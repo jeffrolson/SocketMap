@@ -1,0 +1,50 @@
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "SocketMap Tester",
+      "version": "1.0"
+    },
+    "entries": [
+      {
+        "startedDateTime": "2026-09-20T15:00:00.000Z",
+        "time": 85.5,
+        "request": {
+          "method": "GET",
+          "url": "https://api.socketmap.io/v1/projects",
+          "headers": [
+            { "name": "Host", "value": "api.socketmap.io" },
+            { "name": "Authorization", "value": "Bearer secret_api_key_xyz" }
+          ],
+          "bodySize": 0,
+          "headersSize": 180
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/2",
+          "headers": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "set-cookie", "value": "sid=secret123" }
+          ],
+          "content": {
+            "size": 3200,
+            "mimeType": "application/json"
+          },
+          "bodySize": 3200,
+          "headersSize": 220
+        },
+        "timings": {
+          "blocked": 1.2,
+          "dns": 18.5,
+          "connect": 25.0,
+          "ssl": 15.0,
+          "send": 2.0,
+          "wait": 45.0,
+          "receive": 8.0
+        },
+        "serverIPAddress": "104.16.24.81"
+      }
+    ]
+  }
+}

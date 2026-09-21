@@ -1,0 +1,57 @@
+{
+  "title": "Custom Service Mesh Execution",
+  "phases": ["Edge Ingress", "Processing"],
+  "participants": [
+    { "id": "client", "label": "Web Client", "role": "client", "color": "#06b6d4" },
+    { "id": "gateway", "label": "API Gateway", "role": "gateway", "color": "#10b981" },
+    { "id": "service", "label": "Account Service", "role": "service", "color": "#f59e0b" }
+  ],
+  "messages": [
+    {
+      "id": "m1",
+      "from": "client",
+      "to": "gateway",
+      "label": "POST /accounts/login",
+      "kind": "request",
+      "phase": 0,
+      "latencyMs": 15
+    },
+    {
+      "id": "m2",
+      "from": "gateway",
+      "to": "service",
+      "label": "RPC ValidateCredentials",
+      "kind": "request",
+      "phase": 1,
+      "latencyMs": 30
+    },
+    {
+      "id": "m3",
+      "from": "service",
+      "to": "service",
+      "label": "Argon2 Hash Verification",
+      "kind": "retry",
+      "phase": 1,
+      "latencyMs": 40,
+      "isLoop": true
+    },
+    {
+      "id": "m4",
+      "from": "service",
+      "to": "gateway",
+      "label": "200 OK (JWT Session)",
+      "kind": "return",
+      "phase": 1,
+      "latencyMs": 5
+    },
+    {
+      "id": "m5",
+      "from": "gateway",
+      "to": "client",
+      "label": "Login Successful",
+      "kind": "return",
+      "phase": 1,
+      "latencyMs": 2
+    }
+  ]
+}
