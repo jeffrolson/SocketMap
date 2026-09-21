@@ -1,68 +1,59 @@
 ---
-name: [Project Name]
+name: SocketMap
 colors:
-  primary: "#1A1C1E"
-  secondary: "#6C7278"
-  tertiary: "#2E64B8"
-  neutral: "#F7F5F2"
-  surface: "#FFFFFF"
-  on-surface: "#1A1C1E"
-  error: "#B00020"
+  primary: "#06B6D4"
+  secondary: "#94A3B8"
+  tertiary: "#10B981"
+  neutral: "#070B12"
+  surface: "#0B1120"
+  on-surface: "#F8FAFC"
+  error: "#F43F5E"
 typography:
   h1:
-    fontFamily: Inter
-    fontSize: 3rem
+    fontFamily: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
+    fontSize: 1.5rem
   h2:
-    fontFamily: Inter
-    fontSize: 2rem
+    fontFamily: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
+    fontSize: 1.125rem
   body-md:
-    fontFamily: Inter
-    fontSize: 1rem
+    fontFamily: ui-monospace, "SF Mono", Menlo, monospace
+    fontSize: 0.8125rem
   label-caps:
-    fontFamily: Inter
-    fontSize: 0.75rem
+    fontFamily: ui-monospace, "SF Mono", Menlo, monospace
+    fontSize: 0.6875rem
 rounded:
   sm: 4px
   md: 8px
-  lg: 16px
+  lg: 14px
 spacing:
-  sm: 8px
-  md: 16px
+  sm: 6px
+  md: 12px
   lg: 24px
 ---
 
 ## Overview
-[Brand personality in two or three sentences: what the product should feel like,
-who it is for, the emotional tone. This prose is the agent's fallback when no
-specific token or rule covers a decision.]
 
-This file follows the Google `@google/design.md` format. It exists ONLY for projects
-with a UI surface. Headless workers do not get a DESIGN.md. Validate before committing:
-
-    npx @google/design.md lint DESIGN.md
-
-Replace every token in the front matter with this venture's real palette and type
-scale. For JR Generations ventures, pull from the venture's own brand standard, not
-these placeholder values (August and Always in particular is a locked standard).
+SocketMap delivers a dark "signal-flow" aesthetic designed for high-density, mission-critical network analysis. The visual tone is technical, crisp, and telemetry-focused: deep obsidian canvas, illuminated neon activation lifelines, and sharp directional interaction routing.
 
 ## Colors
-Each color carries a semantic role so an agent never repurposes, for example, error
-red as an accent.
 
-- **Primary ([hex]):** [core text and headlines]
-- **Secondary ([hex]):** [borders, captions, secondary text]
-- **Tertiary ([hex]):** [sole driver for interaction: links, primary buttons]
-- **Neutral ([hex]):** [background and foundation]
-- **Surface / on-surface:** [card and content surfaces, and text placed on them]
-- **Error ([hex]):** [validation and destructive states only]
+- **Primary (`#06B6D4` - Cyan):** Request flow, client-origin sync operations, active route indicators.
+- **Secondary (`#94A3B8` - Slate):** Return arrows, dashed response lines, participant sublabels, lifelines.
+- **Tertiary (`#10B981` - Emerald):** Live artifact status beacon, gateway edge nodes, successful connections.
+- **Neutral (`#070B12` - Deep Navy/Black):** Canvas background foundation with subtle dotted grid overlay.
+- **Surface / on-surface (`#0B1120` / `#F8FAFC`):** Participant header cards, inspector drawer, floating tooltip, legend.
+- **Error (`#F43F5E` - Crimson):** Security barriers, authentication checks, credential verification.
+- **Warning / Accent (`#F59E0B` - Amber):** Retry loops, cache fallbacks, origin service nodes.
+- **Infrastructure (`#8B5CF6` - Purple):** DNS resolvers, DoH endpoints, async telemetry workers.
 
 ## Typography
-[Type families and scale, and when each level applies. Note any pairing rules.]
+
+- System Monospace (`ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace`): Interaction labels, status codes, timings, latency badges, and inspector code payloads.
+- Native System Sans (`-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`): Participant titles, application branding, and UI control buttons.
+- No external web fonts or CDN links: strictly system-native typography for 100% offline consistency.
 
 ## Spacing and radius
-[The spacing scale and corner-radius intent. When to use tight versus generous spacing.]
 
-## Components
-[Optional. Define component-level token pairs, for example button-primary background
-and text color, so the linter can WCAG-check contrast. Keep compound states
-(size + variant + disabled) minimal until a real need appears.]
+- Rounded 4px (`sm`): Badges, status chips, code boxes.
+- Rounded 8px (`md`): Navigation controls, search inputs, tooltips.
+- Rounded 10-14px (`lg`): Participant cards, live artifact badge, legend container.
