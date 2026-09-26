@@ -327,8 +327,15 @@ export function buildTraceSvg(trace) {
     const cardX = node.x - cardWidth / 2;
     const iconSvg = getRoleIconSvg(p.role);
 
+    // Fit long labels inside the card: shrink the font, then compress if still too wide.
+    const labelRoom = cardWidth - 52;
+    const estWidth = (size) => String(p.label).length * size * 0.58;
+    const labelSize = estWidth(13) > labelRoom ? Math.max(10.5, labelRoom / (String(p.label).length * 0.58)) : 13;
+    const labelFit = estWidth(labelSize) > labelRoom ? ` textLength="${labelRoom}" lengthAdjust="spacingAndGlyphs"` : "";
+
     return `
       <g class="participant-card participant-${p.id}" data-id="${p.id}" transform="translate(${cardX}, ${cardTopY})">
+        <title>${escapeXml(p.label)}${p.sublabel ? ` (${escapeXml(p.sublabel)})` : ""}</title>
         <!-- Card Backdrop -->
         <rect x="0" y="0" width="${cardWidth}" height="${cardHeight}" rx="10"
               fill="#0b1120" stroke="${p.color}" stroke-width="1.5" stroke-opacity="0.85"/>
@@ -344,7 +351,7 @@ export function buildTraceSvg(trace) {
         </g>
         <!-- Text Labels -->
         <text x="44" y="27" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-              font-size="13" font-weight="700" letter-spacing="-0.01em">${escapeXml(p.label)}</text>
+              font-size="${labelSize.toFixed(1)}" font-weight="700" letter-spacing="-0.01em"${labelFit}>${escapeXml(p.label)}</text>
         <text x="44" y="44" fill="#94a3b8" font-family="ui-monospace, 'SF Mono', Menlo, monospace"
               font-size="10.5" font-weight="500">${escapeXml(p.sublabel)}</text>
       </g>

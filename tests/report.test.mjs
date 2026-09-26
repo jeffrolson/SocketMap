@@ -45,6 +45,12 @@ describe("Report HTML", () => {
     assert.ok(html.includes('class="wf-row is-failed"'), "the refused localhost call is marked failed");
   });
 
+  it("pins a copy of the host cards above the diagram while scrolling", () => {
+    assert.ok(html.includes(".seq-sticky"), "sticky header styles");
+    assert.ok(html.includes('querySelectorAll(".participant-card")'), "cards are cloned into the sticky header");
+    assert.ok(html.includes("<title>portal.example.com (198.51.100.20)</title>"), "each card names its host and IP on hover");
+  });
+
   it("contains the AI summary text", () => {
     assert.ok(html.includes('id="ai-summary"'));
   });

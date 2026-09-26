@@ -135,3 +135,24 @@ describe("Renderer & SVG Builder", () => {
     }, "Embedded script should compile with zero syntax errors");
   });
 });
+
+describe("Participant card labels", () => {
+  const trace = (label) => normalizeTrace({
+    title: "t",
+    participants: [{ id: "a", label, sublabel: "192.0.2.1", role: "client" }],
+    messages: [{ from: "a", to: "a", label: "x" }]
+  });
+
+  it("keeps short labels at full size", () => {
+    const svg = buildTraceSvg(trace("Browser"));
+    assert.ok(svg.includes('font-size="13.0"'));
+    assert.ok(!svg.includes("textLength"));
+  });
+
+  it("shrinks and fits long labels inside the card, with the full name on hover", () => {
+    const svg = buildTraceSvg(trace("static.cloudflareinsights.com"));
+    assert.ok(svg.includes('font-size="10.5"'));
+    assert.ok(svg.includes('textLength="112" lengthAdjust="spacingAndGlyphs"'));
+    assert.ok(svg.includes("<title>static.cloudflareinsights.com (192.0.2.1)</title>"));
+  });
+});

@@ -9,6 +9,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Findings for TLS inspection (certificate from a private root), proxies and slow proxy lookups, calls to services on this computer, failed requests, slow servers, slow connections, slow DNS, QUIC failures, browser queueing, and HTTP/1.1 hosts.
 - Environment details from the capture: browser, OS, local IP, DNS servers and search domains, secure DNS, proxy setup.
 - `--page <site>` option to analyze a specific site in a capture.
+- Sequence diagram in the report keeps the host cards pinned at the top while scrolling, aligned with their lifelines.
+- Long participant names shrink to fit their card, with the full name and IP shown on hover.
 - Capture guide for `chrome://net-export` / `edge://net-export` in the README.
 
 ### Changed
