@@ -39,6 +39,7 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/redact.mjs` | Secret redaction for URLs and header lines | Node.js or browser |
 | `src/cert.mjs` | Minimal X.509 reader: subject, issuer, root, expiry from PEM | Node.js or browser |
 | `src/analysis.mjs` | Page selection, Good / Better / Best / Poor host ratings, findings, time breakdown, AI summary text | Node.js or browser |
+| `src/demo/sample-capture.mjs` | Synthetic NetLog capture (documentation IPs, throwaway certificates): the viewer's sample, `npm run demo`, and test fixtures | Node.js or browser |
 | `src/theme.mjs` | Reads DESIGN.md front matter; turns tokens into CSS variables with semantic roles and local font fallbacks | Node.js or browser |
 | `src/renderer/theme.generated.mjs` | Default theme compiled from DESIGN.md (`npm run generate:theme`; `verify` checks it is current) | Node.js or browser |
 | `src/viewer/viewer-core.mjs` | Viewer pipeline without page APIs: capture reader, report builder, file check | Node.js or browser |
@@ -87,6 +88,8 @@ HAR or generic JSON, end to end:
 - A connection counts as new for a request only if it finished setting up after that request started waiting for a stream. Only new connections contribute DNS, connect, and TLS time to a request.
 - Redirects followed inside one request share a source. Timing phases describe the last leg; the time before it is reported as `redirect`.
 - A capture Chrome never finished writing still parses: complete events are kept, `polledData` is simply absent.
+- `.gitattributes` forces LF line endings so generated-file checks and tests behave the same on Windows. `npm test` relies on Node's own test-file discovery (`**/*.test.mjs`), not a shell glob.
+- The viewer's start page is also the product explainer. It must only state what the tool does and numbers that were measured.
 - The report is one page with views switched by script (`.view.is-active`); without script every view shows. In-page `#` links are handled by the report's own click handler, because inside the viewer the report is an `srcdoc` iframe and `#` links would resolve against the viewer's address.
 - The sequence view is HTML, not SVG: rows are positioned with CSS variables (`--a`, `--w` as fractions of the host columns), the host header is `position: sticky` inside the scroll container, and explanations are embedded as JSON (`#seq-explain`) keyed by row (`seq-N`) and column (`card-<id>`).
 - Waterfall and sequence rows carry `data-flags` (error, slow, inspected, local) and `data-search`; one filter bar in the top bar drives both.

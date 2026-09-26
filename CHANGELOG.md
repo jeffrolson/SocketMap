@@ -3,6 +3,20 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-26
+### Added
+- The viewer's start page explains what SocketMap does, how it works, what it shows, and what it cannot see, with a **Try the sample capture** button that opens a report from the built-in synthetic capture.
+- `npm run demo` builds `demo-report.html` from the synthetic capture.
+- User guide (`docs/USER-GUIDE.md`) covering capture, the viewer, every report tab, each finding, protocols, sharing, and troubleshooting; screenshots in `docs/images/`.
+- Windows quick start in the README (winget, PowerShell commands, Download ZIP route).
+
+### Changed
+- README rewritten around the troubleshooting report; the older HAR/JSON diagram documentation moved to `docs/HAR-DIAGRAM.md`.
+- The synthetic capture builder moved from the tests to `src/demo/sample-capture.mjs`, shared by the viewer, the demo, and the tests.
+
+### Fixed
+- Windows: `.gitattributes` keeps LF line endings on checkout, the theme freshness check ignores CRLF, and `npm test` uses Node's built-in test discovery instead of a shell glob that Windows does not expand.
+
 ## [0.5.0] - 2026-09-26
 ### Added
 - Telemetry Trace Dark design system: DESIGN.md tokens drive the report and viewer colors, fonts, and rounding (`npm run generate:theme`). `--theme <DESIGN.md>` applies a company theme to CLI reports and viewer builds.

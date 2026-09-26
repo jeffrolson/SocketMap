@@ -12,27 +12,17 @@ tokens) and keeps everything else, including IPs. Real captures never enter the 
 ## Now
 Actively being built.
 
-- Phase 1, MVP: truthful NetLog report from the CLI (branch `feat/netlog-mvp`, built, awaiting review and merge)
-  - Streaming parser that processes events as they arrive, correlating each request
-    to its real connection and DNS lookup
-  - One entry per real host, no request cap, page traffic separated from browser and
-    extension background traffic
-  - No invented values: missing data shows as unknown
-  - Environment card (OS, browser, local IP, proxy setup), findings, host table with
-    Good / Better / Best / Poor connection ratings, waterfall timeline
-  - Secret redaction including tokens in URLs
-  - Copy-able AI summary
-  - Validate: `npm run verify` passes; synthetic fixtures use documentation IP ranges only
+- Try SocketMap on Windows and with colleagues; collect what confuses people.
+- Phase 2: Microsoft 365 detectors (TLS inspection via certificate issuer, proxy and PAC
+  cost, QUIC fallback, localhost calls, sign-in redirect chains, embedded Microsoft 365
+  endpoint list). Needs a real SharePoint capture from work.
 
 ## Next (2 to 4 weeks)
 Queued, priority-ordered.
 
-- Phase 2: M365 detectors (TLS inspection via certificate issuer, proxy and PAC cost,
-  QUIC fallback, localhost calls, sign-in redirect chains, embedded M365 endpoint list).
-  Needs a real SharePoint capture from work.
-- Phase 3a: drag-and-drop HTML viewer (branch `feat/viewer`, built, awaiting review)
-- Phase 3b: design system from DESIGN.md, company theming (`--theme`), tabbed layout, filters, and the rebuilt sequence view (branch `feat/design-system`, built, awaiting review)
-- Later from the design mockup: timeline slider with problem markers; export the sequence as an image
+- Merge the viewer's toolbar into the report header
+- From the design mockup: timeline slider with problem markers; export the sequence as an image
+- Bring the HAR diagram up to the "only real values" rule, or route HAR files into the report
 
 ## Later (this quarter)
 Planned but not scheduled.
@@ -53,6 +43,11 @@ Ideas, deferred features, nice-to-haves. No commitment.
 
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
+
+- 2026-09-26: Viewer start page explains SocketMap, with a sample capture; README and user guide rewritten; Windows support
+- 2026-09-26: Design system from DESIGN.md, company theming, tabbed report, filters, HTML sequence view with docked inspector
+- 2026-09-26: Drag-and-drop viewer that builds the report in the browser
+- 2026-09-26: Truthful NetLog troubleshooting report (streaming parser, ratings, findings, plain-language explanations)
 
 - 2026-09-26: Trace Inventory & Tech Stack Catalog with 1-click interactive filtering and KPI metrics
 - 2026-09-26: Prescriptive Guidance Engine with Good / Better / Best Chrome Modern Web Guidance playbooks
