@@ -6,8 +6,8 @@
  * zero-dependency standalone HTML sequence diagram.
  */
 
-import { existsSync, writeFileSync, readFileSync, openSync, readSync, closeSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { existsSync, writeFileSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { resolve, dirname, basename } from "node:path";
 import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +20,7 @@ import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
 import { parseDesignTokens } from "../src/theme.mjs";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
 function printHelp() {
   console.log(`
@@ -156,7 +156,8 @@ async function main() {
       console.log(`\x1b[32m● [Analysis]\x1b[0m Page ${p.site}: ${p.requestCount} requests, ${p.hostCount} hosts, ${analysis.findings.length} findings (${model.requests.length} requests in capture).`);
       for (const f of analysis.findings) console.log(`  - [${f.severity}] ${f.title}`);
       const theme = themePath ? parseDesignTokens(readFileSync(resolve(themePath), "utf8")) : undefined;
-      htmlOutput = renderReportHtml(model, analysis, theme ? { theme } : {});
+      const source = { name: basename(resolvedInput), bytes: statSync(resolvedInput).size };
+      htmlOutput = renderReportHtml(model, analysis, theme ? { theme, source } : { source });
     } else {
       console.log("\x1b[35m● [Parser]\x1b[0m Ingesting generic/HAR/trace JSON...");
       trace = parseGenericTrace(resolvedInput, { filter });

@@ -53,6 +53,7 @@ function init() {
   const fileName = $("file-name");
   let model = null;
   let current = null;
+  let source = null;
 
   function showError(message) {
     progress.hidden = true;
@@ -61,7 +62,7 @@ function init() {
   }
 
   function show(site) {
-    current = buildReport(model, site, globalThis.SOCKETMAP_THEME);
+    current = buildReport(model, site, globalThis.SOCKETMAP_THEME, source);
     frame.srcdoc = current.html;
     pageSelect.value = current.analysis.page.site;
   }
@@ -72,6 +73,7 @@ function init() {
     bar.style.width = "0%";
     progressText.textContent = `Reading ${file.name}...`;
     try {
+      source = { name: file.name, bytes: file.size };
       model = await readCapture(file, (read, total) => {
         bar.style.width = `${Math.min(100, (read / Math.max(1, total)) * 100).toFixed(1)}%`;
         progressText.textContent = `Reading ${file.name}: ${formatMb(read)} of ${formatMb(total)}`;

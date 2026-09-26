@@ -262,3 +262,33 @@ export function plainSummary(r) {
   const where = dom && dom.share >= 0.4 ? ` Most of the ${formatDuration(r.durationMs)} went to "${dom.label}". ${dom.where}` : ` It took ${formatDuration(r.durationMs)} in total.`;
   return `${what} ${result}.${where}`;
 }
+
+const TONE_RANK = { bad: 3, warn: 2, info: 1, good: 0 };
+const ALL_PHASES = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
+
+/** Timing phases with raw values, for the inspector's timing bars. */
+export function timingBreakdown(r) {
+  return ALL_PHASES.filter(k => r.timing[k] != null && r.timing[k] > 0)
+    .map(k => ({ key: k, label: TIMING_LABELS[k], ms: r.timing[k], value: formatDuration(r.timing[k]), meaning: TIMING_MEANINGS[k] }));
+}
+
+/** One explanation for a whole request: what was asked, what came back, and where the time went. */
+export function explainTransaction(r, conn) {
+  const req = explainRequest(r, conn);
+  const res = explainResponse(r, conn);
+  const lead = TONE_RANK[res.tone] >= TONE_RANK[req.tone] ? res : req;
+  const result = r.fromCache ? "used its saved copy" : r.netError ? `got no answer (${r.netError})` : r.status != null ? `got status ${r.status}` : "got no recorded answer";
+  return {
+    title: req.title,
+    tone: lead.tone,
+    verdict: lead.verdict,
+    plain: `The browser asked ${r.host} for ${describeResource(r)} and ${result}. The whole exchange took ${formatDuration(r.durationMs)}.`,
+    insight: res.insight,
+    steps: timingSteps(r, ALL_PHASES),
+    timing: timingBreakdown(r),
+    totalMs: r.durationMs,
+    facts: [["Address", r.url], ["Method", r.method || "not recorded"], ["Protocol", r.protocol || "not recorded"], ...res.facts],
+    headers: { request: r.requestHeaders, response: r.responseHeaders },
+    requestId: r.id
+  };
+}

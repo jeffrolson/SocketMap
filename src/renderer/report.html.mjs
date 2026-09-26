@@ -1,24 +1,24 @@
 /**
  * SocketMap troubleshooting report: one self-contained HTML file.
  *
- * Sections: environment, findings, where the time went, host ratings, request
- * waterfall, sequence diagram (click any arrow or bar for a plain-language
- * explanation), other activity, AI-ready summary, and a learn section. No remote
+ * Layout: sidebar views (Overview, Waterfall, Sequence, Environment, AI summary,
+ * Learn), a top bar with the capture and a shared filter, and a status bar. The
+ * sequence view has a sticky host header and a docked inspector that explains
+ * any row or column in plain language. No remote
  * resources; colors live in CSS variables so a DESIGN.md theme can replace them.
  */
 
-import { buildTraceSvg } from "./svg-builder.mjs";
-import { normalizeTrace, formatDuration, formatBytes } from "../normalizer.mjs";
-import { TIMING_LABELS, buildAiSummary } from "../analysis.mjs";
-import { explainConnection, explainRequest, explainResponse, explainHost, plainSummary, MEASURE_HELP, RATING_WORDS } from "../explain.mjs";
+import { formatDuration, formatBytes } from "../normalizer.mjs";
+import { TIMING_LABELS, THRESHOLDS, buildAiSummary } from "../analysis.mjs";
+import { explainConnection, explainHost, explainTransaction, plainSummary, MEASURE_HELP } from "../explain.mjs";
 import { renderLearn } from "./learn.mjs";
 import { themeCss } from "../theme.mjs";
 import { DEFAULT_THEME } from "./theme.generated.mjs";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const MAX_SEQUENCE_HOSTS = 8;
-const MAX_SEQUENCE_REQUESTS = 200; // display limit for the diagram only; the waterfall shows every request
+const MAX_SEQUENCE_REQUESTS = 1000; // display limit for the sequence view only; the waterfall shows every request
 
 function esc(value) {
   return String(value ?? "")
@@ -165,12 +165,12 @@ function renderWaterfall(analysis, connections) {
   const pct = (v) => `${Math.max(0, v / span * 100).toFixed(3)}%`;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => `<span style="left:${f * 100}%">${esc(formatDuration(f * span))}</span>`).join("");
   const rows = pageRequests.map(r => {
-    const failed = r.netError && r.netError !== "ERR_ABORTED";
     const status = r.netError || r.status || (r.fromCache ? "cache" : "");
     const segs = SEGMENTS.filter(k => r.timing[k] > 0)
       .map(k => `<span class="seg seg-${k}" style="width:${(r.timing[k] / Math.max(1, r.durationMs) * 100).toFixed(2)}%" title="${esc(TIMING_LABELS[k])}: ${esc(ms(r.timing[k]))}"></span>`).join("");
+    const flags = requestFlags(r, connections.get(r.connectionId));
     return `
-      <details class="wf-row${failed || r.status >= 400 ? " is-failed" : ""}" id="req-${r.id}">
+      <details class="wf-row${flags.map(f => ` flag-${f}`).join("")}" id="req-${r.id}" data-flags="${flags.join(" ")}" data-search="${esc(searchText(r))}">
         <summary>
           <span class="wf-label" title="${esc(r.url)}"><span class="method">${esc(r.method || "")}</span> <span class="wf-host">${esc(r.host)}</span><span class="wf-path">${esc(pathOf(r.url))}</span></span>
           <span class="wf-status">${esc(status)}</span>
@@ -193,116 +193,257 @@ function renderWaterfall(analysis, connections) {
     </section>`;
 }
 
-/**
- * Sequence diagram of the page load: one lifeline per host, only values from the capture.
- * Returns the diagram trace plus a plain-language explanation for every arrow and card.
- */
-export function buildSequenceTrace(analysis, connections, environment = null) {
-  const { page } = analysis;
-  const pageRequests = analysis.pageRequests.slice(0, MAX_SEQUENCE_REQUESTS);
-  const order = [...new Set(pageRequests.map(r => r.host))];
-  const shown = order.slice(0, MAX_SEQUENCE_HOSTS);
-  const hidden = order.length - shown.length;
-  const idOf = (host) => (shown.includes(host) ? `h${shown.indexOf(host)}` : "other");
-  const participants = [
-    { id: "browser", label: "Browser", sublabel: "This computer", role: "client" },
-    ...shown.map((h, i) => {
-      const ips = [...new Set(pageRequests.filter(r => r.host === h).map(r => connections.get(r.connectionId)?.remoteIp).filter(Boolean))];
-      const name = h.replace(/^www\./, "");
-      return { id: `h${i}`, label: name.length > 24 ? `${name.slice(0, 21)}...` : name, sublabel: ips[0] || "IP not recorded", role: "gateway" };
-    })
-  ];
-  if (hidden > 0) participants.push({ id: "other", label: `Other hosts (${hidden})`, sublabel: "See waterfall", role: "service" });
+const ICONS = {
+  logo: '<path d="M3 16l4-5 4 3 5-7 5 6"/>',
+  overview: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  waterfall: '<path d="M4 6h8M7 11h9M10 16h10"/>',
+  sequence: '<path d="M5 4v16M19 4v16M5 8h12M13 5l3 3-3 3M19 15H7M10 12l-3 3 3 3"/>',
+  environment: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  ai: '<path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
+  learn: '<path d="M4 19V5a2 2 0 012-2h13v16H6a2 2 0 00-2 2z"/>',
+  browser: '<rect x="4" y="5" width="16" height="10" rx="1.5"/><path d="M2 19h20"/>',
+  server: '<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M8 7h.01M8 17h.01"/>',
+  other: '<circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'
+};
 
-  const explanations = {};
+function icon(name, size = 16) {
+  return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+}
+
+const PROTOCOL_LABELS = { h3: "H3", h2: "H2", "http/1.1": "HTTP/1.1" };
+
+function isLocalRequest(r) {
+  return r.host === "localhost" || r.host === "::1" || /^127\./.test(r.host || "") || ["loopback", "local", "private"].includes(r.addressSpace);
+}
+
+/** Problem flags shared by the waterfall and the sequence view: error, slow, inspected, local. */
+export function requestFlags(r, conn) {
+  const flags = [];
+  if ((r.netError && r.netError !== "ERR_ABORTED") || r.status >= 400) flags.push("error");
+  if ((r.timing.wait || 0) > THRESHOLDS.server.better || r.durationMs > THRESHOLDS.server.good) flags.push("slow");
+  if (conn?.cert?.knownRoot === false) flags.push("inspected");
+  if (isLocalRequest(r)) flags.push("local");
+  return flags;
+}
+
+function searchText(r) {
+  return [r.method, r.url, r.host, r.status, r.netError, r.protocol, PROTOCOL_LABELS[r.protocol]].filter(Boolean).join(" ").toLowerCase();
+}
+
+function offsetLabel(offset) {
+  if (Math.abs(offset) < 1) return "+0ms";
+  return offset < 0 ? `-${formatDuration(-offset)}` : `+${formatDuration(offset)}`;
+}
+
+/**
+ * Sequence view of the page load: one column per host, one row per new connection
+ * and per request. Every value comes from the capture; every row and column carries
+ * a plain-language explanation for the inspector.
+ */
+export function buildSequenceView(analysis, connections, environment = null) {
+  const { page } = analysis;
+  const requests = analysis.pageRequests.slice(0, MAX_SEQUENCE_REQUESTS);
+  const order = [...new Set(requests.map(r => r.host))];
+  const shown = order.slice(0, MAX_SEQUENCE_HOSTS);
+  const hidden = order.slice(MAX_SEQUENCE_HOSTS);
   const hostRatings = new Map(analysis.hosts.map(h => [h.host, h]));
+  const explanations = {};
+
+  const actors = [{ key: "card-browser", kind: "browser", label: "Browser", sub: environment?.localAddresses?.[0] || "This computer", title: "Browser (this computer)" }];
   explanations["card-browser"] = {
     title: "Browser (this computer)",
     tone: "info",
     verdict: "Every request starts here.",
-    plain: "This column is the web browser on the computer where the capture was taken. Solid arrows leaving it are requests; dashed arrows coming back are answers.",
+    plain: "This column is the web browser on the computer where the capture was taken. Each row is one step: the browser opening a connection to a server, or asking a server for something and getting the answer.",
     steps: [],
-    facts: [["Local IP address", environment?.localAddresses?.join(", ") || "not recorded"], ["Browser", environment?.browser || "not recorded"]]
+    facts: [["Local IP address", environment?.localAddresses?.join(", ") || "not recorded"], ["Browser", environment?.browser || "not recorded"], ["Operating system", environment?.os || "not recorded"]]
   };
-  shown.forEach((h, i) => { if (hostRatings.has(h)) explanations[`card-h${i}`] = explainHost(hostRatings.get(h)); });
-  if (hidden > 0) {
+  shown.forEach((h, i) => {
+    const rating = hostRatings.get(h);
+    actors.push({ key: `card-h${i}`, kind: "host", label: h, sub: rating?.ips?.[0] || "IP not recorded", level: rating?.overall || "unknown", title: `${h}${rating?.ips?.length ? ` (${rating.ips.join(", ")})` : ""}` });
+    if (rating) explanations[`card-h${i}`] = explainHost(rating);
+  });
+  if (hidden.length) {
+    actors.push({ key: "card-other", kind: "other", label: `Other hosts (${hidden.length})`, sub: "See waterfall", title: hidden.join(", ") });
     explanations["card-other"] = {
-      title: `Other hosts (${hidden})`, tone: "info", verdict: "Grouped to keep the diagram readable.",
-      plain: `The page also talked to ${order.slice(MAX_SEQUENCE_HOSTS).join(", ")}. They share this column; the waterfall and the hosts table list each one separately.`,
+      title: `Other hosts (${hidden.length})`, tone: "info", verdict: "Grouped to keep the view readable.",
+      plain: `The page also talked to ${hidden.join(", ")}. They share this column; the waterfall and the hosts table list each one separately.`,
       steps: [], facts: []
     };
   }
+  const column = (host) => (shown.includes(host) ? shown.indexOf(host) + 1 : actors.length - 1);
 
-  const messages = [];
-  const addMessage = (msg, explanation) => {
-    const id = `seq-${messages.length + 1}`;
-    messages.push({ id, ...msg });
-    explanations[id] = explanation;
+  const rows = [];
+  const add = (row, explanation) => {
+    const key = `seq-${rows.length + 1}`;
+    rows.push({ key, ...row });
+    explanations[key] = explanation;
   };
-  for (const r of pageRequests) {
-    const to = idOf(r.host);
+  for (const r of requests) {
     const conn = connections.get(r.connectionId);
+    const to = column(r.host);
     if (conn && r.reusedConnection === false) {
       const setup = (conn.connectMs || 0) + (conn.tlsMs || 0);
-      addMessage({
-        from: "browser", to,
-        label: `${conn.kind === "quic" ? "QUIC handshake" : "TCP + TLS"}${conn.cert?.knownRoot === false ? ", private root" : ""}`,
-        kind: conn.cert?.knownRoot === false || conn.error ? "security" : "async",
-        latencyMs: setup, isBlocking: false
+      const t = THRESHOLDS.connection;
+      const flags = [];
+      if (conn.error) flags.push("error");
+      if (conn.cert?.knownRoot === false) flags.push("inspected");
+      if (setup > t.good) flags.push("slow");
+      add({
+        kind: "connect", to,
+        offset: (conn.start ?? r.start) - page.startMs,
+        label: conn.error ? "Connection failed" : conn.kind === "quic" ? "QUIC handshake" : "TCP + TLS handshake",
+        chips: [
+          { text: formatDuration(setup), tone: setup > t.good ? "bad" : setup >= t.better ? "warn" : "good" },
+          conn.tlsVersion ? { text: conn.tlsVersion, tone: "tls" } : null,
+          conn.cert?.knownRoot === false ? { text: "Private root", tone: "bad" } : null,
+          conn.error ? { text: conn.error, tone: "bad" } : null
+        ].filter(Boolean),
+        flags,
+        search: [r.host, conn.remoteIp, "connection handshake tls", conn.tlsVersion, conn.error].filter(Boolean).join(" ").toLowerCase()
       }, explainConnection(r, conn));
     }
+    const flags = requestFlags(r, conn);
+    const wait = r.timing.wait;
     const path = pathOf(r.url);
-    addMessage({
-      from: "browser", to,
-      label: `${r.method || ""} ${path.length > 34 ? `${path.slice(0, 31)}...` : path}`,
-      kind: "request", method: r.method, latencyMs: r.timing.send, isBlocking: false
-    }, explainRequest(r, conn));
-    addMessage({
-      from: to, to: "browser",
-      label: `${r.netError || r.status || (r.fromCache ? "cache" : "no response")}`,
-      kind: r.netError && r.netError !== "ERR_ABORTED" ? "security" : "return",
-      status: r.status ?? undefined, bytes: r.bytesWire ?? undefined, latencyMs: r.timing.wait, isBlocking: false
-    }, explainResponse(r, conn));
+    add({
+      kind: "request", to,
+      offset: r.start - page.startMs,
+      label: `${r.method || ""} ${path.length > 44 ? `${path.slice(0, 41)}...` : path}`.trim(),
+      chips: [
+        r.protocol ? { text: PROTOCOL_LABELS[r.protocol] || r.protocol, tone: "proto" } : null,
+        { text: String(r.netError || r.status || (r.fromCache ? "cache" : "no answer")), tone: flags.includes("error") ? "bad" : r.status >= 300 && r.status < 400 ? "info" : "good" },
+        wait != null ? { text: `wait ${formatDuration(wait)}`, tone: wait > THRESHOLDS.server.good ? "bad" : wait > THRESHOLDS.server.better ? "warn" : "plain" } : null,
+        r.bytesWire ? { text: formatBytes(r.bytesWire), tone: "plain" } : null
+      ].filter(Boolean),
+      flags,
+      search: searchText(r)
+    }, explainTransaction(r, conn));
   }
-  const trace = normalizeTrace({
-    title: `Page load: ${page.site.replace(/^https?:\/\//, "")}`,
-    phases: [`${page.requestCount} requests, ${formatDuration(page.loadMs)}`],
-    participants,
-    messages
-  });
-  return { trace, explanations };
+  // Time runs top to bottom: a handshake can start after its request was queued.
+  rows.sort((a, b) => a.offset - b.offset || (a.kind === "connect" ? -1 : 1));
+  return { actors, rows, explanations, truncated: analysis.pageRequests.length > requests.length };
 }
 
 function renderHowToRead() {
-  const line = (color, dash) => `<svg width="46" height="12" aria-hidden="true"><line x1="2" y1="6" x2="40" y2="6" stroke="${color}" stroke-width="2" ${dash ? `stroke-dasharray="${dash}"` : ""}/><path d="M 38 2 L 45 6 L 38 10 z" fill="${color}"/></svg>`;
+  const sample = (cls) => `<span class="how-sample ${cls}"><span class="seq-line"></span></span>`;
   return `
     <div class="how-to">
-      <h3 class="sub">How to read this diagram</h3>
-      <p>Each column is one participant: your <strong>browser</strong> on the left, and every <strong>server</strong> the page talked to. Time runs from top to bottom. Each arrow is one message between them.</p>
+      <h3 class="sub">How to read this view</h3>
+      <p>Each column is one participant: your <strong>browser</strong> on the left, then every <strong>server</strong> the page talked to. Time runs from top to bottom; the number at the left of each row is when that step started, counted from the first request.</p>
       <ul class="how-legend">
-        <li>${line("var(--seg-dns)", "6 4")}<span><strong>Opening a connection.</strong> The browser connects to a server and sets up encryption. Happens once per server.</span></li>
-        <li>${line("var(--primary)")}<span><strong>Request.</strong> The browser asks the server for something: the page, a script, an image, data.</span></li>
-        <li>${line("var(--text-muted)", "6 4")}<span><strong>Answer.</strong> The server sends back a status (200 means OK) and the content.</span></li>
-        <li>${line("var(--poor)")}<span><strong>Problem.</strong> A failed request, or a connection whose certificate points to TLS inspection.</span></li>
+        <li>${sample("kind-request")}<span><strong>Request and answer.</strong> The browser asks the server for something (the page, a script, an image, data) and gets an answer.</span></li>
+        <li>${sample("kind-connect")}<span><strong>Opening a connection.</strong> The browser connects to a server and sets up encryption. Happens once per server.</span></li>
+        <li><span class="how-band flag-error"></span><span><strong>Red row:</strong> a failure, or a connection whose certificate points to TLS inspection.</span></li>
+        <li><span class="how-band flag-slow"></span><span><strong>Amber row:</strong> slow. The server took over ${formatDuration(THRESHOLDS.server.better)} to answer, or the step took over ${formatDuration(THRESHOLDS.server.good)}.</span></li>
       </ul>
-      <p>The number in brackets is how long that step took (ms = milliseconds; 1,000 ms is one second). The rounded bars show which two sides are busy with each message. <strong>Click any arrow, bar, or column heading</strong> for a plain-language explanation.</p>
+      <p>The labels under each line show the protocol (H2, H3), the result (200 means OK), how long the server took to answer (wait), and the size.</p>
+      <p><strong>Click any row or column heading</strong> to see what it means here.</p>
     </div>`;
 }
+
+function renderChip(c) {
+  return `<span class="tag tone-${esc(c.tone)}">${esc(c.text)}</span>`;
+}
+
+function renderSequence(view, page) {
+  const n = view.actors.length;
+  const center = (i) => ((i + 0.5) / n).toFixed(5);
+  const head = view.actors.map(a => `
+        <button type="button" class="seq-actor kind-${a.kind}${a.level ? ` lvl-${esc(a.level)}` : ""}" data-key="${esc(a.key)}" title="${esc(a.title)}">
+          ${icon(a.kind === "browser" ? "browser" : a.kind === "other" ? "other" : "server")}
+          <span class="actor-text"><span class="actor-name">${esc(a.label)}</span><span class="actor-sub">${esc(a.sub)}</span></span>
+        </button>`).join("");
+  const lanes = view.actors.map((a, i) => `<span class="lane" style="left:calc(var(--tcol) + (100% - var(--tcol)) * ${center(i)})"></span>`).join("");
+  const rows = view.rows.map(row => `
+        <div class="seq-row kind-${row.kind}${row.flags.map(f => ` flag-${f}`).join("")}" data-key="${row.key}" data-kind="${row.kind}" data-flags="${row.flags.join(" ")}" data-search="${esc(row.search)}" tabindex="0" role="button" aria-label="${esc(row.label)}">
+          <span class="seq-t">${esc(offsetLabel(row.offset))}</span>
+          <span class="seq-span" style="--a:${center(0)};--w:${(row.to / n).toFixed(5)}">
+            <span class="seq-label">${esc(row.label)}</span>
+            <span class="seq-line"></span>
+            <span class="seq-chips">${row.chips.map(renderChip).join("")}</span>
+          </span>
+        </div>`).join("");
+  return `
+    <section id="sequence" class="seq-layout">
+      <div class="seq-main card">
+        <div class="seq-title">
+          <h2>Sequence</h2>
+          <p class="note">One column per server (the first ${MAX_SEQUENCE_HOSTS} contacted; the rest share the last column). A handshake row appears only where a new connection was opened.${view.truncated ? ` Showing the first ${MAX_SEQUENCE_REQUESTS} of ${page.requestCount} requests; the waterfall lists all of them.` : ""}</p>
+        </div>
+        <div class="seq-scroll" style="--n:${n}">
+          <div class="seq-grid">
+            <div class="seq-head"><span class="seq-t head">Time</span>${head}</div>
+            <div class="seq-body">${lanes}${rows}</div>
+          </div>
+        </div>
+      </div>
+      <aside class="inspector" id="explain" aria-label="Details" aria-live="polite">
+        <div class="insp-bar"><span class="kicker">Details</span><button type="button" class="insp-close" id="explain-close" aria-label="Close details">Close</button></div>
+        <div id="insp-empty">${renderHowToRead()}</div>
+        <div id="insp-body" hidden>
+          <h3 id="insp-title"></h3>
+          <p class="verdict" id="insp-verdict"></p>
+          <div class="insp-tabs" role="tablist">
+            <button type="button" role="tab" data-tab="explained" aria-selected="true">Explained</button>
+            <button type="button" role="tab" data-tab="timing" aria-selected="false">Timing</button>
+            <button type="button" role="tab" data-tab="connection" aria-selected="false">Connection</button>
+            <button type="button" role="tab" data-tab="headers" aria-selected="false">Headers</button>
+          </div>
+          <div class="insp-pane" data-pane="explained"></div>
+          <div class="insp-pane" data-pane="timing" hidden></div>
+          <div class="insp-pane" data-pane="connection" hidden></div>
+          <div class="insp-pane" data-pane="headers" hidden></div>
+          <p class="insp-link" id="insp-link" hidden></p>
+        </div>
+      </aside>
+      <script type="application/json" id="seq-explain">${JSON.stringify(view.explanations).replace(/</g, "\\u003c")}</script>
+    </section>`;
+}
+
+function renderFilterBar(pageRequests, connections) {
+  const counts = { problems: 0, slow: 0, inspected: 0, local: 0 };
+  for (const r of pageRequests) {
+    const flags = requestFlags(r, connections.get(r.connectionId));
+    if (flags.includes("error") || flags.includes("inspected")) counts.problems++;
+    for (const f of ["slow", "inspected", "local"]) if (flags.includes(f)) counts[f]++;
+  }
+  const button = (key, label, count) => `<button type="button" data-filter="${key}"${key === "all" ? ' class="is-on" aria-pressed="true"' : ' aria-pressed="false"'}>${esc(label)}${count != null ? ` <span class="count">${count}</span>` : ""}</button>`;
+  return `
+    <div class="filterbar" id="filterbar">
+      <label class="search">${icon("search", 14)}<input id="filter-text" type="search" placeholder="Filter by host, address, status or protocol" aria-label="Filter requests"></label>
+      <div class="filter-chips" role="group" aria-label="Show only">
+        ${button("all", "All")}${button("problems", "Problems", counts.problems)}${button("slow", "Slow", counts.slow)}${button("inspected", "TLS inspection", counts.inspected)}${button("local", "Local calls", counts.local)}
+      </div>
+      <span class="filter-count" id="filter-count"></span>
+    </div>`;
+}
+
+const NAV = [
+  ["overview", "overview", "Overview"],
+  ["waterfall", "waterfall", "Waterfall"],
+  ["sequence", "sequence", "Sequence"],
+  ["environment", "environment", "Environment"],
+  ["ai-summary", "ai", "AI summary"],
+  ["learn", "learn", "Learn"]
+];
 
 /**
  * @param {object} model     capture model
  * @param {object} analysis  result of analyzeCapture
- * @param {{ theme?: object }} options  theme: design tokens (defaults to DESIGN.md)
+ * @param {{ theme?: object, source?: { name?: string, bytes?: number } }} options
+ *   theme: design tokens (defaults to DESIGN.md); source: the capture file, for the header
  */
-export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME } = {}) {
+export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, source = null } = {}) {
   const connections = new Map(model.connections.map(c => [c.id, c]));
   const { page } = analysis;
   const high = analysis.findings.filter(f => f.severity === "high").length;
-  const sequence = buildSequenceTrace(analysis, connections, model.environment);
-  const svg = buildTraceSvg(sequence.trace);
-  const explanationsJson = JSON.stringify(sequence.explanations).replace(/</g, "\\u003c");
+  const view = buildSequenceView(analysis, connections, model.environment);
   const summary = buildAiSummary(model, analysis);
-  const title = `SocketMap Report: ${page.site.replace(/^https?:\/\//, "")}`;
+  const siteName = page.site.replace(/^https?:\/\//, "");
+  const title = `SocketMap Report: ${siteName}`;
+  const env = model.environment;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -314,40 +455,89 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME } = {}
 <style>
   :root {
     ${themeCss(theme)}
+    --sidebar-w: 216px;
+    --topbar-h: 96px;
+    --tcol: 76px;
   }
   * { box-sizing: border-box; }
+  html { scroll-padding-top: calc(var(--topbar-h) + 12px); }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font-sans); }
-  header.top { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; }
-  header.top h1 { font-size: 18px; margin: 0; }
-  header.top nav a { color: var(--text-muted); text-decoration: none; margin-right: 14px; font-size: 13px; }
-  header.top nav a:hover { color: var(--primary); }
-  main { max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; display: grid; gap: 18px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; min-width: 0; }
-  h2 { font-size: 16px; margin: 0 0 12px; }
+  code, pre, .mono { font-family: var(--font-mono); font-size: 12.5px; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--canvas); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 12px; }
   h3 { font-size: 14px; margin: 0; }
-  code, pre { font-family: var(--font-mono); font-size: 12px; }
-  pre { white-space: pre-wrap; word-break: break-all; background: var(--bg); padding: 10px; border-radius: 6px; border: 1px solid var(--border); }
+  a { color: var(--primary); }
+  .icon { flex: none; }
   .muted, .note { color: var(--text-muted); }
   .note { font-size: 12.5px; margin: 0 0 10px; }
-  .banner { border-left: 3px solid var(--primary); background: var(--surface-2); padding: 10px 14px; border-radius: 6px; font-size: 13px; }
+  .sub { font-size: 12px; font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin: 16px 0 8px; }
+  button { font: 13px var(--font-sans); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 11px; cursor: pointer; }
+  button:hover { border-color: var(--secondary); }
+
+  /* Shell: sidebar, top bar, status bar */
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; padding: 14px 10px; z-index: 30; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; padding: 4px 8px 14px; color: var(--text); }
+  .brand .icon { color: var(--secondary); }
+  .sidebar a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius); color: var(--text-muted); text-decoration: none; }
+  .sidebar a:hover { background: var(--surface-mid); color: var(--text); }
+  .sidebar a.is-active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .side-box { margin-top: auto; background: var(--canvas); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+  .side-box .sub { margin: 0 0 6px; }
+  .side-box div { display: flex; justify-content: space-between; gap: 8px; }
+  .app { margin-left: var(--sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid color-mix(in srgb, var(--secondary) 20%, transparent); padding: 10px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .top-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .crumbs { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 13px; min-width: 0; }
+  .crumbs .brand-mini { color: var(--secondary); font-weight: 600; letter-spacing: 0.05em; }
+  .crumbs .sep { color: var(--text-faint); }
+  .crumbs .file { background: var(--surface-mid); padding: 2px 8px; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }
+  .badge { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
+  .page-url { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 160px; }
+  .pill { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); white-space: nowrap; }
+  .pill.is-bad { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+  .pill.is-plain { background: var(--surface-2); color: var(--text-muted); }
+  main { padding: 18px 20px 28px; flex: 1; min-width: 0; }
+  .view { display: grid; gap: 16px; }
+  .js .view:not(.is-active) { display: none; }
+  .js .filterbar:not(.is-shown) { display: none; }
+  .statusbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 20px; background: var(--canvas); border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); }
+  .statusbar strong { color: var(--text); font-weight: 600; }
+  .done-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; }
+
+  /* Filter bar */
+  .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .search { display: flex; align-items: center; gap: 6px; background: var(--canvas); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 8px; color: var(--text-faint); flex: 1; min-width: 220px; max-width: 520px; }
+  .search:focus-within { border-color: var(--secondary); }
+  .search input { flex: 1; background: transparent; border: 0; outline: none; color: var(--text); font: 12.5px var(--font-mono); }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filter-chips button { font: 600 11.5px var(--font-mono); padding: 3px 9px; color: var(--text-muted); }
+  .filter-chips button.is-on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .filter-chips .count { opacity: 0.8; margin-left: 3px; }
+  .filter-count { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); }
+  .is-filtered-out { display: none !important; }
+
+  /* Cards and overview */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
+  .banner { border-left: 3px solid var(--secondary); background: var(--surface-mid); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin: 0; }
+  .page-card h2 { font-family: var(--font-mono); font-size: 14px; overflow-wrap: anywhere; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
   .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
-  .kpi b { display: block; font-size: 22px; font-family: var(--font-mono); }
+  .kpi b { display: block; font-size: 22px; font-family: var(--font-mono); font-weight: 600; }
   .kpi span { color: var(--text-muted); font-size: 12px; }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
   .kv dt { color: var(--text-muted); }
-  .kv dd { margin: 0; font-family: var(--font-mono); font-size: 12.5px; word-break: break-word; }
-  .finding { border: 1px solid var(--border); border-left: 4px solid var(--sev-info); border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface-2); }
+  .kv dd { margin: 0; font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .finding { border: 1px solid var(--border); border-left: 4px solid var(--sev-info); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px; background: var(--surface-mid); }
   .finding.sev-high { border-left-color: var(--sev-high); }
   .finding.sev-medium { border-left-color: var(--sev-medium); }
   .finding header { display: flex; gap: 10px; align-items: center; }
   .finding p { margin: 6px 0; }
   .finding ul { margin: 6px 0; padding-left: 18px; }
-  .sev { text-transform: uppercase; font: 700 10.5px var(--font-mono); letter-spacing: .06em; padding: 2px 6px; border-radius: 4px; background: var(--sev-info); color: var(--bg); }
+  .sev { text-transform: uppercase; font: 700 10.5px var(--font-mono); letter-spacing: .06em; padding: 2px 6px; border-radius: var(--radius-sm); background: var(--sev-info); color: var(--bg); }
   .sev-high .sev { background: var(--sev-high); }
   .sev-medium .sev { background: var(--sev-medium); }
   .team { font-size: 13px; }
-  .stack { display: flex; height: 18px; border-radius: 4px; overflow: hidden; background: var(--bg); }
+  .stack { display: flex; height: 16px; border-radius: var(--radius-sm); overflow: hidden; background: var(--canvas); }
   .legend { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; }
   .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
   ${SEGMENTS.map(k => `.seg-${k} { background: var(--seg-${k}); }`).join("\n  ")}
@@ -355,263 +545,373 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME } = {}
   .table-wrap { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  thead th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
-  .chip { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11.5px; border: 1px solid currentColor; white-space: nowrap; }
+  thead th { color: var(--text-faint); font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+  .chip { display: inline-block; padding: 1px 7px; border-radius: var(--radius-sm); font: 11.5px var(--font-mono); border: 1px solid currentColor; white-space: nowrap; }
   .lvl-best { color: var(--best); } .lvl-better { color: var(--better); } .lvl-good { color: var(--good); } .lvl-poor { color: var(--poor); } .lvl-unknown { color: var(--unknown); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: currentColor; }
+  .glossary { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 8px 0; }
+  .glossary dt { font-weight: 600; }
+  .glossary dd { margin: 0; color: var(--text-muted); }
+  details.more summary { cursor: pointer; color: var(--primary); font-size: 12.5px; margin-top: 8px; }
+
+  /* Waterfall */
   .wf { font-size: 12px; }
   .wf-row, .wf-axis { border-bottom: 1px solid var(--border); }
-  .wf-row > summary, .wf-axis { display: grid; grid-template-columns: minmax(180px, 34%) 70px 58px 1fr 70px; gap: 8px; align-items: center; padding: 4px 0; cursor: pointer; list-style: none; }
+  .wf-row > summary, .wf-axis { display: grid; grid-template-columns: minmax(180px, 34%) 70px 64px 1fr 70px; gap: 8px; align-items: center; padding: 4px 0; cursor: pointer; list-style: none; }
   .wf-row > summary::-webkit-details-marker { display: none; }
-  .wf-row > summary:hover { background: var(--surface-2); }
-  .wf-row.is-failed .wf-status { color: var(--poor); font-weight: 700; }
+  .wf-row > summary:hover { background: var(--surface-mid); }
+  .wf-row.flag-error > summary { background: color-mix(in srgb, var(--danger-container) 28%, transparent); }
+  .wf-row.flag-slow:not(.flag-error) > summary { background: color-mix(in srgb, var(--warning) 9%, transparent); }
+  .wf-row.flag-error .wf-status { color: var(--danger); font-weight: 700; }
   .wf-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--font-mono); }
-  .wf-host { color: var(--text); }
   .wf-path { color: var(--text-muted); }
   .method { color: var(--primary); }
   .wf-status, .wf-proto, .wf-time { font-family: var(--font-mono); color: var(--text-muted); }
   .wf-time { text-align: right; }
-  .wf-track { position: relative; height: 14px; background: var(--bg); border-radius: 3px; }
+  .wf-track { position: relative; height: 14px; background: var(--canvas); border-radius: 3px; }
   .wf-bar { position: absolute; top: 2px; bottom: 2px; display: flex; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .ticks span { position: absolute; top: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+  .ticks span { position: absolute; top: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--text-faint); white-space: nowrap; font-family: var(--font-mono); }
   .ticks span:first-child { transform: none; } .ticks span:last-child { transform: translateX(-100%); }
   .detail { padding: 10px 0 14px; }
   .detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; }
   .mini th { color: var(--text-muted); font-weight: 500; width: 150px; }
   .wrap { overflow-wrap: anywhere; }
-  details.more summary { cursor: pointer; color: var(--primary); font-size: 12.5px; margin-top: 8px; }
-  .seq-tools { display: flex; gap: 8px; margin-bottom: 8px; }
-  button { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; cursor: pointer; font: 13px var(--font-sans); }
-  button:hover { border-color: var(--primary); }
-  .seq-wrap { overflow: auto; max-height: 80vh; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
-  .seq-wrap svg { display: block; }
-  .seq-sticky { position: sticky; top: 0; height: 0; z-index: 2; width: max-content; }
-  .seq-sticky svg { box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5); }
-  .seq-sticky.is-hidden { visibility: hidden; }
-  .seq-wrap .trace-legend, .seq-wrap .status-badge { display: none; }
-  .seq-wrap .message-route, .seq-wrap .activation-bar, .seq-wrap .participant-card { cursor: pointer; }
-  .seq-wrap .message-route:hover .route-line, .seq-wrap .message-route.is-selected .route-line, .seq-wrap .message-route:focus-visible .route-line { stroke-width: 4; }
-  .seq-wrap .message-route.is-selected .route-label-text { fill: var(--primary); }
-  .seq-wrap .message-route:focus { outline: none; }
-  .how-to { background: var(--surface-2); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
-  .how-to p { margin: 6px 0; }
-  .how-legend { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
-  .how-legend li { display: flex; gap: 10px; align-items: center; }
-  .how-legend svg { flex: none; }
-  .sub { font-size: 14px; margin: 16px 0 8px; }
-  .plain { background: var(--surface-2); padding: 8px 10px; border-radius: 6px; margin: 0 0 10px; }
-  .explain { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--surface); border-left: 1px solid var(--border); z-index: 20; overflow-y: auto; padding: 18px 20px 40px; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5); }
-  .explain[hidden] { display: none; }
-  .explain:focus { outline: none; }
-  .explain .close { float: right; }
-  .explain h3 { font-size: 16px; margin: 0 80px 10px 0; }
-  .explain p { margin: 8px 0; }
-  .verdict { padding: 8px 10px; border-radius: 6px; border-left: 4px solid var(--unknown); background: var(--surface-2); font-weight: 600; }
-  .tone-good { border-left-color: var(--best); } .tone-warn { border-left-color: var(--good); } .tone-bad { border-left-color: var(--poor); } .tone-info { border-left-color: var(--primary); }
-  .insight { border: 1px dashed var(--border); border-radius: 6px; padding: 8px 10px; }
+  .plain { background: var(--surface-mid); padding: 8px 10px; border-radius: var(--radius-sm); margin: 0 0 10px; }
+
+  /* Sequence view */
+  .seq-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+  .seq-main { padding: 0; overflow: hidden; }
+  .seq-title { padding: 14px 18px 4px; }
+  .seq-scroll { overflow: auto; max-height: calc(100vh - var(--topbar-h) - 150px); background: var(--canvas); border-top: 1px solid var(--border); }
+  .seq-grid { min-width: calc(var(--tcol) + var(--n) * 128px); }
+  .seq-head { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: var(--tcol) repeat(var(--n), minmax(0, 1fr)); gap: 6px; padding: 8px 8px 8px 0; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid color-mix(in srgb, var(--secondary) 20%, transparent); }
+  .seq-actor { display: flex; align-items: center; gap: 6px; min-width: 0; text-align: left; background: var(--surface-mid); padding: 6px 8px; }
+  .seq-actor .icon { color: var(--secondary); }
+  .seq-actor.kind-browser .icon { color: var(--primary); }
+  .seq-actor.lvl-poor { border-color: var(--danger); } .seq-actor.lvl-poor .icon { color: var(--danger); }
+  .seq-actor.lvl-good .icon { color: var(--warning); }
+  .seq-actor.is-selected { border-color: var(--secondary); box-shadow: 0 0 12px color-mix(in srgb, var(--secondary) 25%, transparent); }
+  .actor-text { display: flex; flex-direction: column; min-width: 0; }
+  .actor-name { font: 600 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .actor-sub { font: 10.5px var(--font-mono); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seq-body { position: relative; padding: 6px 0 16px; }
+  .lane { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--border); }
+  .seq-t { position: absolute; left: 0; width: calc(var(--tcol) - 10px); top: 21px; text-align: right; font: 10.5px var(--font-mono); color: var(--text-faint); }
+  .seq-t.head { position: static; align-self: center; width: auto; padding-right: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .seq-row { position: relative; height: 60px; cursor: pointer; border-radius: var(--radius-sm); outline: none; }
+  .seq-row:hover { background: color-mix(in srgb, var(--secondary) 6%, transparent); }
+  .seq-row:focus-visible, .seq-row.is-selected { background: color-mix(in srgb, var(--secondary) 12%, transparent); box-shadow: inset 0 0 0 1px var(--secondary); }
+  .seq-row.flag-slow { background: color-mix(in srgb, var(--warning) 9%, transparent); }
+  .seq-row.flag-error, .seq-row.flag-inspected { background: color-mix(in srgb, var(--danger-container) 30%, transparent); }
+  .seq-row.flag-error .seq-t, .seq-row.flag-inspected .seq-t { color: var(--danger); font-weight: 600; }
+  .seq-span { position: absolute; top: 0; bottom: 0; left: calc(var(--tcol) + (100% - var(--tcol)) * var(--a)); width: calc((100% - var(--tcol)) * var(--w)); }
+  .seq-label { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 11px var(--font-mono); padding: 1px 7px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); }
+  .seq-line { position: absolute; top: 27px; left: 4px; right: 4px; height: 2px; background: var(--primary); }
+  .seq-line::before { content: ""; position: absolute; left: -4px; top: -7px; width: 7px; height: 16px; border-radius: 4px; background: color-mix(in srgb, currentColor 30%, transparent); border: 1.5px solid; color: var(--primary); }
+  .seq-line::after { content: ""; position: absolute; right: -2px; top: -5px; border: 6px solid transparent; border-left: 9px solid var(--primary); border-right: 0; }
+  .kind-connect .seq-line { background: none; border-top: 2px dashed var(--seg-tls); height: 0; }
+  .kind-connect .seq-line::before { color: var(--seg-tls); }
+  .kind-connect .seq-line::after { border-left-color: var(--seg-tls); top: -7px; }
+  .flag-error .seq-line, .flag-inspected .seq-line { background: var(--danger); }
+  .flag-error .seq-line::after, .flag-inspected .seq-line::after { border-left-color: var(--danger); }
+  .kind-connect.flag-inspected .seq-line, .kind-connect.flag-error .seq-line { background: none; border-top-color: var(--danger); }
+  .seq-chips { position: absolute; top: 35px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; white-space: nowrap; }
+  .tag { font: 600 10.5px var(--font-mono); padding: 0 6px; line-height: 18px; border-radius: var(--radius-sm); border: 1px solid currentColor; background: color-mix(in srgb, currentColor 12%, transparent); text-transform: uppercase; letter-spacing: 0.03em; }
+  .tone-proto { color: var(--secondary); } .tone-tls { color: var(--seg-tls); } .tone-good { color: var(--success); } .tone-warn { color: var(--warning); } .tone-bad { color: var(--danger); } .tone-info { color: var(--primary); } .tone-plain { color: var(--text-muted); }
+
+  /* Inspector */
+  .inspector { position: sticky; top: calc(var(--topbar-h) + 12px); max-height: calc(100vh - var(--topbar-h) - 40px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px 18px; }
+  .insp-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .kicker { font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
+  .insp-close { display: none; }
+  .inspector h3 { font-size: 16px; margin: 4px 0 10px; }
+  .verdict { padding: 8px 10px; border-radius: var(--radius-sm); border-left: 4px solid var(--unknown); background: var(--surface-mid); font-weight: 600; margin: 0 0 10px; }
+  .verdict.tone-good { border-left-color: var(--success); color: var(--text); } .verdict.tone-warn { border-left-color: var(--warning); color: var(--text); } .verdict.tone-bad { border-left-color: var(--danger); color: var(--text); } .verdict.tone-info { border-left-color: var(--primary); color: var(--text); }
+  .insp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .insp-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 6px 10px; font: 600 12px var(--font-mono); color: var(--text-faint); }
+  .insp-tabs button[aria-selected="true"] { color: var(--secondary); border-bottom-color: var(--secondary); }
+  .insp-pane p { margin: 8px 0; }
+  .insight { border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
   .meaning { color: var(--text-muted); font-size: 12px; font-weight: 400; }
-  .explain a { color: var(--primary); }
+  .bars { display: grid; gap: 8px; }
+  .bar-row .bar-top { display: flex; justify-content: space-between; font: 12px var(--font-mono); }
+  .bar-row .bar-top span:first-child { color: var(--text-muted); }
+  .bar-track { height: 5px; background: var(--canvas); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+  .bar-fill { height: 100%; }
+  .how-to p { margin: 6px 0; }
+  .how-legend { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+  .how-legend li { display: flex; gap: 10px; align-items: center; }
+  .how-sample { position: relative; flex: none; width: 46px; height: 16px; }
+  .how-sample .seq-line { top: 7px; }
+  .how-band { flex: none; width: 46px; height: 16px; border-radius: var(--radius-sm); }
+  .how-band.flag-error { background: color-mix(in srgb, var(--danger-container) 60%, transparent); border: 1px solid var(--danger); }
+  .how-band.flag-slow { background: color-mix(in srgb, var(--warning) 20%, transparent); border: 1px solid var(--warning); }
+
+  /* Learn, AI summary */
   .steps li { margin: 4px 0; }
   .learn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 4px 28px; }
   .links { list-style: none; padding: 0; margin: 0; }
   .links li { margin: 0 0 10px; }
-  .links a { color: var(--primary); font-weight: 600; }
+  .links a { font-weight: 600; }
   .links span { display: block; color: var(--text-muted); font-size: 12.5px; }
-  .glossary { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 8px 0; }
-  .glossary dt { font-weight: 600; }
-  .glossary dd { margin: 0; color: var(--text-muted); }
-  textarea { width: 100%; min-height: 260px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font: 12px var(--font-mono); }
-  footer { color: var(--text-muted); font-size: 12px; text-align: center; padding: 10px; }
-  @media (max-width: 800px) { .glossary { grid-template-columns: 1fr; } .glossary dd { margin-bottom: 6px; } .detail-grid { grid-template-columns: 1fr; } .wf-row > summary, .wf-axis { grid-template-columns: 1fr 60px 70px; } .wf-proto, .wf-track { display: none; } }
+  textarea { width: 100%; min-height: 320px; background: var(--canvas); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; font: 12px var(--font-mono); }
+  .tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+
+  @media (max-width: 1200px) {
+    .seq-layout { grid-template-columns: 1fr; }
+    .inspector { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); max-height: none; border-radius: 0; z-index: 40; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5); }
+    .js .inspector:not(.is-open) { display: none; }
+    .insp-close { display: inline-block; }
+  }
+  @media (max-width: 900px) {
+    .sidebar { position: static; width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; }
+    .brand { padding: 4px 8px; }
+    .side-box { display: none; }
+    .app { margin-left: 0; }
+    .detail-grid, .glossary { grid-template-columns: 1fr; }
+    .wf-row > summary, .wf-axis { grid-template-columns: 1fr 60px 70px; }
+    .wf-proto, .wf-track { display: none; }
+  }
 </style>
 </head>
 <body>
-<header class="top">
-  <h1>SocketMap Report</h1>
-  <nav>
-    <a href="#findings">Findings</a><a href="#hosts">Hosts</a><a href="#waterfall">Waterfall</a><a href="#sequence">Sequence</a><a href="#environment">Environment</a><a href="#ai-summary">AI summary</a><a href="#learn">Learn</a>
-  </nav>
-</header>
-<main>
-  <div class="card">
-    <h2>${esc(page.url)}</h2>
-    <p class="banner">This report contains IP addresses, full URLs, and request/response headers from the capture. Passwords, cookies, auth headers, and tokens were removed before it was written.</p>
+<nav class="sidebar" aria-label="Report sections">
+  <div class="brand">${icon("logo", 20)}SocketMap</div>
+  ${NAV.map(([target, iconName, label]) => `<a href="#${target}" data-nav="${target}">${icon(iconName)}${esc(label)}</a>`).join("\n  ")}
+  <div class="side-box">
+    <p class="sub">This capture</p>
+    <div><span>Page requests</span><strong>${page.requestCount}</strong></div>
+    <div><span>All requests</span><strong>${model.requests.length}</strong></div>
+    <div><span>Hosts</span><strong>${page.hostCount}</strong></div>
+    <div><span>Length</span><strong>${esc(ms(env.captureDurationMs))}</strong></div>
   </div>
-  <div class="kpis">
-    <div class="kpi"><b>${esc(formatDuration(page.loadMs))}</b><span>First request to last response</span></div>
-    <div class="kpi"><b>${page.requestCount}</b><span>Requests</span></div>
-    <div class="kpi"><b>${page.hostCount}</b><span>Hosts</span></div>
-    <div class="kpi"><b>${esc(formatBytes(page.bytesWire) || "0 B")}</b><span>Transferred</span></div>
-    <div class="kpi"><b>${analysis.findings.length}</b><span>Findings (${high} high)</span></div>
-  </div>
-  ${renderFindings(analysis.findings)}
-  ${renderBreakdown(analysis.breakdown)}
-  ${renderHosts(analysis.hosts)}
-  ${renderWaterfall(analysis, connections)}
-  <section id="sequence" class="card">
-    <h2>Sequence diagram</h2>
-    <p class="note">One lifeline per host (the first ${MAX_SEQUENCE_HOSTS} contacted; the rest are grouped). Connection setup appears only where a new connection was opened.${page.requestCount > MAX_SEQUENCE_REQUESTS ? ` Showing the first ${MAX_SEQUENCE_REQUESTS} of ${page.requestCount} requests; the waterfall lists all of them.` : ""}</p>
-    ${renderHowToRead()}
-    <div class="seq-tools"><button type="button" data-zoom="0.8">Zoom out</button><button type="button" data-zoom="1.25">Zoom in</button><button type="button" data-zoom="reset">Reset</button></div>
-    <div class="seq-wrap">${svg}</div>
-    <script type="application/json" id="seq-explain">${explanationsJson}</script>
-  </section>
-  ${renderEnvironment(model.environment)}
-  <section id="other" class="card">
-    <h2>Other activity in this capture</h2>
-    ${analysis.background.length ? `<p class="note">Traffic from other tabs, extensions, and the browser itself. Not included above. Re-run with <code>--page &lt;site&gt;</code> to analyze one of these.</p>
-    <table><thead><tr><th>Site</th><th>Requests</th><th>Type</th></tr></thead><tbody>
-      ${analysis.background.map(p => `<tr><td>${esc(p.site)}</td><td>${p.requestCount}</td><td>${p.isBackground ? "Browser / extension" : "Other page"}</td></tr>`).join("")}
-    </tbody></table>` : "<p>None.</p>"}
-  </section>
-  <section id="ai-summary" class="card">
-    <h2>AI summary</h2>
-    <p class="note">Paste this into your AI assistant and ask what is slowing the page down and who should look at it.</p>
-    <div class="seq-tools"><button type="button" id="copy-summary">Copy summary</button><span id="copy-status" class="muted"></span></div>
-    <textarea id="summary-text" readonly>${esc(summary)}</textarea>
-  </section>
-  ${renderLearn()}
-</main>
-<aside id="explain" class="explain" hidden tabindex="-1" aria-live="polite" aria-label="Explanation">
-  <button type="button" class="close" id="explain-close" aria-label="Close explanation">Close</button>
-  <div class="explain-body"></div>
-</aside>
-<footer>Generated by SocketMap ${VERSION} from a Chrome NetLog capture. NetLog shows network activity only; it does not show page JavaScript/CPU time.</footer>
+</nav>
+<div class="app">
+  <header class="topbar">
+    <div class="top-row">
+      <div class="crumbs">${icon("logo")}<span class="brand-mini">SOCKETMAP</span><span class="sep">/</span><span class="file" title="${esc(source?.name || "")}">${esc(source?.name || "NetLog capture")}</span>${source?.bytes ? `<span class="badge">${esc(formatBytes(source.bytes))}</span>` : ""}</div>
+      <span class="page-url" title="${esc(page.url)}">${esc(page.url)}</span>
+      <span class="pill is-plain">Load ${esc(formatDuration(page.loadMs))}</span>
+      <span class="pill is-plain">${page.requestCount} requests</span>
+      <span class="pill${high ? " is-bad" : ""}">${analysis.findings.length} finding${analysis.findings.length === 1 ? "" : "s"}${high ? ` (${high} high)` : ""}</span>
+    </div>
+    ${renderFilterBar(analysis.pageRequests, connections)}
+  </header>
+  <main>
+    <div class="view" id="overview" data-view="overview">
+      <div class="card page-card">
+        <h2>${esc(page.url)}</h2>
+        <p class="banner">This report contains IP addresses, full URLs, and request/response headers from the capture. Passwords, cookies, auth headers, and tokens were removed before it was written.</p>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><b>${esc(formatDuration(page.loadMs))}</b><span>First request to last response</span></div>
+        <div class="kpi"><b>${page.requestCount}</b><span>Requests</span></div>
+        <div class="kpi"><b>${page.hostCount}</b><span>Hosts</span></div>
+        <div class="kpi"><b>${esc(formatBytes(page.bytesWire) || "0 B")}</b><span>Transferred</span></div>
+        <div class="kpi"><b>${analysis.findings.length}</b><span>Findings (${high} high)</span></div>
+      </div>
+      ${renderFindings(analysis.findings)}
+      ${renderBreakdown(analysis.breakdown)}
+      ${renderHosts(analysis.hosts)}
+    </div>
+    <div class="view" id="view-waterfall" data-view="waterfall">
+      ${renderWaterfall(analysis, connections)}
+    </div>
+    <div class="view" id="view-sequence" data-view="sequence">
+      ${renderSequence(view, page)}
+    </div>
+    <div class="view" id="view-environment" data-view="environment">
+      ${renderEnvironment(env)}
+      <section id="other" class="card">
+        <h2>Other activity in this capture</h2>
+        ${analysis.background.length ? `<p class="note">Traffic from other tabs, extensions, and the browser itself. Not included in this report's analysis. Pick one of these as the page to analyze it.</p>
+        <table><thead><tr><th>Site</th><th>Requests</th><th>Type</th></tr></thead><tbody>
+          ${analysis.background.map(p => `<tr><td>${esc(p.site)}</td><td>${p.requestCount}</td><td>${p.isBackground ? "Browser / extension" : "Other page"}</td></tr>`).join("")}
+        </tbody></table>` : "<p>None.</p>"}
+      </section>
+    </div>
+    <div class="view" id="view-ai" data-view="ai-summary">
+      <section id="ai-summary" class="card">
+        <h2>AI summary</h2>
+        <p class="note">Paste this into your AI assistant and ask what is slowing the page down and who should look at it.</p>
+        <div class="tools"><button type="button" id="copy-summary" class="primary">Copy summary</button><span id="copy-status" class="muted"></span></div>
+        <textarea id="summary-text" readonly>${esc(summary)}</textarea>
+      </section>
+    </div>
+    <div class="view" id="view-learn" data-view="learn">
+      ${renderLearn()}
+    </div>
+  </main>
+  <footer class="statusbar">
+    <span class="done-dot" aria-hidden="true"></span><strong>${model.stats.events.toLocaleString("en-US")} events read</strong>
+    <span>${model.requests.length} requests in capture</span>
+    <span>${page.requestCount} on this page</span>
+    <span>${page.hostCount} hosts</span>
+    <span>Secrets removed</span>
+    <span>Works offline</span>
+    <span>SocketMap ${VERSION}</span>
+  </footer>
+</div>
 <script>
 (function () {
-  var wrap = document.querySelector(".seq-wrap");
-  var svg = wrap && wrap.querySelector("svg");
-  var baseW = svg ? Number(svg.getAttribute("width")) : 0;
-  var baseH = svg ? Number(svg.getAttribute("height")) : 0;
-  var scale = 1;
+  document.documentElement.classList.add("js");
+  var topbar = document.querySelector(".topbar");
+  function setTopbarHeight() { document.documentElement.style.setProperty("--topbar-h", topbar.offsetHeight + "px"); }
 
-  // Floating host header: a copy of the participant cards pinned to the top of the
-  // diagram once the real cards scroll out of view, so each lifeline stays labeled.
-  var sticky = null, strip = null, bandTop = 0, bandH = 0;
-  var cards = svg ? svg.querySelectorAll(".participant-card") : [];
-  if (cards.length) {
-    var first = cards[0];
-    var cardTop = first.transform.baseVal.consolidate().matrix.f;
-    bandTop = cardTop - 12;
-    bandH = first.getBBox().height + 24;
-    var ns = "http://www.w3.org/2000/svg";
-    strip = document.createElementNS(ns, "svg");
-    strip.setAttribute("viewBox", "0 " + bandTop + " " + baseW + " " + bandH);
-    var defs = svg.querySelector("defs");
-    if (defs) strip.appendChild(defs.cloneNode(true));
-    var bg = document.createElementNS(ns, "rect");
-    bg.setAttribute("x", 0); bg.setAttribute("y", bandTop);
-    bg.setAttribute("width", baseW); bg.setAttribute("height", bandH);
-    bg.setAttribute("fill", getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#070b12");
-    strip.appendChild(bg);
-    cards.forEach(function (c) { strip.appendChild(c.cloneNode(true)); });
-    sticky = document.createElement("div");
-    sticky.className = "seq-sticky is-hidden";
-    sticky.appendChild(strip);
-    wrap.insertBefore(sticky, svg);
+  // Views: the hash names a view or an element inside one.
+  var views = Array.prototype.slice.call(document.querySelectorAll(".view"));
+  var filterbar = document.getElementById("filterbar");
+  function route(requested) {
+    var hash = requested || decodeURIComponent(location.hash.slice(1)) || "overview";
+    var target = document.getElementById(hash);
+    var view = target ? (target.classList.contains("view") ? target : target.closest(".view")) : null;
+    if (!view) { view = document.getElementById("overview"); target = null; }
+    views.forEach(function (v) { v.classList.toggle("is-active", v === view); });
+    var name = view.getAttribute("data-view");
+    document.querySelectorAll("[data-nav]").forEach(function (a) { a.classList.toggle("is-active", a.getAttribute("data-nav") === name); });
+    filterbar.classList.toggle("is-shown", name === "waterfall" || name === "sequence");
+    setTopbarHeight();
+    if (target && target !== view && !/^(waterfall|sequence|ai-summary|learn|environment)$/.test(hash)) {
+      if (target.tagName === "DETAILS") target.open = true;
+      target.scrollIntoView({ block: "center" });
+    } else {
+      window.scrollTo(0, 0);
+    }
   }
-  function sizeStrip() {
-    if (!strip) return;
-    strip.setAttribute("width", baseW * scale);
-    strip.setAttribute("height", bandH * scale);
-  }
-  function updateSticky() {
-    if (!sticky) return;
-    var headerBottom = (bandTop + bandH - 12) * scale;
-    sticky.classList.toggle("is-hidden", wrap.scrollTop < headerBottom);
-  }
-  sizeStrip();
-  if (wrap) wrap.addEventListener("scroll", updateSticky, { passive: true });
+  window.addEventListener("hashchange", function () { route(); });
+  // In-page links switch views directly. Inside the viewer the report is an embedded
+  // document whose "#" links would otherwise resolve against the viewer's address.
+  document.addEventListener("click", function (ev) {
+    var a = ev.target.closest && ev.target.closest('a[href^="#"]');
+    if (!a) return;
+    ev.preventDefault();
+    var hash = a.getAttribute("href").slice(1);
+    route(hash);
+    if (window === window.top) { try { history.replaceState(null, "", "#" + hash); } catch (e) { /* file:// may refuse; the view still changes */ } }
+  });
+  window.addEventListener("resize", setTopbarHeight);
 
-  document.querySelectorAll("[data-zoom]").forEach(function (b) {
+  // Filter: the same search and chips apply to the waterfall and the sequence.
+  var mode = "all";
+  var input = document.getElementById("filter-text");
+  var count = document.getElementById("filter-count");
+  function applyFilter() {
+    var text = input.value.trim().toLowerCase();
+    var shown = 0, total = 0;
+    document.querySelectorAll(".wf-row, .seq-row").forEach(function (row) {
+      var flags = " " + (row.getAttribute("data-flags") || "") + " ";
+      var byMode = mode === "all" || (mode === "problems" ? /\\s(error|inspected)\\s/.test(flags) : flags.indexOf(" " + mode + " ") >= 0);
+      var byText = !text || (row.getAttribute("data-search") || "").indexOf(text) >= 0;
+      var visible = byMode && byText;
+      row.classList.toggle("is-filtered-out", !visible);
+      if (row.classList.contains("wf-row")) { total++; if (visible) shown++; }
+    });
+    count.textContent = (mode === "all" && !text) ? "" : "Showing " + shown + " of " + total + " requests";
+  }
+  input.addEventListener("input", applyFilter);
+  document.querySelectorAll("[data-filter]").forEach(function (b) {
     b.addEventListener("click", function () {
-      var z = b.getAttribute("data-zoom");
-      scale = z === "reset" ? 1 : Math.min(3, Math.max(0.2, scale * Number(z)));
-      if (svg) { svg.setAttribute("width", baseW * scale); svg.setAttribute("height", baseH * scale); }
-      sizeStrip();
-      updateSticky();
+      mode = b.getAttribute("data-filter");
+      document.querySelectorAll("[data-filter]").forEach(function (x) {
+        var on = x === b;
+        x.classList.toggle("is-on", on);
+        x.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      applyFilter();
     });
   });
-  // Plain-language explanations: click any arrow, activity bar, or column heading.
+
+  // Inspector: plain-language explanation of the selected row or column.
   var EXPLAIN = JSON.parse(document.getElementById("seq-explain").textContent || "{}");
-  var panel = document.getElementById("explain");
-  var panelBody = panel.querySelector(".explain-body");
+  var inspector = document.getElementById("explain");
+  var empty = document.getElementById("insp-empty");
+  var body = document.getElementById("insp-body");
   var selected = null;
-  var routes = null;
   function esc(t) { var d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; }
-  function routeIndex() {
-    if (routes) return routes;
-    routes = Array.prototype.map.call(svg.querySelectorAll(".message-route"), function (g) {
-      var b = g.querySelector(".route-line").getBBox();
-      return { el: g, y: b.y + b.height / 2, from: g.getAttribute("data-from"), to: g.getAttribute("data-to") };
-    });
-    return routes;
+  function table(rows) {
+    return '<table class="mini"><tbody>' + rows.map(function (r) { return "<tr><th>" + esc(r[0]) + '</th><td class="wrap">' + r[1] + "</td></tr>"; }).join("") + "</tbody></table>";
   }
-  function show(key, routeEl) {
+  function fill(e) {
+    var explained = "<p>" + esc(e.plain) + "</p>";
+    if (e.insight) explained += '<p class="insight">' + esc(e.insight) + "</p>";
+    if (e.steps && e.steps.length) {
+      explained += '<h4 class="sub">' + esc(e.stepsTitle || "Step by step") + "</h4>" + table(e.steps.map(function (s) {
+        return [s.label, "<strong>" + esc(s.value) + '</strong><div class="meaning">' + esc(s.meaning) + "</div>"];
+      }));
+    }
+    var timing = '<p class="muted">No timing for this item.</p>';
+    if (e.timing && e.timing.length) {
+      var total = e.totalMs || e.timing.reduce(function (s, t) { return s + t.ms; }, 0) || 1;
+      timing = '<p class="muted">Total ' + esc(e.timing.length ? formatTotal(total) : "") + '. Each bar is that step\\'s share of the total.</p><div class="bars">' + e.timing.map(function (t) {
+        return '<div class="bar-row"><div class="bar-top"><span>' + esc(t.label) + "</span><span>" + esc(t.value) + '</span></div><div class="bar-track"><div class="bar-fill seg-' + esc(t.key) + '" style="width:' + Math.max(1, Math.round(t.ms / total * 100)) + '%"></div></div><div class="meaning">' + esc(t.meaning) + "</div></div>";
+      }).join("") + "</div>";
+    }
+    var connection = e.facts && e.facts.length ? table(e.facts.map(function (f) { return [f[0], esc(f[1])]; })) : '<p class="muted">Nothing recorded.</p>';
+    var headers = '<p class="muted">No headers recorded for this item.</p>';
+    if (e.headers && ((e.headers.request || []).length || (e.headers.response || []).length)) {
+      headers = '<h4 class="sub">Request</h4><pre>' + esc((e.headers.request || []).join("\\n") || "None recorded") + '</pre><h4 class="sub">Response</h4><pre>' + esc((e.headers.response || []).join("\\n") || "None recorded") + "</pre>";
+    }
+    body.querySelector('[data-pane="explained"]').innerHTML = explained;
+    body.querySelector('[data-pane="timing"]').innerHTML = timing;
+    body.querySelector('[data-pane="connection"]').innerHTML = connection;
+    body.querySelector('[data-pane="headers"]').innerHTML = headers;
+  }
+  function formatTotal(msValue) { return msValue >= 1000 ? (msValue / 1000).toFixed(2) + "s" : Math.round(msValue * 10) / 10 + "ms"; }
+  function selectTab(name) {
+    body.querySelectorAll("[data-tab]").forEach(function (b) { b.setAttribute("aria-selected", b.getAttribute("data-tab") === name ? "true" : "false"); });
+    body.querySelectorAll("[data-pane]").forEach(function (p) { p.hidden = p.getAttribute("data-pane") !== name; });
+  }
+  function show(key, el) {
     var e = EXPLAIN[key];
     if (!e) return;
     if (selected) selected.classList.remove("is-selected");
-    selected = routeEl || null;
+    selected = el;
     if (selected) selected.classList.add("is-selected");
-    var html = "<h3>" + esc(e.title) + "</h3>";
-    html += '<p class="verdict tone-' + esc(e.tone) + '">' + esc(e.verdict) + "</p>";
-    html += "<p>" + esc(e.plain) + "</p>";
-    if (e.insight) html += '<p class="insight">' + esc(e.insight) + "</p>";
-    if (e.steps && e.steps.length) {
-      html += '<h4 class="sub">' + esc(e.stepsTitle || "Step by step") + '</h4><table class="mini"><tbody>';
-      e.steps.forEach(function (s) { html += "<tr><th>" + esc(s.label) + "</th><td><strong>" + esc(s.value) + '</strong><div class="meaning">' + esc(s.meaning) + "</div></td></tr>"; });
-      html += "</tbody></table>";
+    document.getElementById("insp-title").textContent = e.title;
+    var verdict = document.getElementById("insp-verdict");
+    verdict.textContent = e.verdict;
+    verdict.className = "verdict tone-" + e.tone;
+    fill(e);
+    selectTab("explained");
+    var link = document.getElementById("insp-link");
+    if (e.requestId != null) {
+      link.innerHTML = '<a href="#req-' + esc(e.requestId) + '">Show this request in the waterfall</a>';
+      link.hidden = false;
+    } else {
+      link.hidden = true;
     }
-    if (e.facts && e.facts.length) {
-      html += '<details class="more" open><summary>Technical details</summary><table class="mini"><tbody>';
-      e.facts.forEach(function (f) { html += "<tr><th>" + esc(f[0]) + '</th><td class="wrap">' + esc(f[1]) + "</td></tr>"; });
-      html += "</tbody></table></details>";
-    }
-    if (e.requestId != null) html += '<p><a href="#req-' + esc(e.requestId) + '" data-open-req="' + esc(e.requestId) + '">Show this request in the waterfall</a></p>';
-    panelBody.innerHTML = html;
-    panel.hidden = false;
-    panel.scrollTop = 0;
+    empty.hidden = true;
+    body.hidden = false;
+    inspector.classList.add("is-open");
+    inspector.scrollTop = 0;
   }
-  function hide() { panel.hidden = true; if (selected) selected.classList.remove("is-selected"); selected = null; }
-  function activate(target) {
-    var route = target.closest(".message-route");
-    if (route) return show(route.id, route);
-    var card = target.closest(".participant-card");
-    if (card) return show("card-" + card.getAttribute("data-id"), null);
-    var bar = target.closest(".activation-bar");
-    if (bar) {
-      var y = bar.y.baseVal.value + bar.height.baseVal.value / 2;
-      var pid = bar.getAttribute("data-participant");
-      var best = null;
-      routeIndex().forEach(function (r) {
-        if (r.from !== pid && r.to !== pid) return;
-        if (!best || Math.abs(r.y - y) < Math.abs(best.y - y)) best = r;
-      });
-      if (best && Math.abs(best.y - y) < 40) show(best.el.id, best.el);
-    }
+  function closeInspector() {
+    inspector.classList.remove("is-open");
+    if (selected) selected.classList.remove("is-selected");
+    selected = null;
+    body.hidden = true;
+    empty.hidden = false;
   }
-  if (wrap) {
-    wrap.addEventListener("click", function (ev) { activate(ev.target); });
-    wrap.addEventListener("keydown", function (ev) {
-      if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest && ev.target.closest(".message-route, .participant-card")) { ev.preventDefault(); activate(ev.target); }
-    });
-    Array.prototype.forEach.call(wrap.querySelectorAll(".message-route, .participant-card"), function (el) {
-      el.setAttribute("tabindex", "0");
-      el.setAttribute("role", "button");
-    });
-  }
-  document.getElementById("explain-close").addEventListener("click", hide);
-  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && !panel.hidden) hide(); });
-  panel.addEventListener("click", function (ev) {
-    var link = ev.target.closest("[data-open-req]");
-    if (!link) return;
-    ev.preventDefault();
-    var row = document.getElementById("req-" + link.getAttribute("data-open-req"));
-    if (row) { row.open = true; row.scrollIntoView({ block: "center" }); }
+  var seq = document.getElementById("sequence");
+  seq.addEventListener("click", function (ev) {
+    var el = ev.target.closest("[data-key]");
+    if (el) show(el.getAttribute("data-key"), el);
   });
+  seq.addEventListener("keydown", function (ev) {
+    if ((ev.key === "Enter" || ev.key === " ") && ev.target.classList && ev.target.classList.contains("seq-row")) {
+      ev.preventDefault();
+      show(ev.target.getAttribute("data-key"), ev.target);
+    }
+  });
+  body.querySelector(".insp-tabs").addEventListener("click", function (ev) {
+    var tab = ev.target.closest("[data-tab]");
+    if (tab) selectTab(tab.getAttribute("data-tab"));
+  });
+  document.getElementById("explain-close").addEventListener("click", closeInspector);
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && inspector.classList.contains("is-open")) closeInspector(); });
 
-  var copy = document.getElementById("copy-summary");
-  copy.addEventListener("click", function () {
+  document.getElementById("copy-summary").addEventListener("click", function () {
     var text = document.getElementById("summary-text");
     var status = document.getElementById("copy-status");
     function done() { status.textContent = "Copied"; setTimeout(function () { status.textContent = ""; }, 2000); }
@@ -619,6 +919,9 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME } = {}
       navigator.clipboard.writeText(text.value).then(done, function () { text.select(); document.execCommand("copy"); done(); });
     } else { text.select(); document.execCommand("copy"); done(); }
   });
+
+  applyFilter();
+  route();
 })();
 </script>
 </body>

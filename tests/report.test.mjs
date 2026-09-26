@@ -40,15 +40,41 @@ describe("Report HTML", () => {
     assert.ok(html.includes('id="hosts"'));
     assert.ok(html.includes('id="waterfall"'));
     assert.ok(html.includes('id="sequence"'));
-    assert.ok(html.includes("<svg"), "sequence diagram");
     assert.equal((html.match(/<details class="wf-row/g) || []).length, 5, "one waterfall row per page request");
-    assert.ok(html.includes('class="wf-row is-failed"'), "the refused localhost call is marked failed");
+    assert.ok(/<details class="wf-row[^"]*flag-error[^"]*" id="req-30"/.test(html), "the refused localhost call is marked failed");
   });
 
-  it("pins a copy of the host cards above the diagram while scrolling", () => {
-    assert.ok(html.includes(".seq-sticky"), "sticky header styles");
-    assert.ok(html.includes('querySelectorAll(".participant-card")'), "cards are cloned into the sticky header");
-    assert.ok(html.includes("<title>portal.example.com (198.51.100.20)</title>"), "each card names its host and IP on hover");
+  it("lays the report out as views with a sidebar, top bar, and status bar", () => {
+    for (const view of ["overview", "view-waterfall", "view-sequence", "view-environment", "view-ai", "view-learn"]) {
+      assert.ok(html.includes(`id="${view}"`), view);
+    }
+    for (const nav of ["#overview", "#waterfall", "#sequence", "#environment", "#ai-summary", "#learn"]) {
+      assert.ok(html.includes(`href="${nav}" data-nav=`), nav);
+    }
+    assert.ok(html.includes('class="topbar"'));
+    assert.ok(html.includes('class="statusbar"'));
+    assert.ok(html.includes("events read"));
+  });
+
+  it("shows the sequence as rows under a sticky host header", () => {
+    assert.ok(/\.seq-head \{ position: sticky/.test(html), "host header stays pinned");
+    assert.ok(html.includes('title="portal.example.com (198.51.100.20)"'), "each host names its IP");
+    const rows = html.match(/<div class="seq-row [^"]*"/g) || [];
+    assert.equal(rows.filter(r => r.includes("kind-request")).length, 5, "one row per request");
+    assert.ok(rows.some(r => r.includes("kind-connect") && r.includes("flag-inspected")), "inspected handshake is flagged");
+    assert.ok(html.includes('<span class="seq-t">+0ms</span>') || html.includes('<span class="seq-t">+&lt;1ms</span>') || /<span class="seq-t">\+/.test(html), "time offsets");
+    assert.ok(html.includes('class="tag tone-proto">H2<'), "protocol chips");
+  });
+
+  it("offers a shared filter with problem counts", () => {
+    assert.ok(html.includes('id="filter-text"'));
+    assert.ok(/data-filter="problems"[^>]*>Problems <span class="count">2<\/span>/.test(html), "failed localhost call and inspected API call");
+    assert.ok(/data-filter="local"[^>]*>Local calls <span class="count">1<\/span>/.test(html));
+    assert.ok(/data-flags="error local"/.test(html));
+  });
+
+  it("docks a tabbed inspector", () => {
+    for (const tab of ["explained", "timing", "connection", "headers"]) assert.ok(html.includes(`data-tab="${tab}"`), tab);
   });
 
   it("explains every arrow in plain language when clicked", () => {
@@ -57,7 +83,7 @@ describe("Report HTML", () => {
     const explanations = JSON.parse(json[1]);
     assert.ok(Object.keys(explanations).length >= 10);
     assert.ok(html.includes('id="explain"'), "explanation panel");
-    assert.ok(html.includes("How to read this diagram"));
+    assert.ok(html.includes("How to read this view"));
     assert.ok(html.includes('id="req-1"'), "waterfall rows can be opened from the panel");
     assert.ok(html.includes('class="plain"'), "plain-language summary in each waterfall row");
   });

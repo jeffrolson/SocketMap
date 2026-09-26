@@ -24,10 +24,14 @@ export function createCaptureReader() {
 /**
  * Analyzes one page of the capture (default: the page that was loaded) and renders the report.
  * theme: design tokens; omitted means the built-in DESIGN.md theme.
+ * source: { name, bytes } of the capture file, shown in the report header.
  */
-export function buildReport(model, site, theme) {
+export function buildReport(model, site, theme, source) {
   const analysis = analyzeCapture(model, { site: site || undefined });
-  return { analysis, html: renderReportHtml(model, analysis, theme ? { theme } : {}) };
+  const options = {};
+  if (theme) options.theme = theme;
+  if (source) options.source = source;
+  return { analysis, html: renderReportHtml(model, analysis, options) };
 }
 
 /** Checks the first few KB of a file before reading all of it. */

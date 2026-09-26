@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { explainConnection, explainRequest, explainResponse, explainHost, plainSummary, describeResource } from "../src/explain.mjs";
-import { buildSequenceTrace } from "../src/renderer/report.html.mjs";
+import { buildSequenceView } from "../src/renderer/report.html.mjs";
 import { buildPageLoadNetLog, toNetLogText } from "./fixtures/netlog-builder.mjs";
 
 let dir;
@@ -80,9 +80,19 @@ describe("Plain-language explanations", () => {
     assert.ok(text.includes("Server wait"));
   });
 
-  it("gives every arrow and column in the diagram an explanation", () => {
-    const { trace, explanations } = buildSequenceTrace(analysis, connections, model.environment);
-    for (const m of trace.messages) assert.ok(explanations[m.id], `explanation for ${m.id}`);
-    for (const p of trace.participants) assert.ok(explanations[`card-${p.id}`], `explanation for ${p.id}`);
+  it("gives every row and column in the sequence view an explanation", () => {
+    const { actors, rows, explanations } = buildSequenceView(analysis, connections, model.environment);
+    for (const row of rows) assert.ok(explanations[row.key], `explanation for ${row.key}`);
+    for (const a of actors) assert.ok(explanations[a.key], `explanation for ${a.key}`);
+  });
+
+  it("explains a whole request with timing bars and headers", async () => {
+    const { explainTransaction } = await import("../src/explain.mjs");
+    const e = explainTransaction(req(10), conn(req(10)));
+    assert.equal(e.tone, "bad");
+    assert.ok(e.plain.includes("got status 200"));
+    assert.ok(e.timing.some(t => t.key === "wait" && t.ms === 1200));
+    assert.ok(e.headers.request.some(h => h.startsWith(":path")));
+    assert.ok(!JSON.stringify(e).includes("DIGESTSECRET"));
   });
 });
