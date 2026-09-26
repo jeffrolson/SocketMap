@@ -19,7 +19,7 @@ import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 function printHelp() {
   console.log(`

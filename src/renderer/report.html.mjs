@@ -13,7 +13,7 @@ import { TIMING_LABELS, buildAiSummary } from "../analysis.mjs";
 import { explainConnection, explainRequest, explainResponse, explainHost, plainSummary, MEASURE_HELP, RATING_WORDS } from "../explain.mjs";
 import { renderLearn } from "./learn.mjs";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const MAX_SEQUENCE_HOSTS = 8;
 const MAX_SEQUENCE_REQUESTS = 200; // display limit for the diagram only; the waterfall shows every request
