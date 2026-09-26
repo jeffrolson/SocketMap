@@ -39,6 +39,9 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/redact.mjs` | Secret redaction for URLs and header lines | Node.js or browser |
 | `src/cert.mjs` | Minimal X.509 reader: subject, issuer, root, expiry from PEM | Node.js or browser |
 | `src/analysis.mjs` | Page selection, Good / Better / Best / Poor host ratings, findings, time breakdown, AI summary text | Node.js or browser |
+| `src/viewer/viewer-core.mjs` | Viewer pipeline without page APIs: capture reader, report builder, file check | Node.js or browser |
+| `src/viewer/viewer-app.mjs` | Viewer page wiring: drop zone, chunked file read with progress, page picker, save report | Browser |
+| `scripts/build-viewer.mjs` | Minimal bundler: packs the viewer and every module it imports into `socketmap-viewer.html` | Node.js |
 | `src/explain.mjs` | Plain-language explanations: per diagram arrow and host column, waterfall summaries, rating meanings | Node.js or browser |
 | `src/renderer/learn.mjs` | Learn tab: next steps, curated outbound links, glossary | Node.js or browser |
 | `src/renderer/report.html.mjs` | Troubleshooting report HTML: findings, hosts, waterfall, sequence diagram with click-to-explain panel, environment, AI summary, Learn tab | Node.js or browser |
@@ -58,6 +61,8 @@ NetLog capture, end to end:
 4. At end of file it follows the links: request → controller (proxy decision) → stream job → socket, HTTP/2 session, or QUIC session → connect job (DNS) and certificate verifier job (chain, public root or not). URLs and headers are redacted here.
 5. `analysis` picks the page (the site with a main-frame load and the most requests), rates each host, and builds findings with evidence.
 6. `report.html.mjs` writes one self-contained HTML file.
+
+The drag-and-drop viewer runs steps 2 to 6 in the browser: `File.stream()` feeds decoded chunks to the same tokenizer and analyzer, and the report renders into an iframe.
 
 HAR or generic JSON, end to end:
 
@@ -121,6 +126,13 @@ HAR or generic JSON, end to end:
 - Rationale: The report's readers are network, security, and vendor support teams who need addresses and paths. Credentials are never needed for diagnosis.
 - Alternatives considered: Masking IPs and document paths by default.
 - Trade-offs accepted: Reports identify the client machine's IP and the documents it opened; users must share them accordingly.
+
+### Self-Built Viewer Bundle
+- Status: Accepted
+- Decision: `scripts/build-viewer.mjs` bundles the browser modules into one HTML file by wrapping each module in a function and linking named imports. It accepts only named relative imports and `export function` / `export const`, and fails the build on anything else or on Node APIs.
+- Rationale: Zero dependencies rules out esbuild or Rollup; ES module `<script type="module">` imports do not work from `file://`, and the viewer must work as a double-clicked file.
+- Alternatives considered: Inlining modules as `data:` URL imports; a third-party bundler.
+- Trade-offs accepted: Modules must stick to the supported syntax. A test runs the bundle and requires its report to match the CLI report byte for byte.
 
 ### Browser-Portable Core
 - Status: Accepted

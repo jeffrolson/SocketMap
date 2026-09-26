@@ -30,8 +30,8 @@ Queued, priority-ordered.
 - Phase 2: M365 detectors (TLS inspection via certificate issuer, proxy and PAC cost,
   QUIC fallback, localhost calls, sign-in redirect chains, embedded M365 endpoint list).
   Needs a real SharePoint capture from work.
-- Phase 3: drag-and-drop HTML viewer (runs fully in the browser) and company theming
-  from `themes/<company>/DESIGN.md`
+- Phase 3a: drag-and-drop HTML viewer (branch `feat/viewer`, built, awaiting review)
+- Phase 3b: company theming from `themes/<company>/DESIGN.md`
 
 ## Later (this quarter)
 Planned but not scheduled.

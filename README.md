@@ -33,6 +33,12 @@ This is the main workflow. The capture works in any Chrome or Edge browser, with
 
 ### 2. Build the report
 
+**No install: the viewer.** Open `socketmap-viewer.html` in Chrome or Edge and drop the capture on it. The capture is read inside the browser and never uploaded; the page works offline. Use **Save report** to get a standalone report file to share.
+
+Build the viewer once with `npm run build:viewer`, then share the single `socketmap-viewer.html` file (email, SharePoint, intranet). Nobody who uses it needs Node.js.
+
+**Command line (power users, scripts, AI agents):**
+
 ```bash
 node bin/traceviz.mjs ~/Downloads/chrome-net-export-log.json -o report.html --open
 ```

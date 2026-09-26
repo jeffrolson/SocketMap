@@ -96,6 +96,17 @@ and the code disagree, this file wins and the code gets fixed.
   - DOM event delegation with `data-filter-type` and `data-filter-value` ensures reliable client-side execution.
 - Acceptance criteria: Displays complete KPI metrics and provides seamless 1-click interactive filtering.
 
+### Drag-and-Drop Viewer
+- Purpose: Let anyone with Chrome or Edge produce the report, with no install.
+- Inputs: A NetLog file dropped on, or chosen in, `socketmap-viewer.html`.
+- Outputs: The same report the CLI produces, shown in the page, plus a downloadable standalone report.
+- Business rules:
+  - The file is read in chunks inside the browser. Nothing is uploaded and no network access is needed.
+  - The first bytes are checked first; HAR files and other files get a plain explanation instead of a failure.
+  - Page picker lists every site in the capture; the default is the loaded page.
+  - Progress shows bytes read of the total.
+- Acceptance criteria: For the same capture, the viewer's report equals the CLI's report.
+
 ### CLI Binary Entrypoint
 - Purpose: Command-line interface for developer workflows.
 - Inputs: CLI arguments (`bin/traceviz.mjs <file> [options]`).
