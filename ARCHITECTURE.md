@@ -39,7 +39,9 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/redact.mjs` | Secret redaction for URLs and header lines | Node.js or browser |
 | `src/cert.mjs` | Minimal X.509 reader: subject, issuer, root, expiry from PEM | Node.js or browser |
 | `src/analysis.mjs` | Page selection, Good / Better / Best / Poor host ratings, findings, time breakdown, AI summary text | Node.js or browser |
-| `src/renderer/report.html.mjs` | Troubleshooting report HTML: findings, hosts, waterfall, sequence diagram, environment, AI summary | Node.js or browser |
+| `src/explain.mjs` | Plain-language explanations: per diagram arrow and host column, waterfall summaries, rating meanings | Node.js or browser |
+| `src/renderer/learn.mjs` | Learn tab: next steps, curated outbound links, glossary | Node.js or browser |
+| `src/renderer/report.html.mjs` | Troubleshooting report HTML: findings, hosts, waterfall, sequence diagram with click-to-explain panel, environment, AI summary, Learn tab | Node.js or browser |
 | `src/parsers/generic-parser.mjs` | Parser for HAR archives and generic span JSON traces | Node.js |
 | `src/normalizer.mjs` | Maps events into canonical IR schema; credential redactor; critical path classifier & guidance engine | Node.js |
 | `src/renderer/svg-builder.mjs` | Computes column geometry, lifelines, activation blocks, glow filters, markers, and blocking indicators | Node.js |
@@ -78,6 +80,7 @@ HAR or generic JSON, end to end:
 - A connection counts as new for a request only if it finished setting up after that request started waiting for a stream. Only new connections contribute DNS, connect, and TLS time to a request.
 - Redirects followed inside one request share a source. Timing phases describe the last leg; the time before it is reported as `redirect`.
 - A capture Chrome never finished writing still parses: complete events are kept, `polledData` is simply absent.
+- Diagram explanations are computed at build time and embedded as JSON (`#seq-explain`), keyed by message id (`seq-N`) and column (`card-<participant>`). Clicking an activity bar resolves to the nearest arrow on that lifeline. The report hides the SVG's own legend and badge and shows a plain-language legend instead.
 - The sequence diagram in the report has display limits (`MAX_SEQUENCE_HOSTS`, `MAX_SEQUENCE_REQUESTS` in `report.html.mjs`). The waterfall and analysis always include every request.
 - Chromium NetLog event types and source types are often numeric IDs mapped to strings via `constants.logEventTypes` and `constants.logSourceType`. The parser dynamically inverts these constants to resolve event names regardless of numeric assignment across Chrome versions.
 - All SVG filters and markers are encapsulated inside `<defs>` with unique IDs. Text elements use `paint-order: stroke` to create an outline buffer, ensuring arrow labels remain legible when crossing lifelines and grid dots.

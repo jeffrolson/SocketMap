@@ -11,6 +11,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `--page <site>` option to analyze a specific site in a capture.
 - Sequence diagram in the report keeps the host cards pinned at the top while scrolling, aligned with their lifelines.
 - Long participant names shrink to fit their card, with the full name and IP shown on hover.
+- Click any arrow, activity bar, or column heading in the sequence diagram for a plain-language explanation: what happened, a verdict, each timing step with its meaning, where to look, and technical details, with a link to the matching waterfall row.
+- "How to read this diagram" guide above the sequence diagram, a plain-language summary in every waterfall row, and explanations of each host rating.
+- Learn tab: next troubleshooting steps, verified links (Web Vitals, Chrome Modern Web Guidance, DevTools, NetLog Viewer, Microsoft 365 networking, Wireshark, and more), and a glossary.
 - Capture guide for `chrome://net-export` / `edge://net-export` in the README.
 
 ### Changed

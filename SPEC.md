@@ -34,7 +34,9 @@ and the code disagree, this file wins and the code gets fixed.
     - Server wait (median time to first byte): under 200 ms Best, 200 to 500 ms Better, 500 ms to 1 s Good, over 1 s Poor.
   - Findings, each with severity, evidence lines from the capture, and the team to involve: TLS inspection, proxy authentication (407), calls to this computer or local network, proxy use, slow proxy lookup, failed requests, slow server, slow connection, slow DNS, QUIC failure, browser queueing, HTTP/1.1 hosts.
   - Waterfall with every page request; each row expands to timing, connection, certificate, and redacted headers.
-  - Sequence diagram with one lifeline per host; connection setup drawn only for new connections.
+  - Sequence diagram with one lifeline per host; connection setup drawn only for new connections. Host cards stay pinned while scrolling.
+  - Plain language for every audience: clicking any arrow, activity bar, or host column opens an explanation (what happened, a verdict, each step with its meaning, where to look, technical details). Each waterfall row opens with a one-paragraph summary.
+  - Learn tab with next steps, verified outbound links, and a glossary. Links open in a new tab; the report itself loads nothing remote.
   - AI summary: compact plain text with environment, time breakdown, findings, host ratings, and slowest requests.
 - Acceptance criteria: Opens offline with no remote resources; contains no credentials; contains no value that is not in the capture.
 

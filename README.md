@@ -46,7 +46,8 @@ The report is one HTML file you can email or attach to a ticket. It opens offlin
 - **Findings**: plain-language problems with the evidence and the team to involve. They cover TLS inspection (certificates from a private root), proxies and slow proxy lookups, calls to services on this computer (such as sign-in agents on `localhost`), failed requests, slow servers, slow connections, slow DNS, and QUIC failures.
 - **Hosts and connection ratings**: every host the page used, with its server IP and certificate issuer, rated on six measures.
 - **Request waterfall**: every request, with its time split into phases. Click a row for connection, certificate, and header details.
-- **Sequence diagram**: the page load drawn as conversations between the browser and each host.
+- **Sequence diagram**: the page load drawn as conversations between the browser and each host. Click any arrow, bar, or host heading for a plain-language explanation of that step.
+- **Learn**: what to do next, links to deeper tools and guidance (Web Vitals, Chrome DevTools, Microsoft 365 networking, Wireshark), and a glossary.
 - **Environment**: browser, OS, local IP, DNS servers, and proxy setup at capture time.
 - **AI summary**: a compact text version to paste into your AI assistant.
 
