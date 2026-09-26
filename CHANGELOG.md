@@ -3,6 +3,29 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-26
+### Added
+- Troubleshooting report for Chrome/Edge NetLog captures: findings with evidence and the team to involve, host table with Good / Better / Best / Poor ratings, request waterfall with per-phase timing, sequence diagram, environment card, and a copyable AI summary.
+- Findings for TLS inspection (certificate from a private root), proxies and slow proxy lookups, calls to services on this computer, failed requests, slow servers, slow connections, slow DNS, QUIC failures, browser queueing, and HTTP/1.1 hosts.
+- Environment details from the capture: browser, OS, local IP, DNS servers and search domains, secure DNS, proxy setup.
+- `--page <site>` option to analyze a specific site in a capture.
+- Capture guide for `chrome://net-export` / `edge://net-export` in the README.
+
+### Changed
+- NetLog parsing now streams one event at a time and never holds the event list in memory.
+- Requests are linked to the connection, DNS lookup, and certificate check Chrome actually used, instead of the first one in the file.
+- Every request in the capture is kept; the 20-request cap is gone.
+- Redaction now also removes secrets in URLs (tokens, OAuth codes, SAML, signed-URL signatures) and more credential headers.
+- Example and fixture data use documentation IP ranges; real captures are gitignored.
+
+### Fixed
+- NetLog event phases were read backwards (begin as end), which produced wrong timings.
+- The NetLog diagram invented a "Route Handler" hop, default TLS/protocol values, latencies, and sizes. Values not in the capture are now shown as not recorded.
+- All hosts were drawn on one lifeline named after the first request's host.
+
+### Removed
+- The old NetLog sample fixture, which did not match Chrome's real format.
+
 ## [0.2.0] - 2026-09-26
 ### Added
 - Prescriptive Guidance Engine mapping network interactions to Chrome Modern Web Guidance with Good / Better / Best optimization playbooks.

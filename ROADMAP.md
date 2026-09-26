@@ -12,7 +12,7 @@ tokens) and keeps everything else, including IPs. Real captures never enter the 
 ## Now
 Actively being built.
 
-- Phase 1, MVP: truthful NetLog report from the CLI (branch `feat/netlog-mvp`)
+- Phase 1, MVP: truthful NetLog report from the CLI (branch `feat/netlog-mvp`, built, awaiting review and merge)
   - Streaming parser that processes events as they arrive, correlating each request
     to its real connection and DNS lookup
   - One entry per real host, no request cap, page traffic separated from browser and

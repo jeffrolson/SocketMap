@@ -19,6 +19,52 @@ When a website or web app is slow, fails to load, or behaves unexpectedly, your 
 
 ---
 
+## Troubleshoot a slow page with a Chrome NetLog
+
+This is the main workflow. The capture works in any Chrome or Edge browser, with nothing to install, and records far more than DevTools does: the proxy decision, DNS, every connection, and the certificate each server presented.
+
+### 1. Capture (2 minutes)
+
+1. Close other tabs, so their traffic does not mix into the capture.
+2. Open a new tab and go to `chrome://net-export` (in Edge: `edge://net-export`).
+3. Leave the default **Strip private information** selected and click **Start Logging to Disk**. Save the file.
+4. In another tab, load the slow page (or reproduce the slow action).
+5. Go back to the net-export tab and click **Stop Logging**.
+
+### 2. Build the report
+
+```bash
+node bin/traceviz.mjs ~/Downloads/chrome-net-export-log.json -o report.html --open
+```
+
+SocketMap picks the page you loaded and lists everything else (other tabs, extensions, Chrome itself) separately. To analyze a different site from the same capture, add `--page https://site.example.com`.
+
+### 3. Read the report
+
+The report is one HTML file you can email or attach to a ticket. It opens offline on any machine.
+
+- **Findings**: plain-language problems with the evidence and the team to involve. They cover TLS inspection (certificates from a private root), proxies and slow proxy lookups, calls to services on this computer (such as sign-in agents on `localhost`), failed requests, slow servers, slow connections, slow DNS, and QUIC failures.
+- **Hosts and connection ratings**: every host the page used, with its server IP and certificate issuer, rated on six measures.
+- **Request waterfall**: every request, with its time split into phases. Click a row for connection, certificate, and header details.
+- **Sequence diagram**: the page load drawn as conversations between the browser and each host.
+- **Environment**: browser, OS, local IP, DNS servers, and proxy setup at capture time.
+- **AI summary**: a compact text version to paste into your AI assistant.
+
+| Measure | Best | Better | Good | Poor |
+|---|---|---|---|---|
+| Protocol | HTTP/3 (QUIC) | HTTP/2 | HTTP/1.1 | QUIC failed, fell back to TCP |
+| TLS | 1.3 | 1.2 | | Below 1.2 |
+| Connection setup | Reused an open connection | New, under 100 ms | 100 to 300 ms | Over 300 ms, or failed |
+| DNS | From cache | Under 20 ms | 20 to 100 ms | Over 100 ms, or failed |
+| Path | Direct | Through a proxy | | Certificate from a private root (inspection) |
+| Server wait (median) | Under 200 ms | 200 to 500 ms | 500 ms to 1 s | Over 1 s |
+
+**Privacy:** passwords, cookies, authorization headers, and tokens (including tokens in URLs) are removed. Everything else stays, including IP addresses and full URLs, because the network team needs them.
+
+**Limits:** a NetLog records network activity only. It cannot show page JavaScript/CPU time or security software running inside the browser, and it does not contain the machine name, public IP, or a traceroute.
+
+---
+
 ## 🎯 Product Vision & Architecture Philosophy
 
 ### From Opaque Network Telemetry to Prescriptive Intelligence
@@ -108,7 +154,7 @@ You don't need to capture any traces or run any commands to see what SocketMap p
 | **[E-Commerce Checkout Flow](examples/ecommerce-checkout.html)** (`examples/ecommerce-checkout.html`) | Customer clicks "Place Order" $\to$ WAF inspection $\to$ Inventory reservation $\to$ Payment gateway $\to$ DB commit $\to$ Async email queue. | Multi-service orchestration, Stripe 3D Secure verification, and background worker jobs. |
 | **[User Login & 2FA Flow](examples/user-login-2fa.html)** (`examples/user-login-2fa.html`) | User submits email & password $\to$ SMS OTP code dispatched via Twilio $\to$ Redis challenge validation $\to$ Secure session cookie issued. | Security-accented arrows, one-time code verification, and automatic password/token redaction. |
 | **[Slow API & Timeout Recovery](examples/slow-api-troubleshooting.html)** (`examples/slow-api-troubleshooting.html`) | Browser loads page $\to$ Recommendation API hangs for 800ms and returns `504 Gateway Timeout` $\to$ Circuit breaker trips $\to$ Redis cache fallback recovers gracefully. | Pinpointing slow bottlenecks, retry loops, and cache fallback recovery without crashing the page. |
-| **[Real-World NetLog: Google Firestore & Web Sync](examples/weekend-game-plan.html)** (`examples/weekend-game-plan.html`) | 5.46 MB Chrome NetLog capture of live Google web services $\to$ Firestore realtime listener $\to$ Multi-watch sync channel. | Real-world streaming ingestion (80 correlated interactions), long-lived persistent channels, and automatic auth key redaction. |
+| **Your own NetLog report** (`examples/weekend-game-plan.html`) | Generated only when a real capture is present locally as `examples/Example_Weekend Game Plan_chrome-net-export-log.json`. Real captures are never committed. | The troubleshooting report described above: findings, host ratings, waterfall, sequence diagram. |
 
 > [!TIP]
 > **Want to regenerate the examples?** Run `npm run generate:examples` anytime.
@@ -194,12 +240,9 @@ Choose whichever method is easiest for you:
    - Right-click anywhere in the list of requests and select **Save all as HAR with content**.
 6. Save the file to an easy-to-find place, such as your **Downloads** or **Desktop** folder.
 
-#### Option B: Save a Chromium NetLog (Best for deep network & connection troubleshooting in Chrome or Brave)
+#### Option B: Save a Chromium NetLog (Best for slow-page troubleshooting in Chrome or Edge)
 
-1. Open a new tab in Chrome or Brave and type `chrome://net-export/` into the address bar.
-2. Click **Start Logging to Disk** and save the file to your **Downloads** folder.
-3. Switch to another tab and reproduce the problem or complete the workflow.
-4. Go back to the `chrome://net-export/` tab and click **Stop Logging**.
+Follow [Troubleshoot a slow page with a Chrome NetLog](#troubleshoot-a-slow-page-with-a-chrome-netlog). A NetLog produces the troubleshooting report rather than the diagram described here.
 
 ---
 
@@ -245,9 +288,9 @@ Choose whichever method is easiest for you:
 - **Prescriptive Guidance Engine**: Embeds [Chrome Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance) playbooks directly into the inspector with Good / Better / Best patterns for DNS, render-blocking assets, APIs, databases, and background workers.
 - **Critical Path Detection & Isolation**: Automatically flags synchronous render-blocking calls (`⚡ BLOCKING`) affecting Core Web Vitals (LCP, INP) and provides an instant toggle to isolate the blocking waterfall.
 - **Interactive Visual Density Toggles**: Dynamic header controls for `[⚡ Critical Path]` isolation, `[✨ Glow FX]` ambient lighting, `[⏱️ Latency Badges]` inline chips, and `[💡 Insights]` health report drawer.
-- **Resilient Streaming Ingestion**: Parses Chromium NetLogs (`chrome://net-export/`) via chunked streaming (`fs.createReadStream`), keeping heap memory usage under 30MB even on 500MB+ traces.
+- **Resilient Streaming Ingestion**: Parses Chromium NetLogs (`chrome://net-export/`) one event at a time as the file streams in, so memory use does not grow with file size. Truncated captures (Chrome closed mid-write) still parse.
 - **Trace Format Auto-Detection**: Ingests:
-  - **Chromium NetLogs**: Correlates DNS (`HOST_RESOLVER_IMPL_JOB`), TLS handshake (`CONNECT_JOB` / `SSL_CONNECT_JOB`), and HTTP transactions (`URL_REQUEST` / `HTTP_TRANSACTION`).
+  - **Chromium NetLogs**: Follows Chrome's own links from each request to the stream job, socket or QUIC session, DNS lookup, and certificate check it actually used. Produces the troubleshooting report.
   - **HAR Files**: Ingests HTTP Archives exported from Chrome, Edge, Firefox, or Safari DevTools.
   - **Generic JSON / Spans**: Ingests OpenTelemetry and custom microservice execution spans.
 - **Automatic Credential Redaction**: Automatically scrubs `Authorization`, `Cookie`, `Set-Cookie`, and API keys before outputting diagrams.
@@ -279,8 +322,11 @@ node bin/traceviz.mjs --sample -o sample.html --open
 ### 2. Visualize a Real Trace
 
 ```bash
-# Chromium NetLog export
+# Chromium NetLog export (troubleshooting report)
 node bin/traceviz.mjs ~/Downloads/net-export.json --open
+
+# Analyze a specific site from the same capture
+node bin/traceviz.mjs ~/Downloads/net-export.json --page https://contoso.sharepoint.com --open
 
 # HTTP Archive (HAR)
 node bin/traceviz.mjs network.har --open
@@ -306,6 +352,7 @@ socketmap <input-trace.json> [options]
 OPTIONS:
   -o, --output <file>    Target output HTML file path (default: ./trace-diagram.html)
   --filter <regex>       Filter requests by URL or method pattern
+  --page <site>          NetLog only: analyze this site (e.g. https://contoso.sharepoint.com)
   --sample               Generate demo diagram using synthetic reference data
   --open                 Automatically open the generated visual in your default browser
   -h, --help             Show help message and exit
