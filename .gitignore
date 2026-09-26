@@ -7,3 +7,11 @@ temp-*
 captures/
 examples/*.json
 *.netlog
+
+# AI assistant instruction files stay on each developer's machine
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.cursorrules
+MEMORY.md
+.claude/

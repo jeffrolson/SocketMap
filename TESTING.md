@@ -10,7 +10,7 @@ npm test
 # Single test file
 node --test tests/netlog-parser.test.mjs
 
-# Full verification (tests + context files)
+# Full verification (tests + design-token freshness)
 npm run verify
 ```
 
@@ -21,8 +21,7 @@ npm run verify
 
 ## What counts as a passing build
 - All unit and integration tests pass
-- Context files check passes (`node scripts/check-context-files.mjs`)
-- Generated state is up to date (`npm run generate:state -- --check`)
+- The generated theme matches `DESIGN.md` (`node scripts/generate-theme.mjs --check`)
 - CLI generates valid, self-contained HTML without remote dependencies
 
 ## Writing tests

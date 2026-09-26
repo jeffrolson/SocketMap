@@ -174,6 +174,5 @@ The report's **Learn** tab links to all of these.
 | The report analyzes the wrong site | Pick the site in the viewer's **Page** menu, or use `--page` on the command line. |
 | Windows: `node` or `git` is not recognized | Close and reopen PowerShell after installing, or restart the computer. |
 | Windows: `winget` is not available | Install Node.js LTS from nodejs.org, and use GitHub's **Code > Download ZIP** instead of Git. |
-| Git asks for a password | The repository is private. Sign in with your GitHub account in the browser window Git opens. |
 | A value says "Not recorded" | The capture did not contain it, often because the connection was opened before logging started. Capture again from a fresh tab. |
 | No machine name, public IP, or traceroute | A NetLog does not contain them. A capture helper for these is on the roadmap. |

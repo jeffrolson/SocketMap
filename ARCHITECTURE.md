@@ -1,15 +1,7 @@
 # ARCHITECTURE.md
 
-How this system works. Components, data flow, infrastructure identifiers, and the
-decisions behind them. Imported into agent context by `CLAUDE.md`, so treat it as
-always-loaded.
-
-**Ceiling: 400 lines.**
-
-**No counts. No dates.** A number that describes the running system belongs in
-`docs/STATE.generated.md`, which is regenerated and therefore cannot go stale.
-
-Visual design tokens belong in `DESIGN.md`.
+How this system works: components, data flow, and the decisions behind them.
+Visual design tokens live in `DESIGN.md`; features and requirements in `SPEC.md`.
 
 ## Overview
 

@@ -32,25 +32,18 @@ One logical change per commit. Do not bundle unrelated edits.
   - Why
   - How to validate (commands to run, things to check)
   - Link to issue or `ROADMAP.md` entry
-- Must pass CI before merge
+- `npm run verify` must pass before merge
 - Squash merge into `main` unless history matters
 
 ## Verification and formatting
-- Tool: Native Node.js built-in syntax checks and Context File Standard validator (`scripts/check-context-files.mjs`)
-- Run before commit: `npm run verify`
-- CI rejects commits with test failures or context file non-conformance
+- Run before commit: `npm run verify` (all tests plus the design-token freshness check). It runs the same on Windows, macOS, and Linux.
 
 ## Review checklist
 Before marking PR ready:
 
-- [ ] Tests and context checks pass locally (`npm run verify`) and in CI
+- [ ] `npm run verify` passes
 - [ ] No hardcoded secrets or credentials
 - [ ] `ARCHITECTURE.md` updated if architecture changed (`DESIGN.md` for visual tokens)
 - [ ] `CHANGELOG.md` updated if user-visible
-- [ ] `MEMORY.md` summary appended
 - [ ] Zero runtime dependencies preserved (or justified in `TECH_STACK.md`)
-
-## Agent-specific
-- Agents follow the planning loop in `AGENTS.md` before executing.
-- Agents never overwrite scaffolded doc files without explicit permission.
-- Agents must state assumptions and flag ambiguities before coding.
+- [ ] No real captures, and only documentation IP ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) in tests and examples

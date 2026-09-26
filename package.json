@@ -9,12 +9,11 @@
   },
   "scripts": {
     "test": "node --test",
-    "generate:state": "node scripts/generate-state.mjs",
     "generate:examples": "node scripts/generate-examples.mjs",
     "build:viewer": "node scripts/build-viewer.mjs",
     "demo": "node scripts/demo-report.mjs",
     "generate:theme": "node scripts/generate-theme.mjs",
-    "verify": "npm test && node scripts/generate-theme.mjs --check && node scripts/check-context-files.mjs"
+    "verify": "npm test && node scripts/generate-theme.mjs --check"
   },
   "keywords": [
     "netlog",

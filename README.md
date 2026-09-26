@@ -33,7 +33,7 @@ The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain 
 
 ### Option A: download the viewer (no install)
 
-1. Open the repository's **[Releases](https://github.com/jeffrolson/SocketMap/releases/latest)** page (sign in to GitHub; the repository is private).
+1. Open the repository's **[Releases](https://github.com/jeffrolson/SocketMap/releases/latest)** page.
 2. Under **Assets**, download `socketmap-viewer.html`.
 3. Double-click it. It opens in Edge or Chrome. If Windows picks another program, right-click the file and choose **Open with > Microsoft Edge**.
 4. Drop your capture on it, or click **Try the sample capture** to see a finished report first.
@@ -52,7 +52,7 @@ Nothing else is needed: no Node.js, no admin rights. You can also pass the file 
    winget install Git.Git
    ```
    Close and reopen PowerShell afterwards so the new commands are found. No admin rights? Download the Node.js LTS installer from [nodejs.org](https://nodejs.org) instead, or skip Git and use GitHub's **Code > Download ZIP** button, then unzip.
-2. Get the code. The repository is private, so Git asks you to sign in to GitHub the first time:
+2. Get the code:
    ```powershell
    git clone https://github.com/jeffrolson/SocketMap.git
    ```
@@ -187,8 +187,8 @@ HAR files and generic JSON traces produce an older diagram view instead of the r
 
 ## For developers
 
-- **Verify:** `npm run verify` runs the tests, the theme freshness check, and the context-file checks. It works the same on Windows, macOS, and Linux with Node.js 18 or later.
-- **How it works:** [`ARCHITECTURE.md`](ARCHITECTURE.md). **Rules for contributors and AI agents:** [`AGENTS.md`](AGENTS.md). **Requirements:** [`SPEC.md`](SPEC.md). **Plan:** [`ROADMAP.md`](ROADMAP.md). **History:** [`CHANGELOG.md`](CHANGELOG.md). **Testing:** [`TESTING.md`](TESTING.md). **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- **Verify:** `npm run verify` runs the tests and the design-token freshness check. It works the same on Windows, macOS, and Linux with Node.js 18 or later.
+- **How it works:** [`ARCHITECTURE.md`](ARCHITECTURE.md). **Requirements:** [`SPEC.md`](SPEC.md). **Plan:** [`ROADMAP.md`](ROADMAP.md). **History:** [`CHANGELOG.md`](CHANGELOG.md). **Testing:** [`TESTING.md`](TESTING.md). **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Test data is synthetic and uses documentation IP ranges only. Never commit a real capture.
 
 ## License
