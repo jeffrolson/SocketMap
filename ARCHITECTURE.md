@@ -36,9 +36,9 @@ an interactive, signal-flow sequence diagram packaged into a standalone HTML art
 | `bin/traceviz.mjs` | CLI entrypoint, argument parsing, file format detection, browser launcher | Node.js CLI |
 | `src/parsers/netlog-parser.mjs` | Streaming chunked reader for Chromium NetLogs; event correlation and sanitization | Node.js |
 | `src/parsers/generic-parser.mjs` | Parser for HAR archives and generic span JSON traces | Node.js |
-| `src/normalizer.mjs` | Maps events into canonical IR schema; credential redactor | Node.js |
-| `src/renderer/svg-builder.mjs` | Computes column geometry, lifelines, activation blocks, glow filters, and markers | Node.js |
-| `src/renderer/template.html.mjs` | Embeds SVG, inline CSS reset, pan/zoom controller, tooltip, and inspector into HTML | Node.js |
+| `src/normalizer.mjs` | Maps events into canonical IR schema; credential redactor; critical path classifier & guidance engine | Node.js |
+| `src/renderer/svg-builder.mjs` | Computes column geometry, lifelines, activation blocks, glow filters, markers, and blocking indicators | Node.js |
+| `src/renderer/template.html.mjs` | Embeds SVG, pan/zoom, visual toggles, inspector drawer with guidance, and trace health dashboard | Node.js |
 | `src/sample-data.mjs` | Synthetic reference trace for demo rendering and visual verification | Node.js |
 
 ## Data flow
@@ -49,9 +49,9 @@ Follow one typical trace end to end:
 2. The CLI inspects the input header bytes. If Chromium constants or events are present, it invokes `parseNetLog`; otherwise, `parseGenericTrace`.
 3. The parser correlates events (DNS resolution, TCP/TLS connect, URL request/response) into chronological interactions.
 4. Credentials (`Authorization`, `Cookie`, `Set-Cookie`, tokens) are sanitized via `redactSensitiveData`.
-5. The normalizer produces the canonical Intermediate Representation with assigned participant roles and semantic colors.
-6. The SVG layout engine calculates coordinates: participant lifelines evenly spaced along the X-axis, sequential steps down the Y-axis, activation spans, and phase boundaries.
-7. The HTML generator wraps the SVG and client-side interaction engine (pan/zoom, route dimming/highlighting, tooltip, inspector drawer) into a single standalone HTML document.
+5. The normalizer produces the canonical Intermediate Representation with assigned participant roles, semantic colors, critical path classifications (`isBlocking`, `blockingReason`), and Good / Better / Best architectural guidance playbooks.
+6. The SVG layout engine calculates coordinates: participant lifelines evenly spaced along the X-axis, sequential steps down the Y-axis, activation spans, critical path badges, and phase boundaries.
+7. The HTML generator wraps the SVG and client-side interaction engine (pan/zoom, route dimming/highlighting, critical path toggle, visual density controls, inspector drawer with Lighthouse deep-links, and trace health dashboard) into a single standalone HTML document.
 8. The output HTML is written to disk and optionally opened in the user's default browser.
 
 ## Non-obvious behavior
@@ -75,6 +75,13 @@ Follow one typical trace end to end:
 - Rationale: Chromium net-export files easily grow to hundreds of megabytes. Streaming keeps the memory footprint under thirty megabytes.
 - Alternatives considered: `JSON.parse(fs.readFileSync())`.
 - Trade-offs accepted: Custom bracket and string parser logic in `netlog-parser.mjs`.
+
+### Prescriptive Modern Web Guidance & Critical Path Classification
+- Status: Accepted
+- Decision: Annotate interactions with render-blocking status and Good / Better / Best optimization playbooks referencing Chrome Modern Web Guidance.
+- Rationale: Raw visual diagrams show what happened but do not explain why it matters or how to optimize it. Prescriptive intelligence highlights render-blocking waterfalls and gives immediate architectural remediation steps.
+- Alternatives considered: Passive visualization without guidance or diagnostic links.
+- Trade-offs accepted: Small embedded guidance catalog in `src/normalizer.mjs`.
 
 ## External dependencies
 

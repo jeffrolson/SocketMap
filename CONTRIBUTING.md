@@ -35,20 +35,20 @@ One logical change per commit. Do not bundle unrelated edits.
 - Must pass CI before merge
 - Squash merge into `main` unless history matters
 
-## Linting and formatting
-- Tool: [e.g., ESLint + Prettier, Biome, Ruff]
-- Run before commit: `[command]`
-- CI rejects commits with lint errors
+## Verification and formatting
+- Tool: Native Node.js built-in syntax checks and Context File Standard validator (`scripts/check-context-files.mjs`)
+- Run before commit: `npm run verify`
+- CI rejects commits with test failures or context file non-conformance
 
 ## Review checklist
 Before marking PR ready:
 
-- [ ] Tests pass locally and in CI
+- [ ] Tests and context checks pass locally (`npm run verify`) and in CI
 - [ ] No hardcoded secrets or credentials
-- [ ] `DESIGN.md` updated if architecture changed
+- [ ] `ARCHITECTURE.md` updated if architecture changed (`DESIGN.md` for visual tokens)
 - [ ] `CHANGELOG.md` updated if user-visible
 - [ ] `MEMORY.md` summary appended
-- [ ] New dependencies justified in `TECH_STACK.md`
+- [ ] Zero runtime dependencies preserved (or justified in `TECH_STACK.md`)
 
 ## Agent-specific
 - Agents follow the planning loop in `AGENTS.md` before executing.

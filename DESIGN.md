@@ -55,5 +55,29 @@ SocketMap delivers a dark "signal-flow" aesthetic designed for high-density, mis
 ## Spacing and radius
 
 - Rounded 4px (`sm`): Badges, status chips, code boxes.
-- Rounded 8px (`md`): Navigation controls, search inputs, tooltips.
+- Rounded 8px (`md`): Navigation controls, search inputs, tooltips, inventory KPI cards, filter banner.
 - Rounded 10-14px (`lg`): Participant cards, live artifact badge, legend container.
+
+## Component Design Tokens
+
+### Critical Path Visuals
+- **Critical Blocking Badge (`⚡` / `#FBBF24` Amber):** Render-blocking resources that delay Largest Contentful Paint (LCP) or Interaction to Next Paint (INP).
+- **Critical Path Dimming:** When `[⚡ Critical Path]` is toggled, non-blocking lifelines and routes dim to `0.08` opacity while blocking routes remain at full `1.0` opacity with glowing halos.
+
+### Active Filter Bar
+- **Backdrop:** `rgba(15, 23, 42, 0.95)` with `backdrop-filter: blur(12px)`.
+- **Border:** `1px solid #38BDF8` (Sky Blue) with subtle drop-shadow `0 4px 16px rgba(56, 189, 248, 0.2)`.
+- **Clear Action:** `rgba(244, 63, 94, 0.15)` crimson pill with hover state `rgba(244, 63, 94, 0.3)`.
+
+### Inventory & Tech Stack Cards
+- **Card Background:** `#0F172A` with `1px solid #1E293B` border and `8px` radius.
+- **KPI Metrics:** Large monospace counters (`18px`, `font-weight: 800`) color-coded by category:
+  - 🌐 Domains: `#38BDF8` (Sky)
+  - 🔌 Ports: `#A855F7` (Purple)
+  - ⚛️ Client SDKs: `#10B981` (Emerald)
+  - ☁️ Cloud Tools: `#F59E0B` (Amber)
+
+### Latency Performance Ratings
+- **🟢 Fast (<100ms):** Green badge `#10B981` (`rgba(16, 185, 129, 0.15)` bg)
+- **🟡 Moderate (100-300ms):** Amber badge `#F59E0B` (`rgba(245, 158, 11, 0.15)` bg)
+- **🔴 Slow (>300ms):** Crimson badge `#F43F5E` (`rgba(244, 63, 94, 0.15)` bg)
