@@ -401,16 +401,25 @@ export function buildTraceSvg(trace) {
       labelX = (x1 + x2) / 2;
     }
 
+    const isBlocking = Boolean(msg.isBlocking);
+    const blockingBadge = isBlocking ? "⚡ " : "";
     const latencyText = msg.latencyMs != null ? ` (${formatDuration(msg.latencyMs)})` : "";
-    const fullLabel = `${msg.label}${latencyText}`;
+    const fullLabel = `${blockingBadge}${msg.label}${latencyText}`;
 
     return `
-      <g class="message-route" id="${msg.id}"
+      <g class="message-route ${isBlocking ? "is-blocking" : "is-non-blocking"}" id="${msg.id}"
          data-from="${msg.from}" data-to="${msg.to}" data-kind="${msg.kind}"
          data-label="${escapeXml(msg.label)}" data-detail="${escapeXml(msg.detail || "")}"
          data-latency="${msg.latencyMs || ""}" data-status="${msg.status || ""}"
          data-method="${msg.method || ""}" data-bytes="${msg.bytes || ""}"
-         data-phase="${msg.phase}">
+         data-phase="${msg.phase}"
+         data-blocking="${isBlocking}"
+         data-blocking-reason="${escapeXml(msg.blockingReason || "")}"
+         data-category="${escapeXml(msg.recommendationCategory || "")}"
+         data-domain="${escapeXml(msg.domain || "")}"
+         data-port="${escapeXml(msg.port || "")}"
+         data-tech="${escapeXml((msg.technologies || []).join(","))}"
+         data-resource-type="${escapeXml(msg.resourceType || "")}">
         <!-- Invisible thick hover hit target -->
         <path d="${pathD}" fill="none" stroke="transparent" stroke-width="18" class="route-hitbox"/>
         <!-- Visual Arrow Line -->
@@ -443,27 +452,33 @@ export function buildTraceSvg(trace) {
         </g>
 
         <!-- Response -->
-        <g transform="translate(190, 0)">
+        <g transform="translate(180, 0)">
           <line x1="0" y1="10" x2="36" y2="10" stroke="#94a3b8" stroke-width="1.75" stroke-dasharray="6 4" marker-end="url(#arrow-gray)"/>
           <text x="46" y="14" fill="#cbd5e1" font-family="monospace" font-size="11.5">Response / Return</text>
         </g>
 
         <!-- Security / Auth -->
-        <g transform="translate(390, 0)">
+        <g transform="translate(370, 0)">
           <line x1="0" y1="10" x2="36" y2="10" stroke="#f43f5e" stroke-width="2" marker-end="url(#arrow-crimson)"/>
-          <text x="46" y="14" fill="#cbd5e1" font-family="monospace" font-size="11.5">Security / Auth Guard</text>
+          <text x="46" y="14" fill="#cbd5e1" font-family="monospace" font-size="11.5">Security / Auth</text>
         </g>
 
         <!-- Async Trace -->
-        <g transform="translate(610, 0)">
+        <g transform="translate(540, 0)">
           <line x1="0" y1="10" x2="36" y2="10" stroke="#a855f7" stroke-width="1.75" stroke-dasharray="5 4" marker-end="url(#arrow-purple)"/>
-          <text x="46" y="14" fill="#cbd5e1" font-family="monospace" font-size="11.5">Async Telemetry / Queue</text>
+          <text x="46" y="14" fill="#cbd5e1" font-family="monospace" font-size="11.5">Async / Queue</text>
         </g>
 
         <!-- Retry / Fallback -->
-        <g transform="translate(860, 0)">
+        <g transform="translate(710, 0)">
           <path d="M 0 16 C 10 4, 25 4, 32 12" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrow-amber)"/>
-          <text x="46" y="14" fill="#cbd5e1" font-family="monospace" font-size="11.5">Retry / Cache Fallback</text>
+          <text x="46" y="14" fill="#cbd5e1" font-family="monospace" font-size="11.5">Retry / Cache</text>
+        </g>
+
+        <!-- Critical Blocking Path -->
+        <g transform="translate(880, 0)">
+          <text x="0" y="14" fill="#fbbf24" font-family="ui-monospace, monospace" font-size="14" font-weight="bold">⚡</text>
+          <text x="18" y="14" fill="#fbbf24" font-family="monospace" font-size="11.5" font-weight="bold">Critical Path (Blocking)</text>
         </g>
       </g>
     </g>

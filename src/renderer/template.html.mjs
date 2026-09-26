@@ -149,6 +149,192 @@ export function renderStandaloneHtml(trace) {
       transform: scale(0.97);
     }
 
+    /* Toggle Group & Interactive Buttons */
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #0f172a;
+      padding: 3px 5px;
+      border-radius: 7px;
+      border: 1px solid #1e293b;
+    }
+
+    .toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 26px;
+      padding: 0 8px;
+      border-radius: 5px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    .toggle-btn:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .toggle-btn.active {
+      background: #0369a1;
+      border-color: #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+    }
+
+    .toggle-btn.active-warn {
+      background: #b45309;
+      border-color: #fbbf24;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(251, 191, 36, 0.35);
+    }
+
+    /* Critical Path Filtering States */
+    .canvas-container.has-blocking-filter .message-route.is-non-blocking {
+      opacity: 0.08 !important;
+      pointer-events: none;
+    }
+
+    .canvas-container.has-blocking-filter .message-route.is-blocking {
+      opacity: 1 !important;
+    }
+
+    .canvas-container.has-blocking-filter .message-route.is-blocking .route-line {
+      stroke: #fbbf24 !important;
+      stroke-width: 3.5px !important;
+      filter: drop-shadow(0 0 10px #f59e0b) !important;
+    }
+
+    .canvas-container.no-glow * {
+      filter: none !important;
+    }
+
+    .canvas-container.hide-latency .route-label-text {
+      font-size: 11px !important;
+    }
+
+    /* Impact & Critical Path Badges in Drawer */
+    .impact-badge {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1px solid transparent;
+    }
+
+    .impact-badge.blocking {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fef3c7;
+    }
+
+    .impact-badge.non-blocking {
+      background: rgba(148, 163, 184, 0.1);
+      border-color: rgba(148, 163, 184, 0.25);
+      color: #cbd5e1;
+    }
+
+    .impact-badge .badge-icon {
+      font-size: 20px;
+    }
+
+    .impact-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+      font-family: ui-monospace, "SF Mono", monospace;
+    }
+
+    .rating-chip {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+      font-family: ui-monospace, monospace;
+    }
+
+    .rating-fast { background: #064e3b; color: #34d399; border: 1px solid #059669; }
+    .rating-moderate { background: #451a03; color: #fbbf24; border: 1px solid #d97706; }
+    .rating-slow { background: #4c0519; color: #fb7185; border: 1px solid #e11d48; }
+
+    /* Modern Web Guidance Tiers */
+    .guidance-tiers {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .guidance-tier {
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+    }
+
+    .tier-good { border-left: 3.5px solid #f87171; }
+    .tier-better { border-left: 3.5px solid #fbbf24; }
+    .tier-best { border-left: 3.5px solid #34d399; }
+
+    .tier-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
+    .tier-good .tier-label { color: #f87171; }
+    .tier-better .tier-label { color: #fbbf24; }
+    .tier-best .tier-label { color: #34d399; }
+
+    .tier-desc {
+      font-size: 11.5px;
+      color: #cbd5e1;
+      line-height: 1.45;
+    }
+
+    /* Troubleshoot Links */
+    .troubleshoot-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .ts-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      color: #93c5fd;
+      text-decoration: none;
+      font-size: 11.5px;
+      transition: all 0.15s ease;
+    }
+
+    .ts-link:hover {
+      background: #1e293b;
+      border-color: #38bdf8;
+      color: #ffffff;
+      transform: translateX(2px);
+    }
+
+    .ts-icon {
+      font-size: 16px;
+    }
+
     /* Canvas Viewport */
     .viewport {
       position: absolute;
@@ -451,6 +637,223 @@ export function renderStandaloneHtml(trace) {
       color: #f8fafc;
       border-color: #475569;
     }
+
+    /* Active Filter Notification Bar */
+    .active-filter-bar {
+      position: fixed;
+      top: 60px;
+      left: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #38bdf8;
+      box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2);
+      padding: 6px 14px;
+      border-radius: 8px;
+      z-index: 120;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-size: 12px;
+      animation: fadeInSlide 0.2s ease;
+    }
+
+    @keyframes fadeInSlide {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .filter-bar-tag {
+      color: #38bdf8;
+      font-weight: 700;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+
+    .filter-bar-count {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+
+    .filter-clear-btn {
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid rgba(244, 63, 94, 0.4);
+      color: #fb7185;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-clear-btn:hover {
+      background: rgba(244, 63, 94, 0.3);
+      color: #ffffff;
+    }
+
+    /* Inventory KPI Grid */
+    .inventory-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .inventory-kpi-card {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .inventory-kpi-val {
+      font-size: 18px;
+      font-weight: 800;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+
+    .inventory-kpi-label {
+      font-size: 10.5px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    /* Inventory Category Section & Rows */
+    .inv-group {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .inv-group-header {
+      padding: 8px 12px;
+      background: rgba(30, 41, 59, 0.5);
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .inv-item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+      font-size: 12px;
+      transition: background 0.15s ease;
+    }
+
+    .inv-item-row:last-child {
+      border-bottom: none;
+    }
+
+    .inv-item-row:hover {
+      background: rgba(56, 189, 248, 0.05);
+    }
+
+    .inv-item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+      flex: 1;
+      margin-right: 10px;
+    }
+
+    .inv-item-name {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-weight: 600;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .inv-item-meta {
+      font-size: 10.5px;
+      color: #64748b;
+    }
+
+    .inv-item-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .inv-count-chip {
+      background: #1e293b;
+      color: #cbd5e1;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+
+    .inv-filter-btn {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .inv-filter-btn:hover {
+      background: #38bdf8;
+      color: #070b12;
+      border-color: #38bdf8;
+    }
+
+    .inv-filter-btn.active {
+      background: #38bdf8;
+      color: #070b12;
+      border-color: #38bdf8;
+    }
+
+    /* Fingerprint Chips in Individual Inspector */
+    .fp-chips-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .fp-chip {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      font-size: 11px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+
+    .fp-chip:hover {
+      border-color: #38bdf8;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+    }
   </style>
 </head>
 <body>
@@ -470,6 +873,24 @@ export function renderStandaloneHtml(trace) {
     </div>
 
     <div class="controls-section">
+      <div class="toggle-group">
+        <button id="btn-toggle-blocking" class="toggle-btn" title="Toggle Critical Path (Blocking Only)">
+          <span>⚡</span> Critical Path
+        </button>
+        <button id="btn-toggle-glow" class="toggle-btn active" title="Toggle Neon Glow Effects">
+          <span>✨</span> Glow
+        </button>
+        <button id="btn-toggle-latency" class="toggle-btn active" title="Toggle Latency Chips">
+          <span>⏱️</span> Latency
+        </button>
+        <button id="btn-toggle-insights" class="toggle-btn" title="View Trace Insights & Guidance">
+          <span>💡</span> Insights
+        </button>
+        <button id="btn-toggle-inventory" class="toggle-btn" title="View Domains, Ports, Libraries & Tools Inventory">
+          <span>📦</span> Inventory <span id="inventory-badge" class="toggle-counter"></span>
+        </button>
+      </div>
+
       <div class="search-box">
         <svg class="search-icon" viewBox="0 0 24 24">
           <circle cx="11" cy="11" r="8"/>
@@ -481,6 +902,13 @@ export function renderStandaloneHtml(trace) {
       <button id="btn-reset" class="btn" title="Reset Zoom">1:1</button>
     </div>
   </header>
+
+  <!-- Active Filter Notification Bar -->
+  <div id="active-filter-bar" class="active-filter-bar" style="display: none;">
+    <span class="filter-bar-tag" id="active-filter-tag">Filtered</span>
+    <span class="filter-bar-count" id="active-filter-count"></span>
+    <button id="btn-clear-filter" class="filter-clear-btn" title="Clear filter">&times; Clear</button>
+  </div>
 
   <!-- Interactive Canvas Viewport -->
   <main class="viewport" id="viewport">
@@ -731,6 +1159,36 @@ export function renderStandaloneHtml(trace) {
         });
       });
 
+      // Visual Toggles
+      const btnBlocking = document.getElementById("btn-toggle-blocking");
+      let blockingOnly = false;
+      btnBlocking.addEventListener("click", function() {
+        blockingOnly = !blockingOnly;
+        btnBlocking.classList.toggle("active-warn", blockingOnly);
+        container.classList.toggle("has-blocking-filter", blockingOnly);
+      });
+
+      const btnGlow = document.getElementById("btn-toggle-glow");
+      let glowEnabled = true;
+      btnGlow.addEventListener("click", function() {
+        glowEnabled = !glowEnabled;
+        btnGlow.classList.toggle("active", glowEnabled);
+        container.classList.toggle("no-glow", !glowEnabled);
+      });
+
+      const btnLatency = document.getElementById("btn-toggle-latency");
+      let latencyEnabled = true;
+      btnLatency.addEventListener("click", function() {
+        latencyEnabled = !latencyEnabled;
+        btnLatency.classList.toggle("active", latencyEnabled);
+        container.classList.toggle("hide-latency", !latencyEnabled);
+      });
+
+      const btnInsights = document.getElementById("btn-toggle-insights");
+      btnInsights.addEventListener("click", function() {
+        openTraceInsights();
+      });
+
       // Inspector Logic
       function openInspector(routeEl) {
         const id = routeEl.id;
@@ -740,38 +1198,132 @@ export function renderStandaloneHtml(trace) {
           detail: routeEl.getAttribute("data-detail"),
           from: routeEl.getAttribute("data-from"),
           to: routeEl.getAttribute("data-to"),
-          latencyMs: routeEl.getAttribute("data-latency"),
+          latencyMs: routeEl.getAttribute("data-latency") ? Number(routeEl.getAttribute("data-latency")) : null,
           method: routeEl.getAttribute("data-method"),
-          status: routeEl.getAttribute("data-status"),
-          bytes: routeEl.getAttribute("data-bytes")
+          status: routeEl.getAttribute("data-status") ? Number(routeEl.getAttribute("data-status")) : null,
+          bytes: routeEl.getAttribute("data-bytes") ? Number(routeEl.getAttribute("data-bytes")) : null,
+          isBlocking: routeEl.getAttribute("data-blocking") === "true",
+          blockingReason: routeEl.getAttribute("data-blocking-reason") || "",
+          recommendationCategory: routeEl.getAttribute("data-category") || "api_endpoint"
         };
+
+        const isBlocking = Boolean(msg.isBlocking);
+        const guidance = msg.guidance || {
+          categoryTitle: "Architecture & Performance Guidance",
+          good: "Standard synchronous network call.",
+          better: "Parallelize requests with Promise.all() and use stale-while-revalidate caching.",
+          best: "Stream server-side rendered HTML and consolidate origins to eliminate multi-hop round trips.",
+          docsUrl: "https://developer.chrome.com/docs/modern-web-guidance",
+          docsLabel: "Chrome Modern Web Guidance"
+        };
+
+        // Latency Rating
+        let ratingClass = "rating-fast";
+        let ratingLabel = "🟢 Fast (<100ms)";
+        if (msg.latencyMs != null) {
+          if (msg.latencyMs >= 300) {
+            ratingClass = "rating-slow";
+            ratingLabel = "🔴 High Latency (>300ms)";
+          } else if (msg.latencyMs >= 100) {
+            ratingClass = "rating-moderate";
+            ratingLabel = "🟡 Moderate (100-300ms)";
+          }
+        }
 
         const phaseTitle = traceData.phases && traceData.phases[msg.phase]
           ? traceData.phases[msg.phase]
           : "Phase " + ((msg.phase || 0) + 1);
 
+        document.getElementById("drawer-title").textContent = isBlocking
+          ? "Critical Path Inspector (⚡ Blocking)"
+          : "Interaction Inspector";
+
         drawerBody.innerHTML = [
+          isBlocking
+            ? '<div class="impact-badge blocking">' +
+              '  <span class="badge-icon">⚡</span>' +
+              '  <div>' +
+              '    <strong>CRITICAL BLOCKING PATH</strong>' +
+              '    <div class="impact-sub">' + escapeHtml(msg.blockingReason || "Direct dependency on critical render path") + '</div>' +
+              '  </div>' +
+              '</div>'
+            : '<div class="impact-badge non-blocking">' +
+              '  <span class="badge-icon">✓</span>' +
+              '  <div>' +
+              '    <strong>NON-BLOCKING / ASYNC</strong>' +
+              '    <div class="impact-sub">' + escapeHtml(msg.blockingReason || "Executes asynchronously without blocking initial render") + '</div>' +
+              '  </div>' +
+              '</div>',
+
           '<div class="drawer-section">',
           '  <div class="drawer-section-title">Step Identification</div>',
           '  <div class="key-value-list">',
           '    <span class="kv-key">Message ID:</span><span class="kv-val">' + msg.id + '</span>',
-          '    <span class="kv-key">Source:</span><span class="kv-val">' + msg.from + '</span>',
-          '    <span class="kv-key">Target:</span><span class="kv-val">' + msg.to + '</span>',
-          '    <span class="kv-key">Phase:</span><span class="kv-val">' + phaseTitle + '</span>',
-          '    <span class="kv-key">Interaction:</span><span class="kv-val">' + (msg.kind || "request") + '</span>',
+          '    <span class="kv-key">Source:</span><span class="kv-val">' + escapeHtml(msg.from) + '</span>',
+          '    <span class="kv-key">Target:</span><span class="kv-val">' + escapeHtml(msg.to) + '</span>',
+          '    <span class="kv-key">Phase:</span><span class="kv-val">' + escapeHtml(phaseTitle) + '</span>',
+          '    <span class="kv-key">Interaction:</span><span class="kv-val">' + escapeHtml(msg.kind || "request") + '</span>',
           '  </div>',
           '</div>',
+
           '<div class="drawer-section">',
-          '  <div class="drawer-section-title">Performance Metrics</div>',
+          '  <div class="drawer-section-title">Performance &amp; Diagnostics</div>',
           '  <div class="key-value-list">',
-          '    <span class="kv-key">Latency:</span><span class="kv-val">' + (msg.latencyMs != null ? msg.latencyMs + ' ms' : 'N/A') + '</span>',
-          '    <span class="kv-key">Method:</span><span class="kv-val">' + (msg.method || 'N/A') + '</span>',
+          '    <span class="kv-key">Latency:</span><span class="kv-val">' + (msg.latencyMs != null ? msg.latencyMs + ' ms ' : 'N/A ') + '<span class="rating-chip ' + ratingClass + '">' + ratingLabel + '</span></span>',
+          '    <span class="kv-key">Method:</span><span class="kv-val">' + escapeHtml(msg.method || 'N/A') + '</span>',
           '    <span class="kv-key">HTTP Status:</span><span class="kv-val">' + (msg.status || 'N/A') + '</span>',
-          '    <span class="kv-key">Transferred:</span><span class="kv-val">' + (msg.bytes != null ? msg.bytes + ' bytes' : 'N/A') + '</span>',
+          '    <span class="kv-key">Transferred:</span><span class="kv-val">' + (msg.bytes != null ? (msg.bytes > 1024 ? (msg.bytes / 1024).toFixed(1) + ' KB' : msg.bytes + ' bytes') : 'N/A') + '</span>',
           '  </div>',
           '</div>',
+
           '<div class="drawer-section">',
-          '  <div class="drawer-section-title">Details &amp; Headers</div>',
+          '  <div class="drawer-section-title">Network &amp; Tech Stack Fingerprint</div>',
+          '  <div class="fp-chips-grid">',
+          (msg.domain ? '    <button class="fp-chip" title="Click to filter by domain ' + escapeHtml(msg.domain) + '" data-filter-type="domain" data-filter-value="' + escapeHtml(msg.domain) + '">🌐 ' + escapeHtml(msg.domain) + '</button>' : ''),
+          (msg.port ? '    <button class="fp-chip" title="Click to filter by port ' + escapeHtml(msg.port) + '" data-filter-type="port" data-filter-value="' + escapeHtml(msg.port) + '">🔌 Port ' + escapeHtml(msg.port) + '</button>' : ''),
+          (Array.isArray(msg.technologies) ? msg.technologies.map(t => '    <button class="fp-chip" title="Click to filter by ' + escapeHtml(t) + '" data-filter-type="tech" data-filter-value="' + escapeHtml(t) + '">⚡ ' + escapeHtml(t) + '</button>').join("") : ''),
+          (msg.resourceType ? '    <button class="fp-chip" title="Click to filter by ' + escapeHtml(msg.resourceType) + '" data-filter-type="resource" data-filter-value="' + escapeHtml(msg.resourceType) + '">📄 ' + escapeHtml(msg.resourceType) + '</button>' : ''),
+          '  </div>',
+          '</div>',
+
+          '<div class="drawer-section">',
+          '  <div class="drawer-section-title">Modern Web Guidance (' + escapeHtml(guidance.categoryTitle || "Best Practices") + ')</div>',
+          '  <div class="guidance-tiers">',
+          '    <div class="guidance-tier tier-good">',
+          '      <div class="tier-label">Good (Baseline)</div>',
+          '      <div class="tier-desc">' + escapeHtml(guidance.good || "Standard implementation") + '</div>',
+          '    </div>',
+          '    <div class="guidance-tier tier-better">',
+          '      <div class="tier-label">Better (Optimized)</div>',
+          '      <div class="tier-desc">' + escapeHtml(guidance.better || "Apply caching and parallelization") + '</div>',
+          '    </div>',
+          '    <div class="guidance-tier tier-best">',
+          '      <div class="tier-label">Best (Modern Chrome Guidance)</div>',
+          '      <div class="tier-desc">' + escapeHtml(guidance.best || "Modern web architecture") + '</div>',
+          '    </div>',
+          '  </div>',
+          '</div>',
+
+          '<div class="drawer-section">',
+          '  <div class="drawer-section-title">Troubleshoot Further</div>',
+          '  <div class="troubleshoot-links">',
+          '    <a href="' + (guidance.docsUrl || 'https://developer.chrome.com/docs/modern-web-guidance') + '" target="_blank" rel="noopener noreferrer" class="ts-link">',
+          '      <span class="ts-icon">🌐</span>',
+          '      <span><strong>Chrome Modern Web Guidance</strong>: Explore architectural playbooks</span>',
+          '    </a>',
+          '    <a href="https://pagespeed.web.dev" target="_blank" rel="noopener noreferrer" class="ts-link">',
+          '      <span class="ts-icon">🚀</span>',
+          '      <span><strong>Google Lighthouse Audit</strong>: Test Core Web Vitals (LCP, INP, CLS)</span>',
+          '    </a>',
+          '    <a href="https://developer.chrome.com/docs/devtools/performance" target="_blank" rel="noopener noreferrer" class="ts-link">',
+          '      <span class="ts-icon">🛠️</span>',
+          '      <span><strong>Chrome DevTools Performance</strong>: Record runtime flame chart</span>',
+          '    </a>',
+          '  </div>',
+          '</div>',
+
+          '<div class="drawer-section">',
+          '  <div class="drawer-section-title">Telemetry &amp; Headers</div>',
           '  <div class="raw-code-box">' + (msg.detail ? escapeHtml(msg.detail) : 'No extra telemetry payload.') + '</div>',
           '</div>'
         ].join("");
@@ -779,34 +1331,394 @@ export function renderStandaloneHtml(trace) {
         inspector.classList.add("is-open");
       }
 
-      drawerClose.addEventListener("click", function() {
-        inspector.classList.remove("is-open");
-      });
+      function openTraceInsights() {
+        const totalMsgs = traceData.messages ? traceData.messages.length : 0;
+        const blockingMsgs = (traceData.messages || []).filter(m => m.isBlocking);
+        const nonBlockingCount = totalMsgs - blockingMsgs.length;
+        const totalBlockingLatency = blockingMsgs.reduce((acc, m) => acc + (m.latencyMs || 0), 0);
 
-      // Filter input search
-      filterInput.addEventListener("input", function() {
-        const query = this.value.trim().toLowerCase();
-        if (!query) {
-          clearHighlights();
-          routes.forEach(r => r.style.opacity = "");
+        document.getElementById("drawer-title").textContent = "Trace Performance Insights";
+        drawerBody.innerHTML = [
+          '<div class="impact-badge blocking">',
+          '  <span class="badge-icon">📊</span>',
+          '  <div>',
+          '    <strong>TRACE HEALTH DASHBOARD</strong>',
+          '    <div class="impact-sub">Automated critical path and architectural audit</div>',
+          '  </div>',
+          '</div>',
+          '<div class="drawer-section">',
+          '  <div class="drawer-section-title">Critical Path Summary</div>',
+          '  <div class="key-value-list">',
+          '    <span class="kv-key">Total Steps:</span><span class="kv-val">' + totalMsgs + ' interactions</span>',
+          '    <span class="kv-key">⚡ Blocking:</span><span class="kv-val" style="color:#fbbf24;font-weight:700;">' + blockingMsgs.length + ' on critical render path</span>',
+          '    <span class="kv-key">Deferred:</span><span class="kv-val">' + nonBlockingCount + ' async / background</span>',
+          '    <span class="kv-key">Blocking Time:</span><span class="kv-val" style="color:#38bdf8;font-weight:700;">~' + totalBlockingLatency + ' ms</span>',
+          '  </div>',
+          '</div>',
+          '<div class="drawer-section">',
+          '  <div class="drawer-section-title">Good / Better / Best Architectural Framework</div>',
+          '  <div class="guidance-tiers">',
+          '    <div class="guidance-tier tier-good">',
+          '      <div class="tier-label">Good (Baseline)</div>',
+          '      <div class="tier-desc">Traditional multi-hop request flow with client-side orchestration.</div>',
+          '    </div>',
+          '    <div class="guidance-tier tier-better">',
+          '      <div class="tier-label">Better (Optimized)</div>',
+          '      <div class="tier-desc">Early preconnects, non-blocking deferred scripts, and distributed caching.</div>',
+          '    </div>',
+          '    <div class="guidance-tier tier-best">',
+          '      <div class="tier-label">Best (Modern Chrome Guidance)</div>',
+          '      <div class="tier-desc">Edge SSR streaming, HTTP/3 multiplexing, LCP priority hints, and zero client-blocking cascades.</div>',
+          '    </div>',
+          '  </div>',
+          '</div>',
+          '<div class="drawer-section">',
+          '  <div class="drawer-section-title">Recommended Diagnostics</div>',
+          '  <div class="troubleshoot-links">',
+          '    <a href="https://developer.chrome.com/docs/modern-web-guidance" target="_blank" rel="noopener noreferrer" class="ts-link">',
+          '      <span class="ts-icon">🌐</span>',
+          '      <span><strong>Chrome Modern Web Guidance</strong>: Explore official Google Chrome guidelines</span>',
+          '    </a>',
+          '    <a href="https://pagespeed.web.dev" target="_blank" rel="noopener noreferrer" class="ts-link">',
+          '      <span class="ts-icon">🚀</span>',
+          '      <span><strong>PageSpeed Insights (Lighthouse)</strong>: Audit Core Web Vitals in lab and field</span>',
+          '    </a>',
+          '    <a href="https://developer.chrome.com/docs/devtools/performance" target="_blank" rel="noopener noreferrer" class="ts-link">',
+          '      <span class="ts-icon">🛠️</span>',
+          '      <span><strong>DevTools Performance Flame Chart</strong>: Profile main thread activity</span>',
+          '    </a>',
+          '  </div>',
+          '</div>'
+        ].join("");
+
+        inspector.classList.add("is-open");
+      }
+
+      function openTraceInventory() {
+        const inv = traceData.inventory || {};
+        const summary = inv.summary || {};
+        const domains = inv.domains || [];
+        const ports = inv.ports || [];
+        const libs = inv.frameworks_libraries || [];
+        const tools = inv.infrastructure_tools || [];
+        const resources = inv.resource_types || [];
+
+        document.getElementById("drawer-title").textContent = "Trace Inventory & Tech Stack";
+
+        let html = [
+          '<div class="impact-badge blocking" style="border-left-color: #38bdf8;">',
+          '  <span class="badge-icon">📦</span>',
+          '  <div>',
+          '    <strong>NETWORK &amp; TECH STACK INVENTORY</strong>',
+          '    <div class="impact-sub">Catalog of domains, ports, libraries, frameworks &amp; tools</div>',
+          '  </div>',
+          '</div>',
+
+          '<div class="inventory-kpi-grid">',
+          '  <div class="inventory-kpi-card">',
+          '    <span class="inventory-kpi-val" style="color: #38bdf8;">' + (summary.totalDomains || domains.length) + '</span>',
+          '    <span class="inventory-kpi-label">🌐 Domains &amp; Hosts</span>',
+          '  </div>',
+          '  <div class="inventory-kpi-card">',
+          '    <span class="inventory-kpi-val" style="color: #a855f7;">' + (summary.totalPorts || ports.length) + '</span>',
+          '    <span class="inventory-kpi-label">🔌 Service Ports</span>',
+          '  </div>',
+          '  <div class="inventory-kpi-card">',
+          '    <span class="inventory-kpi-val" style="color: #10b981;">' + (summary.totalLibraries || libs.length) + '</span>',
+          '    <span class="inventory-kpi-label">⚛️ Client Libs / SDKs</span>',
+          '  </div>',
+          '  <div class="inventory-kpi-card">',
+          '    <span class="inventory-kpi-val" style="color: #f59e0b;">' + (summary.totalInfrastructure || tools.length) + '</span>',
+          '    <span class="inventory-kpi-label">☁️ Cloud &amp; Infra Tools</span>',
+          '  </div>',
+          '</div>'
+        ];
+
+        // 1. Domains Section
+        if (domains.length > 0) {
+          html.push(
+            '<div class="inv-group">',
+            '  <div class="inv-group-header">',
+            '    <span>🌐 Domains &amp; Endpoints (' + domains.length + ')</span>',
+            '    <span style="font-size:10px;color:#64748b;">Click to isolate</span>',
+            '  </div>'
+          );
+          for (const d of domains) {
+            const isAct = activeInventoryFilter && activeInventoryFilter.type === 'domain' && activeInventoryFilter.value === d.name;
+            html.push(
+              '  <div class="inv-item-row">',
+              '    <div class="inv-item-info">',
+              '      <span class="inv-item-name" title="' + escapeHtml(d.name) + '">' + escapeHtml(d.name) + '</span>',
+              '      <span class="inv-item-meta">' + (d.isExternal ? "External Origin" : "Internal Cluster") + '</span>',
+              '    </div>',
+              '    <div class="inv-item-actions">',
+              '      <span class="inv-count-chip">' + d.count + ' req' + (d.count > 1 ? 's' : '') + '</span>',
+              '      <button class="inv-filter-btn ' + (isAct ? 'active' : '') + '" data-filter-type="domain" data-filter-value="' + escapeHtml(d.name) + '">' + (isAct ? 'Active' : 'Filter') + '</button>',
+              '    </div>',
+              '  </div>'
+            );
+          }
+          html.push('</div>');
+        }
+
+        // 2. Ports Section
+        if (ports.length > 0) {
+          html.push(
+            '<div class="inv-group">',
+            '  <div class="inv-group-header">',
+            '    <span>🔌 Ports &amp; Protocols (' + ports.length + ')</span>',
+            '    <span style="font-size:10px;color:#64748b;">Traffic protocol</span>',
+            '  </div>'
+          );
+          for (const p of ports) {
+            const isAct = activeInventoryFilter && activeInventoryFilter.type === 'port' && activeInventoryFilter.value === p.port;
+            html.push(
+              '  <div class="inv-item-row">',
+              '    <div class="inv-item-info">',
+              '      <span class="inv-item-name">Port ' + escapeHtml(p.port) + ' (' + escapeHtml(p.protocol) + ')</span>',
+              '      <span class="inv-item-meta">' + escapeHtml(p.description || "Service port") + '</span>',
+              '    </div>',
+              '    <div class="inv-item-actions">',
+              '      <span class="inv-count-chip">' + p.count + ' req' + (p.count > 1 ? 's' : '') + '</span>',
+              '      <button class="inv-filter-btn ' + (isAct ? 'active' : '') + '" data-filter-type="port" data-filter-value="' + escapeHtml(p.port) + '">' + (isAct ? 'Active' : 'Filter') + '</button>',
+              '    </div>',
+              '  </div>'
+            );
+          }
+          html.push('</div>');
+        }
+
+        // 3. Frameworks & Libraries Section
+        if (libs.length > 0) {
+          html.push(
+            '<div class="inv-group">',
+            '  <div class="inv-group-header">',
+            '    <span>⚛️ Frameworks &amp; Client SDKs (' + libs.length + ')</span>',
+            '    <span style="font-size:10px;color:#64748b;">Detected SDKs</span>',
+            '  </div>'
+          );
+          for (const l of libs) {
+            const isAct = activeInventoryFilter && activeInventoryFilter.type === 'tech' && activeInventoryFilter.value === l.name;
+            html.push(
+              '  <div class="inv-item-row">',
+              '    <div class="inv-item-info">',
+              '      <span class="inv-item-name">' + escapeHtml(l.name) + '</span>',
+              '      <span class="inv-item-meta">' + escapeHtml(l.category || "Client Library") + '</span>',
+              '    </div>',
+              '    <div class="inv-item-actions">',
+              '      <span class="inv-count-chip">' + l.count + ' req' + (l.count > 1 ? 's' : '') + '</span>',
+              '      <button class="inv-filter-btn ' + (isAct ? 'active' : '') + '" data-filter-type="tech" data-filter-value="' + escapeHtml(l.name) + '">' + (isAct ? 'Active' : 'Filter') + '</button>',
+              '    </div>',
+              '  </div>'
+            );
+          }
+          html.push('</div>');
+        }
+
+        // 4. Infrastructure & Server Tools Section
+        if (tools.length > 0) {
+          html.push(
+            '<div class="inv-group">',
+            '  <div class="inv-group-header">',
+            '    <span>☁️ Infrastructure &amp; Cloud Tools (' + tools.length + ')</span>',
+            '    <span style="font-size:10px;color:#64748b;">Services &amp; proxies</span>',
+            '  </div>'
+          );
+          for (const t of tools) {
+            const isAct = activeInventoryFilter && activeInventoryFilter.type === 'tech' && activeInventoryFilter.value === t.name;
+            html.push(
+              '  <div class="inv-item-row">',
+              '    <div class="inv-item-info">',
+              '      <span class="inv-item-name">' + escapeHtml(t.name) + '</span>',
+              '      <span class="inv-item-meta">' + escapeHtml(t.category || "Infrastructure") + '</span>',
+              '    </div>',
+              '    <div class="inv-item-actions">',
+              '      <span class="inv-count-chip">' + t.count + ' req' + (t.count > 1 ? 's' : '') + '</span>',
+              '      <button class="inv-filter-btn ' + (isAct ? 'active' : '') + '" data-filter-type="tech" data-filter-value="' + escapeHtml(t.name) + '">' + (isAct ? 'Active' : 'Filter') + '</button>',
+              '    </div>',
+              '  </div>'
+            );
+          }
+          html.push('</div>');
+        }
+
+        // 5. Resource Types Section
+        if (resources.length > 0) {
+          html.push(
+            '<div class="inv-group">',
+            '  <div class="inv-group-header">',
+            '    <span>📊 Resource &amp; Media Types (' + resources.length + ')</span>',
+            '    <span style="font-size:10px;color:#64748b;">Content classification</span>',
+            '  </div>'
+          );
+          for (const r of resources) {
+            const isAct = activeInventoryFilter && activeInventoryFilter.type === 'resource' && activeInventoryFilter.value === r.type;
+            html.push(
+              '  <div class="inv-item-row">',
+              '    <div class="inv-item-info">',
+              '      <span class="inv-item-name">' + escapeHtml(r.type) + '</span>',
+              '      <span class="inv-item-meta">Payload category</span>',
+              '    </div>',
+              '    <div class="inv-item-actions">',
+              '      <span class="inv-count-chip">' + r.count + ' req' + (r.count > 1 ? 's' : '') + '</span>',
+              '      <button class="inv-filter-btn ' + (isAct ? 'active' : '') + '" data-filter-type="resource" data-filter-value="' + escapeHtml(r.type) + '">' + (isAct ? 'Active' : 'Filter') + '</button>',
+              '    </div>',
+              '  </div>'
+            );
+          }
+          html.push('</div>');
+        }
+
+        drawerBody.innerHTML = html.join("");
+        inspector.classList.add("is-open");
+      }
+
+      // Filter state & handlers
+      let activeInventoryFilter = null;
+      const activeFilterBar = document.getElementById("active-filter-bar");
+      const activeFilterTag = document.getElementById("active-filter-tag");
+      const activeFilterCount = document.getElementById("active-filter-count");
+      const btnClearFilter = document.getElementById("btn-clear-filter");
+      const btnToggleInventory = document.getElementById("btn-toggle-inventory");
+      const inventoryBadge = document.getElementById("inventory-badge");
+
+      if (traceData.inventory && traceData.inventory.summary) {
+        const totalItems = (traceData.inventory.summary.totalTechnologies || 0) + (traceData.inventory.summary.totalDomains || 0);
+        if (inventoryBadge && totalItems > 0) {
+          inventoryBadge.textContent = "(" + totalItems + ")";
+        }
+      }
+
+      window.applyInventoryFilter = function(type, value, displayName) {
+        if (activeInventoryFilter && activeInventoryFilter.type === type && activeInventoryFilter.value === value) {
+          window.clearInventoryFilter();
           return;
         }
 
-        routes.forEach(r => {
-          const label = (r.getAttribute("data-label") || "").toLowerCase();
-          const detail = (r.getAttribute("data-detail") || "").toLowerCase();
-          const from = (r.getAttribute("data-from") || "").toLowerCase();
-          const to = (r.getAttribute("data-to") || "").toLowerCase();
+        activeInventoryFilter = {
+          type: type,
+          value: value,
+          displayName: displayName || (type === "domain" ? "Domain: " + value : (type === "port" ? "Port " + value : value))
+        };
 
-          if (label.includes(query) || detail.includes(query) || from.includes(query) || to.includes(query)) {
-            r.style.opacity = "1";
-            r.querySelector(".route-line").style.strokeWidth = "3px";
+        executeFiltering();
+        if (inspector.classList.contains("is-open") && document.getElementById("drawer-title").textContent.includes("Inventory")) {
+          openTraceInventory();
+        }
+      };
+
+      window.clearInventoryFilter = function() {
+        activeInventoryFilter = null;
+        filterInput.value = "";
+        executeFiltering();
+        if (inspector.classList.contains("is-open") && document.getElementById("drawer-title").textContent.includes("Inventory")) {
+          openTraceInventory();
+        }
+      };
+
+      if (btnClearFilter) {
+        btnClearFilter.addEventListener("click", window.clearInventoryFilter);
+      }
+
+      if (btnToggleInventory) {
+        btnToggleInventory.addEventListener("click", function() {
+          const isOpen = inspector.classList.contains("is-open");
+          const isInvOpen = isOpen && document.getElementById("drawer-title").textContent.includes("Inventory");
+          if (isInvOpen) {
+            inspector.classList.remove("is-open");
+            btnToggleInventory.classList.remove("active");
           } else {
-            r.style.opacity = "0.1";
-            r.querySelector(".route-line").style.strokeWidth = "";
+            openTraceInventory();
+            btnToggleInventory.classList.add("active");
+            btnToggleInsights.classList.remove("active");
           }
         });
+      }
+
+      drawerClose.addEventListener("click", function() {
+        inspector.classList.remove("is-open");
+        btnToggleInsights.classList.remove("active");
+        if (btnToggleInventory) btnToggleInventory.classList.remove("active");
       });
+
+      drawerBody.addEventListener("click", function(e) {
+        const btn = e.target.closest("[data-filter-type]");
+        if (btn) {
+          const type = btn.getAttribute("data-filter-type");
+          const val = btn.getAttribute("data-filter-value");
+          if (type && val) {
+            window.applyInventoryFilter(type, val);
+          }
+        }
+      });
+
+      function executeFiltering() {
+        const query = filterInput.value.trim().toLowerCase();
+        const hasFilter = Boolean(query || activeInventoryFilter);
+
+        if (!hasFilter) {
+          clearHighlights();
+          routes.forEach(r => r.style.opacity = "");
+          if (activeFilterBar) activeFilterBar.style.display = "none";
+          return;
+        }
+
+        let matchCount = 0;
+        routes.forEach(r => {
+          let matches = true;
+
+          if (activeInventoryFilter) {
+            const type = activeInventoryFilter.type;
+            const valLower = activeInventoryFilter.value.toLowerCase();
+            if (type === "domain") {
+              const d = (r.getAttribute("data-domain") || "").toLowerCase();
+              matches = d === valLower || d.includes(valLower);
+            } else if (type === "port") {
+              const p = (r.getAttribute("data-port") || "").toLowerCase();
+              matches = p === valLower;
+            } else if (type === "tech") {
+              const t = (r.getAttribute("data-tech") || "").toLowerCase();
+              matches = t.includes(valLower);
+            } else if (type === "resource") {
+              const rt = (r.getAttribute("data-resource-type") || "").toLowerCase();
+              matches = rt.includes(valLower);
+            }
+          }
+
+          if (matches && query) {
+            const label = (r.getAttribute("data-label") || "").toLowerCase();
+            const detail = (r.getAttribute("data-detail") || "").toLowerCase();
+            const from = (r.getAttribute("data-from") || "").toLowerCase();
+            const to = (r.getAttribute("data-to") || "").toLowerCase();
+            const domain = (r.getAttribute("data-domain") || "").toLowerCase();
+            const tech = (r.getAttribute("data-tech") || "").toLowerCase();
+            matches = label.includes(query) || detail.includes(query) || from.includes(query) || to.includes(query) || domain.includes(query) || tech.includes(query);
+          }
+
+          if (matches) {
+            matchCount++;
+            r.style.opacity = "1";
+            const line = r.querySelector(".route-line");
+            if (line) line.style.strokeWidth = "3px";
+          } else {
+            r.style.opacity = "0.08";
+            const line = r.querySelector(".route-line");
+            if (line) line.style.strokeWidth = "";
+          }
+        });
+
+        if (activeFilterBar) {
+          activeFilterBar.style.display = "flex";
+          if (activeInventoryFilter) {
+            activeFilterTag.textContent = "Filtered: " + activeInventoryFilter.displayName;
+          } else {
+            activeFilterTag.textContent = "Filtered: '" + query + "'";
+          }
+          activeFilterCount.textContent = "(" + matchCount + " matching)";
+        }
+      }
+
+      filterInput.addEventListener("input", executeFiltering);
 
       function escapeHtml(str) {
         if (!str) return "";

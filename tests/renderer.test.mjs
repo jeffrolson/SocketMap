@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 
 import { buildTraceSvg, getMessageStyle } from "../src/renderer/svg-builder.mjs";
 import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
@@ -68,22 +69,69 @@ describe("Renderer & SVG Builder", () => {
     assert.ok(html.includes("SOCKETMAP"));
     assert.ok(html.includes("Signal-Flow Trace Visualizer"));
 
-    // Interactive elements
+    // Interactive elements & toggles
     assert.ok(html.includes('id="viewport"'));
     assert.ok(html.includes('id="tooltip"'));
     assert.ok(html.includes('id="inspector"'));
     assert.ok(html.includes('id="filter-input"'));
+    assert.ok(html.includes('id="btn-toggle-blocking"'));
+    assert.ok(html.includes('id="btn-toggle-glow"'));
+    assert.ok(html.includes('id="btn-toggle-latency"'));
+    assert.ok(html.includes('id="btn-toggle-insights"'));
 
-    // Zero external network calls (no external link tags, no remote scripts)
+    // Critical Path & Modern Web Guidance markup
+    assert.ok(html.includes("CRITICAL BLOCKING PATH"));
+    assert.ok(html.includes("Modern Web Guidance"));
+    assert.ok(html.includes("Chrome Modern Web Guidance"));
+
+    // Zero remote asset loads (no external script src, no external stylesheet href, no web fonts)
     assert.ok(!html.includes("<link rel=\"stylesheet\" href=\"http"));
     assert.ok(!html.includes("<script src=\"http"));
     assert.ok(!html.includes("fonts.googleapis.com"));
     assert.ok(!html.includes("cdnjs.cloudflare.com"));
 
-    // Check all URLs in document
-    const urls = html.match(/https?:\/\/[^\s"'<>]+/g) || [];
-    for (const url of urls) {
-      assert.equal(url, "http://www.w3.org/2000/svg", `Disallowed remote asset URL found: ${url}`);
-    }
+    // Ensure zero remote resource-fetching tags (only navigation hyperlinks and XML namespaces allowed)
+    const remoteAssetTags = html.match(/<(?:script|link|img|iframe|audio|video|source)\s+[^>]*?(?:src|href)=["']https?:\/\/[^"']+/gi);
+    assert.equal(remoteAssetTags, null, `Disallowed remote asset loader tag found: ${remoteAssetTags}`);
+  });
+
+  it("should extract comprehensive inventory and render interactive inventory controls", () => {
+    const trace = normalizeTrace(SAMPLE_TRACE);
+    
+    // Inventory verification
+    assert.ok(trace.inventory, "Trace should include inventory");
+    assert.ok(Array.isArray(trace.inventory.domains), "Inventory should list domains");
+    assert.ok(Array.isArray(trace.inventory.ports), "Inventory should list ports");
+    assert.ok(Array.isArray(trace.inventory.frameworks_libraries), "Inventory should list libraries");
+    assert.ok(Array.isArray(trace.inventory.infrastructure_tools), "Inventory should list infrastructure tools");
+    assert.ok(Array.isArray(trace.inventory.resource_types), "Inventory should list resource types");
+    assert.ok(trace.inventory.summary.totalDomains > 0, "Should detect at least one domain");
+    assert.ok(trace.inventory.summary.totalPorts > 0, "Should detect at least one port");
+    assert.ok(trace.inventory.summary.totalTechnologies > 0, "Should detect technologies");
+
+    // SVG data attributes
+    const svg = buildTraceSvg(trace);
+    assert.ok(svg.includes("data-domain="), "SVG routes should include data-domain attribute");
+    assert.ok(svg.includes("data-port="), "SVG routes should include data-port attribute");
+    assert.ok(svg.includes("data-tech="), "SVG routes should include data-tech attribute");
+    assert.ok(svg.includes("data-resource-type="), "SVG routes should include data-resource-type attribute");
+
+    // HTML elements & controls
+    const html = renderStandaloneHtml(trace);
+    assert.ok(html.includes('id="btn-toggle-inventory"'), "HTML should include inventory button");
+    assert.ok(html.includes('id="active-filter-bar"'), "HTML should include active filter bar");
+    assert.ok(html.includes("openTraceInventory"), "HTML script should include openTraceInventory");
+    assert.ok(html.includes("applyInventoryFilter"), "HTML script should include applyInventoryFilter");
+    assert.ok(html.includes("Network &amp; Tech Stack Fingerprint"), "Inspector should include tech stack fingerprint section");
+  });
+
+  it("should generate client-side JavaScript that compiles cleanly without syntax errors in VM", () => {
+    const trace = normalizeTrace(SAMPLE_TRACE);
+    const html = renderStandaloneHtml(trace);
+    const scriptMatch = html.match(/<script>(.*?)<\/script>/s);
+    assert.ok(scriptMatch, "Rendered HTML must contain an embedded script");
+    assert.doesNotThrow(() => {
+      new vm.Script(scriptMatch[1], { filename: "embedded-script.js" });
+    }, "Embedded script should compile with zero syntax errors");
   });
 });
