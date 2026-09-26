@@ -1,6 +1,6 @@
 {
   "name": "socketmap",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Zero-dependency, self-contained network trace visualizer and sequence diagram generator",
   "type": "module",
   "bin": {

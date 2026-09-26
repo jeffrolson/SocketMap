@@ -16,8 +16,10 @@ import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { parseGenericTrace } from "../src/parsers/generic-parser.mjs";
 import { normalizeTrace } from "../src/normalizer.mjs";
 import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
+import { analyzeCapture } from "../src/analysis.mjs";
+import { renderReportHtml } from "../src/renderer/report.html.mjs";
 
-const VERSION = "0.1.0";
+const VERSION = "0.3.0";
 
 function printHelp() {
   console.log(`
@@ -31,6 +33,7 @@ Transform network traces into interactive, self-contained sequence diagrams.
 \x1b[1mOPTIONS:\x1b[0m
   -o, --output <file>    Target output HTML file path (default: ./trace-diagram.html)
   --filter <regex>       Filter requests by URL or method pattern
+  --page <site>          NetLog only: analyze this site (e.g. https://contoso.sharepoint.com)
   --sample               Generate an interactive demo diagram using rich synthetic data
   --open                 Automatically open the generated visual in your default browser
   -h, --help             Show this help message and exit
@@ -38,7 +41,8 @@ Transform network traces into interactive, self-contained sequence diagrams.
 
 \x1b[1mEXAMPLES:\x1b[0m
   node bin/traceviz.mjs --sample -o sample.html --open
-  node bin/traceviz.mjs netlog.json -o diagram.html --filter "api\\.example\\.com"
+  node bin/traceviz.mjs chrome-net-export-log.json -o report.html --open
+  node bin/traceviz.mjs netlog.json --page https://contoso.sharepoint.com
   node bin/traceviz.mjs network.har --open
 `);
 }
@@ -97,6 +101,7 @@ async function main() {
   let inputFile = null;
   let outputFile = "./trace-diagram.html";
   let filter = null;
+  let page = null;
   let openAfter = false;
   let useSample = false;
 
@@ -110,6 +115,8 @@ async function main() {
       outputFile = args[++i];
     } else if (arg === "--filter") {
       filter = args[++i];
+    } else if (arg === "--page") {
+      page = args[++i];
     } else if (!arg.startsWith("-")) {
       inputFile = arg;
     }
@@ -122,6 +129,7 @@ async function main() {
   }
 
   let trace = null;
+  let htmlOutput = null;
 
   if (useSample) {
     console.log("\x1b[36m● [SocketMap]\x1b[0m Loading synthetic multi-phase sample trace...");
@@ -137,17 +145,23 @@ async function main() {
 
     if (isNetLogFile(resolvedInput)) {
       console.log("\x1b[35m● [Parser]\x1b[0m Detected Chromium NetLog format. Streaming events...");
-      trace = await parseNetLog(resolvedInput, { filter });
+      const model = await parseNetLog(resolvedInput, { filter });
+      const analysis = analyzeCapture(model, { site: page });
+      const p = analysis.page;
+      console.log(`\x1b[32m● [Analysis]\x1b[0m Page ${p.site}: ${p.requestCount} requests, ${p.hostCount} hosts, ${analysis.findings.length} findings (${model.requests.length} requests in capture).`);
+      for (const f of analysis.findings) console.log(`  - [${f.severity}] ${f.title}`);
+      htmlOutput = renderReportHtml(model, analysis);
     } else {
       console.log("\x1b[35m● [Parser]\x1b[0m Ingesting generic/HAR/trace JSON...");
       trace = parseGenericTrace(resolvedInput, { filter });
     }
   }
 
-  console.log(`\x1b[32m● [Normalizer]\x1b[0m Trace mapped: ${trace.participants.length} participants, ${trace.messages.length} messages across ${trace.phases.length} phases.`);
-
-  console.log("\x1b[34m● [Renderer]\x1b[0m Building self-contained presentation HTML...");
-  const htmlOutput = renderStandaloneHtml(trace);
+  if (!htmlOutput) {
+    console.log(`\x1b[32m● [Normalizer]\x1b[0m Trace mapped: ${trace.participants.length} participants, ${trace.messages.length} messages across ${trace.phases.length} phases.`);
+    console.log("\x1b[34m● [Renderer]\x1b[0m Building self-contained presentation HTML...");
+    htmlOutput = renderStandaloneHtml(trace);
+  }
 
   const resolvedOutput = resolve(outputFile);
   writeFileSync(resolvedOutput, htmlOutput, "utf8");

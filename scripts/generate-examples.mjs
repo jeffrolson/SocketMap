@@ -12,6 +12,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
+import { analyzeCapture } from "../src/analysis.mjs";
+import { renderReportHtml } from "../src/renderer/report.html.mjs";
 import { normalizeTrace } from "../src/normalizer.mjs";
 import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
 
@@ -30,7 +32,7 @@ const ECOMMERCE_TRACE = {
     status: 201,
     transferredBytes: 18940,
     protocol: "h2",
-    remoteIp: "104.18.32.10"
+    remoteIp: "203.0.113.10"
   },
   phases: [
     "Phase 01: Cart Validation & Inventory Lock",
@@ -243,7 +245,7 @@ const LOGIN_2FA_TRACE = {
     status: 200,
     transferredBytes: 9240,
     protocol: "h2",
-    remoteIp: "172.67.189.44"
+    remoteIp: "203.0.113.44"
   },
   phases: [
     "Phase 01: Credential Submission & Password Check",
@@ -467,7 +469,7 @@ const SLOW_API_TRACE = {
     {
       id: "dns",
       label: "DNS Server",
-      sublabel: "1.1.1.1 (Cloudflare)",
+      sublabel: "192.0.2.53 (Cloudflare)",
       role: "infrastructure",
       color: "#8b5cf6"
     },
@@ -667,14 +669,14 @@ for (const { name, trace, description } of EXAMPLES) {
   console.log(`\x1b[32m✔ Created:\x1b[0m ${name} (\x1b[33m${description}\x1b[0m)`);
 }
 
+// Real captures stay local (gitignored). If one is present, build its report too.
 const realWorldNetLog = resolve(EXAMPLES_DIR, "Example_Weekend Game Plan_chrome-net-export-log.json");
 if (existsSync(realWorldNetLog)) {
-  const rawTrace = await parseNetLog(realWorldNetLog);
-  const normalized = normalizeTrace(rawTrace);
-  const html = renderStandaloneHtml(normalized);
+  const model = await parseNetLog(realWorldNetLog);
+  const html = renderReportHtml(model, analyzeCapture(model));
   const outPath = resolve(EXAMPLES_DIR, "weekend-game-plan.html");
   writeFileSync(outPath, html, "utf8");
-  console.log(`\x1b[32m✔ Created:\x1b[0m weekend-game-plan.html (\x1b[33mReal-world Chromium NetLog: Google Firestore & Signaler\x1b[0m)`);
+  console.log(`\x1b[32m✔ Created:\x1b[0m weekend-game-plan.html (\x1b[33mReport from a local Chrome NetLog capture\x1b[0m)`);
 }
 
 console.log(`\n\x1b[1m\x1b[32mSUCCESS:\x1b[0m Example diagrams generated in \x1b[1m${EXAMPLES_DIR}\x1b[0m`);
