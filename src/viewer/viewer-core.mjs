@@ -21,10 +21,13 @@ export function createCaptureReader() {
   };
 }
 
-/** Analyzes one page of the capture (default: the page that was loaded) and renders the report. */
-export function buildReport(model, site) {
+/**
+ * Analyzes one page of the capture (default: the page that was loaded) and renders the report.
+ * theme: design tokens; omitted means the built-in DESIGN.md theme.
+ */
+export function buildReport(model, site, theme) {
   const analysis = analyzeCapture(model, { site: site || undefined });
-  return { analysis, html: renderReportHtml(model, analysis) };
+  return { analysis, html: renderReportHtml(model, analysis, theme ? { theme } : {}) };
 }
 
 /** Checks the first few KB of a file before reading all of it. */

@@ -14,6 +14,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseDesignTokens, themeCss } from "../src/theme.mjs";
+import { DEFAULT_THEME } from "../src/renderer/theme.generated.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ENTRY = resolve(ROOT, "src/viewer/viewer-app.mjs");
@@ -43,7 +45,7 @@ function transformModule(file) {
 
   const leftover = code.match(/^\s*(import|export)\b.*$/m);
   if (leftover) throw new Error(`${id}: unsupported module syntax for the viewer bundle: ${leftover[0].trim()}`);
-  if (/\bnode:|\brequire\(|\bprocess\./.test(code)) throw new Error(`${id}: uses Node APIs and cannot run in the browser viewer`);
+  if (/["']node:|\brequire\(|\bprocess\./.test(code)) throw new Error(`${id}: uses Node APIs and cannot run in the browser viewer`);
 
   return {
     id,
@@ -89,8 +91,12 @@ const CAPTURE_STEPS = [
   "Go back and click <strong>Stop Logging</strong>. Drop the saved file here."
 ];
 
-export function buildViewerHtml() {
+/**
+ * @param {{ theme?: object }} options  theme: design tokens for a company build; default is DESIGN.md
+ */
+export function buildViewerHtml({ theme } = {}) {
   const bundle = bundleViewer();
+  const themeOverride = theme ? `<script>globalThis.SOCKETMAP_THEME = ${JSON.stringify(theme).replace(/</g, "\\u003c")};</script>\n` : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,11 +106,7 @@ export function buildViewerHtml() {
 <title>SocketMap: why is this page slow?</title>
 <style>
   :root {
-    --bg: #070b12; --surface: #0b1120; --surface-2: #111a2e; --border: #1e293b;
-    --text: #f8fafc; --text-muted: #94a3b8; --primary: #06b6d4; --poor: #f43f5e;
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    --radius: 10px;
+    ${themeCss(theme || DEFAULT_THEME)}
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-sans); }
@@ -172,14 +174,18 @@ export function buildViewerHtml() {
   </div>
   <iframe id="report-frame" title="SocketMap report"></iframe>
 </div>
-<script id="socketmap-bundle">${bundle}</script>
+${themeOverride}<script id="socketmap-bundle">${bundle}</script>
 </body>
 </html>
 `;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const out = resolve(process.cwd(), process.argv[2] || "socketmap-viewer.html");
-  writeFileSync(out, buildViewerHtml(), "utf8");
+  const args = process.argv.slice(2);
+  const themeAt = args.indexOf("--theme");
+  const themePath = themeAt >= 0 ? args.splice(themeAt, 2)[1] : null;
+  const theme = themePath ? parseDesignTokens(readFileSync(resolve(process.cwd(), themePath), "utf8")) : undefined;
+  const out = resolve(process.cwd(), args[0] || "socketmap-viewer.html");
+  writeFileSync(out, buildViewerHtml({ theme }), "utf8");
   console.log(`\x1b[32m✔ Built viewer:\x1b[0m ${out}`);
 }

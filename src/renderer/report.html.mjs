@@ -12,6 +12,8 @@ import { normalizeTrace, formatDuration, formatBytes } from "../normalizer.mjs";
 import { TIMING_LABELS, buildAiSummary } from "../analysis.mjs";
 import { explainConnection, explainRequest, explainResponse, explainHost, plainSummary, MEASURE_HELP, RATING_WORDS } from "../explain.mjs";
 import { renderLearn } from "./learn.mjs";
+import { themeCss } from "../theme.mjs";
+import { DEFAULT_THEME } from "./theme.generated.mjs";
 
 const VERSION = "0.4.0";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
@@ -287,7 +289,12 @@ function renderHowToRead() {
     </div>`;
 }
 
-export function renderReportHtml(model, analysis) {
+/**
+ * @param {object} model     capture model
+ * @param {object} analysis  result of analyzeCapture
+ * @param {{ theme?: object }} options  theme: design tokens (defaults to DESIGN.md)
+ */
+export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME } = {}) {
   const connections = new Map(model.connections.map(c => [c.id, c]));
   const { page } = analysis;
   const high = analysis.findings.filter(f => f.severity === "high").length;
@@ -306,16 +313,7 @@ export function renderReportHtml(model, analysis) {
 <title>${esc(title)}</title>
 <style>
   :root {
-    --bg: #070b12; --surface: #0b1120; --surface-2: #111a2e; --border: #1e293b;
-    --text: #f8fafc; --text-muted: #94a3b8; --primary: #06b6d4;
-    --best: #10b981; --better: #06b6d4; --good: #f59e0b; --poor: #f43f5e; --unknown: #64748b;
-    --sev-high: #f43f5e; --sev-medium: #f59e0b; --sev-info: #64748b;
-    --seg-redirect: #a855f7; --seg-queue: #475569; --seg-proxy: #ec4899; --seg-dns: #8b5cf6;
-    --seg-connect: #f59e0b; --seg-tls: #f43f5e; --seg-stalled: #64748b; --seg-send: #94a3b8;
-    --seg-wait: #10b981; --seg-download: #06b6d4;
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    --radius: 8px;
+    ${themeCss(theme)}
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font-sans); }

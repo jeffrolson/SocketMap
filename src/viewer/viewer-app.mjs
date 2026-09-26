@@ -61,7 +61,7 @@ function init() {
   }
 
   function show(site) {
-    current = buildReport(model, site);
+    current = buildReport(model, site, globalThis.SOCKETMAP_THEME);
     frame.srcdoc = current.html;
     pageSelect.value = current.analysis.page.site;
   }

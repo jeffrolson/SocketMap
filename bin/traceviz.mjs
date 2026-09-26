@@ -6,7 +6,7 @@
  * zero-dependency standalone HTML sequence diagram.
  */
 
-import { existsSync, writeFileSync, openSync, readSync, closeSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync, openSync, readSync, closeSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { exec } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ import { normalizeTrace } from "../src/normalizer.mjs";
 import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
+import { parseDesignTokens } from "../src/theme.mjs";
 
 const VERSION = "0.4.0";
 
@@ -34,6 +35,7 @@ Transform network traces into interactive, self-contained sequence diagrams.
   -o, --output <file>    Target output HTML file path (default: ./trace-diagram.html)
   --filter <regex>       Filter requests by URL or method pattern
   --page <site>          NetLog only: analyze this site (e.g. https://contoso.sharepoint.com)
+  --theme <DESIGN.md>    NetLog only: style the report with another design.md theme
   --sample               Generate an interactive demo diagram using rich synthetic data
   --open                 Automatically open the generated visual in your default browser
   -h, --help             Show this help message and exit
@@ -102,6 +104,7 @@ async function main() {
   let outputFile = "./trace-diagram.html";
   let filter = null;
   let page = null;
+  let themePath = null;
   let openAfter = false;
   let useSample = false;
 
@@ -117,6 +120,8 @@ async function main() {
       filter = args[++i];
     } else if (arg === "--page") {
       page = args[++i];
+    } else if (arg === "--theme") {
+      themePath = args[++i];
     } else if (!arg.startsWith("-")) {
       inputFile = arg;
     }
@@ -150,7 +155,8 @@ async function main() {
       const p = analysis.page;
       console.log(`\x1b[32m● [Analysis]\x1b[0m Page ${p.site}: ${p.requestCount} requests, ${p.hostCount} hosts, ${analysis.findings.length} findings (${model.requests.length} requests in capture).`);
       for (const f of analysis.findings) console.log(`  - [${f.severity}] ${f.title}`);
-      htmlOutput = renderReportHtml(model, analysis);
+      const theme = themePath ? parseDesignTokens(readFileSync(resolve(themePath), "utf8")) : undefined;
+      htmlOutput = renderReportHtml(model, analysis, theme ? { theme } : {});
     } else {
       console.log("\x1b[35m● [Parser]\x1b[0m Ingesting generic/HAR/trace JSON...");
       trace = parseGenericTrace(resolvedInput, { filter });

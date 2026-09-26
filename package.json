@@ -12,7 +12,8 @@
     "generate:state": "node scripts/generate-state.mjs",
     "generate:examples": "node scripts/generate-examples.mjs",
     "build:viewer": "node scripts/build-viewer.mjs",
-    "verify": "npm test && node scripts/check-context-files.mjs"
+    "generate:theme": "node scripts/generate-theme.mjs",
+    "verify": "npm test && node scripts/generate-theme.mjs --check && node scripts/check-context-files.mjs"
   },
   "keywords": [
     "netlog",
