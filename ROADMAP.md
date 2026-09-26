@@ -31,7 +31,8 @@ Queued, priority-ordered.
   QUIC fallback, localhost calls, sign-in redirect chains, embedded M365 endpoint list).
   Needs a real SharePoint capture from work.
 - Phase 3a: drag-and-drop HTML viewer (branch `feat/viewer`, built, awaiting review)
-- Phase 3b: company theming from `themes/<company>/DESIGN.md`
+- Phase 3b: design system from DESIGN.md, company theming (`--theme`), tabbed layout, filters, and the rebuilt sequence view (branch `feat/design-system`, built, awaiting review)
+- Later from the design mockup: timeline slider with problem markers; export the sequence as an image
 
 ## Later (this quarter)
 Planned but not scheduled.

@@ -35,6 +35,8 @@ This is the main workflow. The capture works in any Chrome or Edge browser, with
 
 **No install: the viewer.** Open `socketmap-viewer.html` in Chrome or Edge and drop the capture on it. The capture is read inside the browser and never uploaded; the page works offline. Use **Save report** to get a standalone report file to share.
 
+**Company look:** reports follow `DESIGN.md`. To brand them, copy it to `themes/<company>/DESIGN.md`, change the tokens, and pass `--theme themes/<company>/DESIGN.md` to the CLI or to `npm run build:viewer -- socketmap-viewer.html --theme themes/<company>/DESIGN.md`.
+
 Build the viewer once with `npm run build:viewer`, then share the single `socketmap-viewer.html` file (email, SharePoint, intranet). Nobody who uses it needs Node.js.
 
 **Command line (power users, scripts, AI agents):**
@@ -53,6 +55,7 @@ The report is one HTML file you can email or attach to a ticket. It opens offlin
 - **Hosts and connection ratings**: every host the page used, with its server IP and certificate issuer, rated on six measures.
 - **Request waterfall**: every request, with its time split into phases. Click a row for connection, certificate, and header details.
 - **Sequence diagram**: the page load drawn as conversations between the browser and each host. Click any arrow, bar, or host heading for a plain-language explanation of that step.
+- **Filter**: search by host, address, status, or protocol, or click Problems, Slow, TLS inspection, or Local calls to see only those requests in the waterfall and sequence.
 - **Learn**: what to do next, links to deeper tools and guidance (Web Vitals, Chrome DevTools, Microsoft 365 networking, Wireshark), and a glossary.
 - **Environment**: browser, OS, local IP, DNS servers, and proxy setup at capture time.
 - **AI summary**: a compact text version to paste into your AI assistant.

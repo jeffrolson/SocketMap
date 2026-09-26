@@ -3,6 +3,19 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-26
+### Added
+- Telemetry Trace Dark design system: DESIGN.md tokens drive the report and viewer colors, fonts, and rounding (`npm run generate:theme`). `--theme <DESIGN.md>` applies a company theme to CLI reports and viewer builds.
+- Report layout with sidebar views (Overview, Waterfall, Sequence, Environment, AI summary, Learn), a top bar showing the capture file, size, load time, and findings, and a status bar.
+- Shared filter for the waterfall and sequence: search by host, address, status, or protocol, plus Problems, Slow, TLS inspection, and Local calls chips with counts.
+- Sequence view rebuilt as rows under a sticky host header: time offsets, protocol/status/wait/size tags, red rows for failures and inspection, amber rows for slow steps, and a docked inspector with Explained, Timing, Connection, and Headers tabs.
+
+### Changed
+- One sequence row per request (request and answer together) plus one per new connection, sorted by time. The display limit rose to 1,000 requests.
+
+### Fixed
+- Links inside a report opened in the viewer no longer load the viewer page into the report frame.
+
 ## [0.4.0] - 2026-09-26
 ### Added
 - Drag-and-drop viewer (`socketmap-viewer.html`, built with `npm run build:viewer`): drop a NetLog capture in Chrome or Edge and get the report with no install. Reads the file locally with a progress bar, lets you pick the page, and saves the standalone report.

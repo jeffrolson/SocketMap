@@ -33,8 +33,11 @@ and the code disagree, this file wins and the code gets fixed.
     - Path: direct Best, through a proxy Better, certificate chaining to a non-public root Poor.
     - Server wait (median time to first byte): under 200 ms Best, 200 to 500 ms Better, 500 ms to 1 s Good, over 1 s Poor.
   - Findings, each with severity, evidence lines from the capture, and the team to involve: TLS inspection, proxy authentication (407), calls to this computer or local network, proxy use, slow proxy lookup, failed requests, slow server, slow connection, slow DNS, QUIC failure, browser queueing, HTTP/1.1 hosts.
+  - Layout: sidebar views (Overview, Waterfall, Sequence, Environment, AI summary, Learn), top bar with capture file, size, load time, findings count, and the filter, and a status bar. Views switch in place; the report works without script by showing every view.
+  - Filter: text search over host, URL, status, and protocol, plus chips (Problems = failures or inspection, Slow = server wait over 500 ms or total over 1 s, TLS inspection, Local calls), applied to the waterfall and the sequence.
+  - Styling comes from DESIGN.md tokens; `--theme` applies another design.md. Nothing is loaded remotely; fonts fall back to system faces.
   - Waterfall with every page request; each row expands to timing, connection, certificate, and redacted headers.
-  - Sequence diagram with one lifeline per host; connection setup drawn only for new connections. Host cards stay pinned while scrolling.
+  - Sequence view: one column per host under a sticky header; one row per request and per new connection, sorted by start time, with time offsets and protocol/status/wait/size tags. Failed or inspected rows are red, slow rows amber. A docked inspector (slide-over on narrow screens) explains the selected row or column in Explained, Timing, Connection, and Headers tabs.
   - Plain language for every audience: clicking any arrow, activity bar, or host column opens an explanation (what happened, a verdict, each step with its meaning, where to look, technical details). Each waterfall row opens with a one-paragraph summary.
   - Learn tab with next steps, verified outbound links, and a glossary. Links open in a new tab; the report itself loads nothing remote.
   - AI summary: compact plain text with environment, time breakdown, findings, host ratings, and slowest requests.
