@@ -10,7 +10,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Shared filter for the waterfall and sequence: search by host, address, status, or protocol, plus Problems, Slow, TLS inspection, and Local calls chips with counts.
 - Sequence view rebuilt as rows under a sticky host header: time offsets, protocol/status/wait/size tags, red rows for failures and inspection, amber rows for slow steps, and a docked inspector with Explained, Timing, Connection, and Headers tabs.
 
+- Hover explanations for protocol (H3, H2, HTTP/1.1), result, wait, size, TLS, and rating labels, plus a collapsible "What do H3, H2, and HTTP/1.1 mean?" comparison with this page's counts in the Waterfall and Sequence views.
+- "Hide details panel" button in the Sequence view (remembered per browser); selecting a row brings the panel back. "How to read this view" is collapsible.
+
 ### Changed
+- Viewer start page tagline now describes what the tool shows.
 - One sequence row per request (request and answer together) plus one per new connection, sorted by time. The display limit rose to 1,000 requests.
 
 ### Fixed

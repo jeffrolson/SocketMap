@@ -44,6 +44,8 @@ describe("Drag-and-drop viewer", () => {
     assert.ok(html.includes("never leaves this computer"));
     assert.ok(html.includes("chrome://net-export"));
     assert.ok(html.includes("edge://net-export"));
+    assert.ok(html.includes("explained in plain language"));
+    assert.ok(!html.includes("which team to talk to"));
   });
 
   it("builds the same report in the browser as the command line does", async () => {

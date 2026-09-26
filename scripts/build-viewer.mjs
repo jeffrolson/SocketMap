@@ -146,7 +146,7 @@ export function buildViewerHtml({ theme } = {}) {
 <body>
 <main id="start">
   <h1>SocketMap</h1>
-  <p class="tagline">See why a web page is slow, and which team to talk to.</p>
+  <p class="tagline">Drop in a network capture from Chrome or Edge to see how a page loaded: every connection, request, and delay, with what slowed it down explained in plain language.</p>
   <div id="drop" class="drop" role="button" tabindex="0" aria-label="Choose a NetLog capture file">
     <strong>Drop a NetLog capture here</strong>
     <span>or click to choose the file</span>

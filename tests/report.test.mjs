@@ -73,6 +73,29 @@ describe("Report HTML", () => {
     assert.ok(/data-flags="error local"/.test(html));
   });
 
+  it("explains protocol and result labels on hover", () => {
+    assert.ok(/<span class="wf-proto" data-tip="HTTP\/2: [^"]*Rated Better/.test(html), "waterfall protocol cells");
+    assert.ok(/<span class="wf-proto" data-tip="HTTP\/3 \(QUIC\): [^"]*Rated Best/.test(html));
+    assert.ok(/<span class="wf-status" data-tip="ERR_CONNECTION_REFUSED: Nothing answered/.test(html), "waterfall result cells");
+    assert.ok(/class="tag tone-proto" data-tip="HTTP\/2: /.test(html), "sequence protocol tags");
+    assert.ok(/class="tag tone-plain" data-tip="Server wait: /.test(html), "sequence wait tags");
+    assert.ok(/class="chip lvl-better" data-tip="HTTP\/2: /.test(html), "host table protocol ratings");
+    assert.ok(html.includes('id="tip-box"'));
+  });
+
+  it("compares the protocol versions in a collapsible guide", () => {
+    const guide = html.match(/<details class="proto-guide">[\s\S]*?<\/details>/)[0];
+    for (const name of ["HTTP/3 (QUIC)", "HTTP/2", "HTTP/1.1"]) assert.ok(guide.includes(name), name);
+    assert.ok(guide.includes("This page used H2 for 2 requests, H3 for 1 request, HTTP/1.1 for 1 request."));
+    assert.ok(guide.includes("UDP port 443"));
+  });
+
+  it("lets people hide the details panel", () => {
+    assert.ok(html.includes('id="toggle-details"'));
+    assert.ok(html.includes(".seq-layout.details-hidden"));
+    assert.ok(html.includes('<details class="how-to" open>'), "how-to-read can be collapsed");
+  });
+
   it("docks a tabbed inspector", () => {
     for (const tab of ["explained", "timing", "connection", "headers"]) assert.ok(html.includes(`data-tab="${tab}"`), tab);
   });

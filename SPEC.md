@@ -34,6 +34,7 @@ and the code disagree, this file wins and the code gets fixed.
     - Server wait (median time to first byte): under 200 ms Best, 200 to 500 ms Better, 500 ms to 1 s Good, over 1 s Poor.
   - Findings, each with severity, evidence lines from the capture, and the team to involve: TLS inspection, proxy authentication (407), calls to this computer or local network, proxy use, slow proxy lookup, failed requests, slow server, slow connection, slow DNS, QUIC failure, browser queueing, HTTP/1.1 hosts.
   - Layout: sidebar views (Overview, Waterfall, Sequence, Environment, AI summary, Learn), top bar with capture file, size, load time, findings count, and the filter, and a status bar. Views switch in place; the report works without script by showing every view.
+  - Every protocol, result, wait, size, TLS, and rating label explains itself on hover or keyboard focus; a collapsible guide compares HTTP/1.1, HTTP/2, and HTTP/3 and lists how many requests on the page used each.
   - Filter: text search over host, URL, status, and protocol, plus chips (Problems = failures or inspection, Slow = server wait over 500 ms or total over 1 s, TLS inspection, Local calls), applied to the waterfall and the sequence.
   - Styling comes from DESIGN.md tokens; `--theme` applies another design.md. Nothing is loaded remotely; fonts fall back to system faces.
   - Waterfall with every page request; each row expands to timing, connection, certificate, and redacted headers.

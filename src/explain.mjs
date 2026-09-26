@@ -56,7 +56,7 @@ const NET_ERRORS = {
   ERR_CERT_DATE_INVALID: "The certificate has expired or is not valid yet."
 };
 
-function statusMeaning(status) {
+export function statusMeaning(status) {
   if (status == null) return null;
   if (status === 200) return "OK: the request worked.";
   if (status === 204) return "OK, with nothing to send back (normal for tracking and logging calls).";
@@ -292,3 +292,64 @@ export function explainTransaction(r, conn) {
     requestId: r.id
   };
 }
+
+/**
+ * The three web protocol versions a browser uses, in plain words, with the facts
+ * that matter for comparing them. Ratings match the host table (analysis.mjs).
+ */
+export const PROTOCOL_INFO = {
+  "http/1.1": {
+    label: "HTTP/1.1",
+    name: "HTTP/1.1",
+    rating: "good",
+    short: "The oldest version still in use. Each connection carries one request at a time, so the browser opens up to 6 connections per server and makes the rest wait.",
+    transport: "TCP",
+    parallel: "One at a time per connection (up to 6 connections per server)",
+    setup: "2 round trips (TCP, then TLS 1.3)",
+    watch: "Queueing on busy pages. Often forced by proxies or inspection devices that do not support HTTP/2."
+  },
+  h2: {
+    label: "H2",
+    name: "HTTP/2",
+    rating: "better",
+    short: "Sends many requests at once over a single connection, so busy pages load faster than with HTTP/1.1. Runs over TCP.",
+    transport: "TCP",
+    parallel: "Many at once over one connection",
+    setup: "2 round trips (TCP, then TLS 1.3)",
+    watch: "One lost network packet briefly stalls every request sharing the connection."
+  },
+  h3: {
+    label: "H3",
+    name: "HTTP/3 (QUIC)",
+    rating: "best",
+    short: "The newest version. Like HTTP/2, but runs over QUIC (UDP) instead of TCP: it connects in fewer round trips and copes better with packet loss.",
+    transport: "QUIC over UDP port 443",
+    parallel: "Many at once, and a lost packet only delays its own request",
+    setup: "1 round trip (0 when reconnecting to a known server)",
+    watch: "Firewalls that block UDP port 443 force a slower fallback to HTTP/2."
+  }
+};
+
+/** Hover text for a protocol value such as "h2". */
+export function protocolTip(protocol) {
+  const p = PROTOCOL_INFO[protocol];
+  if (!p) return protocol ? `${protocol}: the web protocol version used for this request.` : "";
+  const order = { best: "the fastest of the three", better: "faster than HTTP/1.1, slower than HTTP/3", good: "the slowest of the three" };
+  return `${p.name}: ${p.short} Rated ${RATING_WORDS[p.rating]} (${order[p.rating]}).`;
+}
+
+/** Hover text for a status code or error shown as a tag. */
+export function resultTip(r) {
+  if (r.fromCache) return "Served from the browser's saved copy: nothing crossed the network.";
+  if (r.netError) return `${r.netError}: ${NET_ERRORS[r.netError] || "the request failed before an answer arrived."}`;
+  if (r.status != null) return `Status ${r.status}: ${statusMeaning(r.status) || "see HTTP status codes in the Learn tab."}`;
+  return "No answer was recorded.";
+}
+
+export const TAG_TIPS = {
+  wait: "Server wait: time between sending the request and the first byte of the answer. Spent at the server or anything in front of it (CDN, proxy, security gateway).",
+  size: "Size of the answer as it crossed the network (often compressed).",
+  tls: "Encryption version. TLS 1.3 is the newest and fastest to set up; TLS 1.2 is still acceptable; older versions are outdated.",
+  setup: "Time to open the connection: TCP plus TLS, or the QUIC handshake.",
+  privateRoot: "The server's certificate chains to a root that is not a public certificate authority. A security device between this computer and the server is decrypting the traffic (TLS inspection)."
+};

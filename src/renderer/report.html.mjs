@@ -10,7 +10,7 @@
 
 import { formatDuration, formatBytes } from "../normalizer.mjs";
 import { TIMING_LABELS, THRESHOLDS, buildAiSummary } from "../analysis.mjs";
-import { explainConnection, explainHost, explainTransaction, plainSummary, MEASURE_HELP } from "../explain.mjs";
+import { explainConnection, explainHost, explainTransaction, plainSummary, MEASURE_HELP, PROTOCOL_INFO, protocolTip, resultTip, TAG_TIPS, RATING_WORDS } from "../explain.mjs";
 import { renderLearn } from "./learn.mjs";
 import { themeCss } from "../theme.mjs";
 import { DEFAULT_THEME } from "./theme.generated.mjs";
@@ -40,8 +40,35 @@ function pathOf(url) {
   }
 }
 
-function chip(r) {
-  return `<span class="chip lvl-${esc(r.level)}" title="${esc(r.level)}">${esc(r.value)}</span>`;
+function chip(r, tip) {
+  return `<span class="chip lvl-${esc(r.level)}" data-tip="${esc(tip || `Rating: ${RATING_WORDS[r.level] || r.level}`)}">${esc(r.value)}</span>`;
+}
+
+function protocolsTip(value) {
+  const found = Object.keys(PROTOCOL_INFO).filter(k => new RegExp(`(^|[\\s,])${k.replace(/[./]/g, "\\$&")}(\\s|,|$)`).test(value));
+  return found.map(protocolTip).join(" ");
+}
+
+/** Collapsible comparison of HTTP/1.1, HTTP/2, and HTTP/3, with counts for this page. */
+function renderProtocolGuide(pageRequests) {
+  const counts = {};
+  for (const r of pageRequests) if (r.protocol) counts[r.protocol] = (counts[r.protocol] || 0) + 1;
+  const used = Object.entries(counts).sort((a, b) => b[1] - a[1])
+    .map(([p, n]) => `${PROTOCOL_INFO[p]?.label || p} for ${n} request${n === 1 ? "" : "s"}`).join(", ");
+  const rows = ["h3", "h2", "http/1.1"].map(k => PROTOCOL_INFO[k]).map(p => `
+          <tr><th><span class="tag tone-proto">${esc(p.label)}</span> ${esc(p.name)}</th>
+            <td>${esc(p.short)}</td><td>${esc(p.transport)}</td><td>${esc(p.parallel)}</td><td>${esc(p.setup)}</td>
+            <td><span class="chip lvl-${p.rating}">${esc(RATING_WORDS[p.rating])}</span></td><td>${esc(p.watch)}</td></tr>`).join("");
+  return `
+    <details class="proto-guide">
+      <summary>What do H3, H2, and HTTP/1.1 mean?</summary>
+      <p class="note">They are versions of the web protocol the browser and server agreed on. Newer versions load busy pages faster. ${used ? `This page used ${esc(used)}.` : ""}</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Protocol</th><th>In plain words</th><th>Runs over</th><th>Requests at once</th><th>Opening a new connection</th><th>Rating</th><th>Watch for</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <p class="note">The browser picks the newest version both sides support. Seeing HTTP/1.1 or H2 where H3 is available usually means something on the network path (a proxy, firewall, or inspection device) does not support the newer one.</p>
+    </details>`;
 }
 
 function renderEnvironment(env) {
@@ -110,7 +137,7 @@ function renderHosts(hosts) {
             <td><span class="dot lvl-${esc(h.overall)}"></span>${esc(h.host)}</td>
             <td><code>${esc(h.ips.join(", ") || "n/a")}</code></td>
             <td>${h.requests}</td>
-            <td>${chip(h.ratings.protocol)}</td>
+            <td>${chip(h.ratings.protocol, protocolsTip(h.ratings.protocol.value))}</td>
             <td>${chip(h.ratings.tls)}</td>
             <td>${h.cert ? `${esc(h.cert.issuer || "unknown")}${h.cert.knownRoot === false ? ' <span class="chip lvl-poor">private root</span>' : h.cert.knownRoot ? ' <span class="muted">public root</span>' : ""}` : '<span class="muted">Not recorded</span>'}</td>
             <td>${chip(h.ratings.connection)}</td>
@@ -173,8 +200,8 @@ function renderWaterfall(analysis, connections) {
       <details class="wf-row${flags.map(f => ` flag-${f}`).join("")}" id="req-${r.id}" data-flags="${flags.join(" ")}" data-search="${esc(searchText(r))}">
         <summary>
           <span class="wf-label" title="${esc(r.url)}"><span class="method">${esc(r.method || "")}</span> <span class="wf-host">${esc(r.host)}</span><span class="wf-path">${esc(pathOf(r.url))}</span></span>
-          <span class="wf-status">${esc(status)}</span>
-          <span class="wf-proto">${esc(r.protocol || "")}</span>
+          <span class="wf-status" data-tip="${esc(resultTip(r))}">${esc(status)}</span>
+          <span class="wf-proto"${r.protocol ? ` data-tip="${esc(protocolTip(r.protocol))}"` : ""}>${esc(r.protocol || "")}</span>
           <span class="wf-track"><span class="wf-bar" style="left:${pct(r.start - page.startMs)};width:${pct(Math.max(r.durationMs, span / 400))}">${segs}</span></span>
           <span class="wf-time">${esc(ms(r.durationMs))}</span>
         </summary>
@@ -186,6 +213,7 @@ function renderWaterfall(analysis, connections) {
       <h2>Request waterfall</h2>
       <p class="note">Every request for this page, in start order. Click a row for its timing, connection, certificate, and headers.</p>
       <ul class="legend">${SEGMENTS.map(k => `<li><span class="swatch seg-${k}"></span>${esc(TIMING_LABELS[k])}</li>`).join("")}</ul>
+      ${renderProtocolGuide(pageRequests)}
       <div class="wf">
         <div class="wf-axis"><span class="wf-label"></span><span class="wf-status"></span><span class="wf-proto"></span><span class="wf-track ticks">${ticks}</span><span class="wf-time"></span></div>
         ${rows}
@@ -295,10 +323,10 @@ export function buildSequenceView(analysis, connections, environment = null) {
         offset: (conn.start ?? r.start) - page.startMs,
         label: conn.error ? "Connection failed" : conn.kind === "quic" ? "QUIC handshake" : "TCP + TLS handshake",
         chips: [
-          { text: formatDuration(setup), tone: setup > t.good ? "bad" : setup >= t.better ? "warn" : "good" },
-          conn.tlsVersion ? { text: conn.tlsVersion, tone: "tls" } : null,
-          conn.cert?.knownRoot === false ? { text: "Private root", tone: "bad" } : null,
-          conn.error ? { text: conn.error, tone: "bad" } : null
+          { text: formatDuration(setup), tone: setup > t.good ? "bad" : setup >= t.better ? "warn" : "good", tip: TAG_TIPS.setup },
+          conn.tlsVersion ? { text: conn.tlsVersion, tone: "tls", tip: TAG_TIPS.tls } : null,
+          conn.cert?.knownRoot === false ? { text: "Private root", tone: "bad", tip: TAG_TIPS.privateRoot } : null,
+          conn.error ? { text: conn.error, tone: "bad", tip: resultTip({ netError: conn.error, timing: {} }) } : null
         ].filter(Boolean),
         flags,
         search: [r.host, conn.remoteIp, "connection handshake tls", conn.tlsVersion, conn.error].filter(Boolean).join(" ").toLowerCase()
@@ -312,10 +340,10 @@ export function buildSequenceView(analysis, connections, environment = null) {
       offset: r.start - page.startMs,
       label: `${r.method || ""} ${path.length > 44 ? `${path.slice(0, 41)}...` : path}`.trim(),
       chips: [
-        r.protocol ? { text: PROTOCOL_LABELS[r.protocol] || r.protocol, tone: "proto" } : null,
-        { text: String(r.netError || r.status || (r.fromCache ? "cache" : "no answer")), tone: flags.includes("error") ? "bad" : r.status >= 300 && r.status < 400 ? "info" : "good" },
-        wait != null ? { text: `wait ${formatDuration(wait)}`, tone: wait > THRESHOLDS.server.good ? "bad" : wait > THRESHOLDS.server.better ? "warn" : "plain" } : null,
-        r.bytesWire ? { text: formatBytes(r.bytesWire), tone: "plain" } : null
+        r.protocol ? { text: PROTOCOL_LABELS[r.protocol] || r.protocol, tone: "proto", tip: protocolTip(r.protocol) } : null,
+        { text: String(r.netError || r.status || (r.fromCache ? "cache" : "no answer")), tone: flags.includes("error") ? "bad" : r.status >= 300 && r.status < 400 ? "info" : "good", tip: resultTip(r) },
+        wait != null ? { text: `wait ${formatDuration(wait)}`, tone: wait > THRESHOLDS.server.good ? "bad" : wait > THRESHOLDS.server.better ? "warn" : "plain", tip: TAG_TIPS.wait } : null,
+        r.bytesWire ? { text: formatBytes(r.bytesWire), tone: "plain", tip: TAG_TIPS.size } : null
       ].filter(Boolean),
       flags,
       search: searchText(r)
@@ -329,8 +357,8 @@ export function buildSequenceView(analysis, connections, environment = null) {
 function renderHowToRead() {
   const sample = (cls) => `<span class="how-sample ${cls}"><span class="seq-line"></span></span>`;
   return `
-    <div class="how-to">
-      <h3 class="sub">How to read this view</h3>
+    <details class="how-to" open>
+      <summary class="sub">How to read this view</summary>
       <p>Each column is one participant: your <strong>browser</strong> on the left, then every <strong>server</strong> the page talked to. Time runs from top to bottom; the number at the left of each row is when that step started, counted from the first request.</p>
       <ul class="how-legend">
         <li>${sample("kind-request")}<span><strong>Request and answer.</strong> The browser asks the server for something (the page, a script, an image, data) and gets an answer.</span></li>
@@ -339,15 +367,15 @@ function renderHowToRead() {
         <li><span class="how-band flag-slow"></span><span><strong>Amber row:</strong> slow. The server took over ${formatDuration(THRESHOLDS.server.better)} to answer, or the step took over ${formatDuration(THRESHOLDS.server.good)}.</span></li>
       </ul>
       <p>The labels under each line show the protocol (H2, H3), the result (200 means OK), how long the server took to answer (wait), and the size.</p>
-      <p><strong>Click any row or column heading</strong> to see what it means here.</p>
-    </div>`;
+      <p><strong>Click any row or column heading</strong> to see what it means here. Hover over any small label (H2, 200, wait) for a quick explanation.</p>
+    </details>`;
 }
 
 function renderChip(c) {
-  return `<span class="tag tone-${esc(c.tone)}">${esc(c.text)}</span>`;
+  return `<span class="tag tone-${esc(c.tone)}"${c.tip ? ` data-tip="${esc(c.tip)}"` : ""}>${esc(c.text)}</span>`;
 }
 
-function renderSequence(view, page) {
+function renderSequence(view, page, analysis) {
   const n = view.actors.length;
   const center = (i) => ((i + 0.5) / n).toFixed(5);
   const head = view.actors.map(a => `
@@ -369,8 +397,9 @@ function renderSequence(view, page) {
     <section id="sequence" class="seq-layout">
       <div class="seq-main card">
         <div class="seq-title">
-          <h2>Sequence</h2>
+          <div class="seq-title-row"><h2>Sequence</h2><button type="button" id="toggle-details" aria-controls="explain" aria-expanded="true">Hide details panel</button></div>
           <p class="note">One column per server (the first ${MAX_SEQUENCE_HOSTS} contacted; the rest share the last column). A handshake row appears only where a new connection was opened.${view.truncated ? ` Showing the first ${MAX_SEQUENCE_REQUESTS} of ${page.requestCount} requests; the waterfall lists all of them.` : ""}</p>
+          ${renderProtocolGuide(analysis.pageRequests)}
         </div>
         <div class="seq-scroll" style="--n:${n}">
           <div class="seq-grid">
@@ -619,6 +648,20 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .tag { font: 600 10.5px var(--font-mono); padding: 0 6px; line-height: 18px; border-radius: var(--radius-sm); border: 1px solid currentColor; background: color-mix(in srgb, currentColor 12%, transparent); text-transform: uppercase; letter-spacing: 0.03em; }
   .tone-proto { color: var(--secondary); } .tone-tls { color: var(--seg-tls); } .tone-good { color: var(--success); } .tone-warn { color: var(--warning); } .tone-bad { color: var(--danger); } .tone-info { color: var(--primary); } .tone-plain { color: var(--text-muted); }
 
+  .seq-title-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .seq-title-row h2 { margin: 0; }
+  .seq-layout.details-hidden { grid-template-columns: minmax(0, 1fr); }
+  .seq-layout.details-hidden .inspector { display: none; }
+  .proto-guide { margin: 6px 0 10px; }
+  .proto-guide > summary { cursor: pointer; color: var(--primary); font-size: 12.5px; }
+  .proto-guide table { margin-top: 6px; }
+  .proto-guide th { white-space: nowrap; }
+  [data-tip] { cursor: help; }
+  .wf-proto[data-tip], .wf-status[data-tip] { text-decoration: underline dotted; text-underline-offset: 3px; }
+  .tip-box { position: fixed; z-index: 60; max-width: 340px; padding: 8px 10px; background: var(--surface-3); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font: 12.5px/1.45 var(--font-sans); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); pointer-events: none; }
+  .tip-box[hidden] { display: none; }
+  details.how-to > summary { cursor: pointer; margin-top: 0; }
+
   /* Inspector */
   .inspector { position: sticky; top: calc(var(--topbar-h) + 12px); max-height: calc(100vh - var(--topbar-h) - 40px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px 18px; }
   .insp-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
@@ -660,6 +703,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
 
   @media (max-width: 1200px) {
     .seq-layout { grid-template-columns: 1fr; }
+    #toggle-details { display: none; }
     .inspector { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); max-height: none; border-radius: 0; z-index: 40; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5); }
     .js .inspector:not(.is-open) { display: none; }
     .insp-close { display: inline-block; }
@@ -719,7 +763,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
       ${renderWaterfall(analysis, connections)}
     </div>
     <div class="view" id="view-sequence" data-view="sequence">
-      ${renderSequence(view, page)}
+      ${renderSequence(view, page, analysis)}
     </div>
     <div class="view" id="view-environment" data-view="environment">
       ${renderEnvironment(env)}
@@ -753,6 +797,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
     <span>SocketMap ${VERSION}</span>
   </footer>
 </div>
+<div class="tip-box" id="tip-box" role="tooltip" hidden></div>
 <script>
 (function () {
   document.documentElement.classList.add("js");
@@ -883,6 +928,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
     }
     empty.hidden = true;
     body.hidden = false;
+    if (layout.classList.contains("details-hidden")) setDetailsHidden(false);
     inspector.classList.add("is-open");
     inspector.scrollTop = 0;
   }
@@ -910,6 +956,41 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   });
   document.getElementById("explain-close").addEventListener("click", closeInspector);
   document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && inspector.classList.contains("is-open")) closeInspector(); });
+
+  // Hover (or keyboard focus) on any [data-tip] label shows its explanation.
+  var tipBox = document.getElementById("tip-box");
+  function showTip(el) {
+    tipBox.textContent = el.getAttribute("data-tip");
+    tipBox.hidden = false;
+    var r = el.getBoundingClientRect();
+    var w = tipBox.offsetWidth, h = tipBox.offsetHeight;
+    var left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+    var top = r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8;
+    tipBox.style.left = left + "px";
+    tipBox.style.top = top + "px";
+  }
+  function hideTip() { tipBox.hidden = true; }
+  document.addEventListener("mouseover", function (ev) {
+    var el = ev.target.closest && ev.target.closest("[data-tip]");
+    if (el) showTip(el); else hideTip();
+  });
+  document.addEventListener("focusin", function (ev) {
+    var el = ev.target.closest && ev.target.closest("[data-tip]");
+    if (el) showTip(el); else hideTip();
+  });
+  window.addEventListener("scroll", hideTip, true);
+
+  // Details panel can be hidden to give the sequence the full width.
+  var layout = document.getElementById("sequence");
+  var toggle = document.getElementById("toggle-details");
+  function setDetailsHidden(hidden) {
+    layout.classList.toggle("details-hidden", hidden);
+    toggle.textContent = hidden ? "Show details panel" : "Hide details panel";
+    toggle.setAttribute("aria-expanded", hidden ? "false" : "true");
+    try { localStorage.setItem("socketmap-details-hidden", hidden ? "1" : "0"); } catch (e) { /* storage may be blocked */ }
+  }
+  toggle.addEventListener("click", function () { setDetailsHidden(!layout.classList.contains("details-hidden")); });
+  try { if (localStorage.getItem("socketmap-details-hidden") === "1") setDetailsHidden(true); } catch (e) { /* storage may be blocked */ }
 
   document.getElementById("copy-summary").addEventListener("click", function () {
     var text = document.getElementById("summary-text");
