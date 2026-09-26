@@ -51,6 +51,29 @@ describe("Report HTML", () => {
     assert.ok(html.includes("<title>portal.example.com (198.51.100.20)</title>"), "each card names its host and IP on hover");
   });
 
+  it("explains every arrow in plain language when clicked", () => {
+    const json = html.match(/<script type="application\/json" id="seq-explain">([\s\S]*?)<\/script>/);
+    assert.ok(json, "explanations are embedded");
+    const explanations = JSON.parse(json[1]);
+    assert.ok(Object.keys(explanations).length >= 10);
+    assert.ok(html.includes('id="explain"'), "explanation panel");
+    assert.ok(html.includes("How to read this diagram"));
+    assert.ok(html.includes('id="req-1"'), "waterfall rows can be opened from the panel");
+    assert.ok(html.includes('class="plain"'), "plain-language summary in each waterfall row");
+  });
+
+  it("has a Learn section with safe outbound links and a glossary", () => {
+    assert.ok(html.includes('id="learn"'));
+    assert.ok(html.includes('href="#learn"'));
+    assert.ok(html.includes("https://web.dev/articles/vitals"));
+    assert.ok(html.includes("https://developer.chrome.com/docs/modern-web-guidance"));
+    assert.ok(html.includes("https://www.wireshark.org/"));
+    assert.ok(html.includes('class="glossary"'));
+    const external = html.match(/<a href="https?:[^"]+"[^>]*>/g) || [];
+    assert.ok(external.length >= 20);
+    for (const a of external) assert.ok(a.includes('target="_blank"') && a.includes('rel="noopener noreferrer"'), a);
+  });
+
   it("contains the AI summary text", () => {
     assert.ok(html.includes('id="ai-summary"'));
   });
