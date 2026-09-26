@@ -9,7 +9,7 @@ import { buildViewerHtml } from "../scripts/build-viewer.mjs";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
-import { buildPageLoadNetLog, toNetLogText } from "./fixtures/netlog-builder.mjs";
+import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
 let dir;
 let html;
@@ -46,6 +46,15 @@ describe("Drag-and-drop viewer", () => {
     assert.ok(html.includes("edge://net-export"));
     assert.ok(html.includes("explained in plain language"));
     assert.ok(!html.includes("which team to talk to"));
+  });
+
+  it("explains what SocketMap does, truthfully, before anything is dropped", () => {
+    for (const id of ['id="how"', 'id="what"', 'id="privacy"', 'id="limits"']) assert.ok(html.includes(id), id);
+    assert.ok(html.includes("data-open-sample"), "sample capture button");
+    assert.ok(html.includes("What a network log cannot show"));
+    for (const claim of ["PCAP", "gRPC", "WebSocket frame", "npx socketmap", "npm install -g"]) {
+      assert.ok(!html.includes(claim), `does not claim ${claim}`);
+    }
   });
 
   it("builds the same report in the browser as the command line does", async () => {

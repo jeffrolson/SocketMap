@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { createNetLogTokenizer } from "../src/parsers/netlog-stream.mjs";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
-import { buildPageLoadNetLog, buildManyRequestsNetLog, toNetLogText } from "./fixtures/netlog-builder.mjs";
+import { buildPageLoadNetLog, buildManyRequestsNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
 let dir;
 let pageLoadPath;

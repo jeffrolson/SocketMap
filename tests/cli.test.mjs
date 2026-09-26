@@ -5,7 +5,7 @@ import { existsSync, unlinkSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildPageLoadNetLog, toNetLogText } from "./fixtures/netlog-builder.mjs";
+import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cliPath = resolve(__dirname, "../bin/traceviz.mjs");
@@ -33,7 +33,7 @@ describe("CLI Integration Tests", () => {
 
   it("should display version with --version", () => {
     const out = execFileSync(process.execPath, [cliPath, "--version"], { encoding: "utf8" });
-    assert.ok(out.includes("SocketMap v0.5.0"));
+    assert.ok(out.includes("SocketMap v0.6.0"));
   });
 
   it("should generate sample diagram via --sample -o", () => {

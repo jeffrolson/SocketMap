@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
-import { buildPageLoadNetLog, toNetLogText } from "./fixtures/netlog-builder.mjs";
+import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
 let dir;
 let html;

@@ -15,7 +15,7 @@ import { renderLearn } from "./learn.mjs";
 import { themeCss } from "../theme.mjs";
 import { DEFAULT_THEME } from "./theme.generated.mjs";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const MAX_SEQUENCE_HOSTS = 8;
 const MAX_SEQUENCE_REQUESTS = 1000; // display limit for the sequence view only; the waterfall shows every request

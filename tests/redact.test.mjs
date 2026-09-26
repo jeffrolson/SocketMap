@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { redactUrl, redactHeaderLines } from "../src/redact.mjs";
 import { summarizeCertificateChain } from "../src/cert.mjs";
-import { TEST_CERTS } from "./fixtures/netlog-builder.mjs";
+import { TEST_CERTS } from "../src/demo/sample-capture.mjs";
 
 describe("URL redaction", () => {
   it("masks secret query and fragment values, keeps the rest", () => {

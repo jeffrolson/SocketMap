@@ -88,12 +88,54 @@ const CAPTURE_STEPS = [
   "Open a new tab and go to <code>chrome://net-export</code> (in Edge: <code>edge://net-export</code>).",
   "Keep <strong>Strip private information</strong> selected and click <strong>Start Logging to Disk</strong>. Save the file.",
   "In another tab, load the slow page or repeat the slow action.",
-  "Go back and click <strong>Stop Logging</strong>. Drop the saved file here."
+  "Go back and click <strong>Stop Logging</strong>. Drop the saved file on this page."
 ];
 
-/**
- * @param {{ theme?: object }} options  theme: design tokens for a company build; default is DESIGN.md
- */
+const SHELL_ICONS = {
+  logo: '<path d="M3 16l4-5 4 3 5-7 5 6"/>',
+  file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>',
+  check: '<path d="M5 12l4 4 10-10"/>',
+  play: '<path d="M8 5l11 7-11 7z"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/>'
+};
+
+function shellIcon(name, size = 18) {
+  return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SHELL_ICONS[name]}</svg>`;
+}
+
+const PILLARS = [
+  ["file", "One HTML file", "Nothing to install", "This page is the whole tool. Open it in Chrome or Edge on Windows or macOS: no admin rights, no Node.js, no browser add-ons.", "0 dependencies"],
+  ["lock", "Local only", "Private by design", "Your capture is read inside your browser and never uploaded. Passwords, cookies, auth headers, and tokens are removed from the report; IP addresses and URLs stay so the network team can act on them.", "Works offline"],
+  ["search", "Enterprise checks", "Finds the usual suspects", "TLS inspection (certificates from a private root), proxies and slow proxy lookups, calls to agents on this computer, slow DNS, slow connections, failed requests, slow servers, and blocked QUIC.", "Evidence for every finding"],
+  ["chat", "Plain language", "Explained for everyone", "Click any step for what happened in everyday words, hover any label (H2, 200, wait) for a definition, and copy a summary to paste into your AI assistant.", "Learn tab with next steps"]
+];
+
+const STEPS = [
+  ["01", "Capture", "Record the slow page", "In Chrome or Edge, start a network log, load the slow page, and stop the log. Two minutes, nothing to install.", "chrome://net-export"],
+  ["02", "Drop", "Drop the file here", "The report builds in your browser. A 5 MB capture takes about a tenth of a second; a 300 MB capture about two seconds.", "chrome-net-export-log.json"],
+  ["03", "Read and share", "Follow the findings", "Start with Findings, then open the Sequence tab and click any row. Save report creates one HTML file you can email or attach to a ticket.", "Save report → socketmap-report-site.html"]
+];
+
+const SPECS = [
+  ["Reads", "Chrome and Edge network logs (net-export). HAR files work with the command-line tool, which draws a diagram view."],
+  ["Shows", "Findings, host ratings (Best / Better / Good / Poor), request waterfall, sequence view, environment (local IP, DNS servers, proxy setup), AI summary."],
+  ["Speed", "5 MB capture: about 0.1 s. 300 MB capture: about 2 s. Measured on a laptop."],
+  ["Runs in", "Current Chrome or Edge. The command line needs Node.js 18 or later."],
+  ["Network access", "None. This page and every report load nothing from the internet."],
+  ["Dependencies", "0"],
+  ["License", "MIT"]
+];
+
+const LIMITS = [
+  ["Time spent running the page's own code", "Record a Performance profile in Chrome DevTools."],
+  ["Security software acting inside the browser", "Compare a capture with the software paused, if policy allows."],
+  ["Packet-level problems such as retransmissions", "Use Wireshark or your network team's packet capture."],
+  ["What the servers do internally", "Ask the application owner or vendor; the report shows how long they took."]
+];
+
 export function buildViewerHtml({ theme } = {}) {
   const bundle = bundleViewer();
   const themeOverride = theme ? `<script>globalThis.SOCKETMAP_THEME = ${JSON.stringify(theme).replace(/</g, "\\u003c")};</script>\n` : "";
@@ -103,66 +145,300 @@ export function buildViewerHtml({ theme } = {}) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="generator" content="SocketMap ${VERSION}">
-<title>SocketMap: why is this page slow?</title>
+<title>SocketMap: see what slowed a web page down</title>
 <style>
   :root {
     ${themeCss(theme || DEFAULT_THEME)}
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-sans); }
-  #start { max-width: 760px; margin: 0 auto; padding: 48px 24px; }
-  h1 { font-size: 28px; margin: 0 0 6px; }
-  .tagline { color: var(--text-muted); margin: 0 0 28px; }
-  .drop { border: 2px dashed var(--border); border-radius: var(--radius); background: var(--surface); padding: 48px 24px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
-  .drop:hover, .drop:focus-visible, .drop.is-over { border-color: var(--primary); background: var(--surface-2); outline: none; }
-  .drop strong { display: block; font-size: 18px; margin-bottom: 6px; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-sans); }
+  a { color: var(--primary); }
+  code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 1px 6px; border-radius: var(--radius-sm); }
+  .icon { flex: none; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  .eyebrow { font: 600 11.5px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--success); }
+  h1 { font-size: clamp(28px, 4.2vw, 40px); line-height: 1.15; letter-spacing: -0.025em; margin: 14px auto 12px; max-width: 820px; text-align: center; }
+  h1 .accent { background: linear-gradient(90deg, var(--secondary), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h2 { font-size: 24px; letter-spacing: -0.02em; margin: 6px 0 10px; }
+  h3 { font-size: 17px; margin: 6px 0; }
+  .muted { color: var(--text-muted); }
+  button, .button { font: 600 13.5px var(--font-sans); color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+  button:hover, .button:hover { border-color: var(--secondary); }
+  .primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+  /* Top bar */
+  .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid color-mix(in srgb, var(--secondary) 18%, transparent); }
+  .nav .wrap { display: flex; align-items: center; gap: 18px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
+  .brand .mark { display: inline-flex; padding: 5px; border-radius: var(--radius-sm); background: var(--surface-3); color: var(--secondary); }
+  .nav-links { display: flex; gap: 4px; margin-left: 12px; }
+  .nav-links a { color: var(--text-muted); text-decoration: none; padding: 6px 10px; border-radius: var(--radius); font-size: 14px; }
+  .nav-links a:hover { background: var(--surface-2); color: var(--text); }
+  .nav .spacer { flex: 1; }
+
+  /* Hero */
+  .hero { position: relative; padding: 36px 0 44px; text-align: center; overflow: hidden; }
+  .glow { position: absolute; left: 50%; top: -140px; width: 720px; height: 340px; transform: translateX(-50%); background: color-mix(in srgb, var(--secondary) 12%, transparent); filter: blur(120px); border-radius: 50%; pointer-events: none; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; position: relative; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); background: var(--surface-2); padding: 4px 10px; border-radius: 999px; }
+  .chip.ok { color: var(--success); }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  .tagline { position: relative; max-width: 700px; margin: 0 auto 26px; color: var(--text-muted); font-size: 16.5px; }
+  .drop { position: relative; max-width: 720px; margin: 0 auto; border: 2px dashed var(--border); border-radius: var(--radius); background: var(--surface); padding: 38px 24px; cursor: pointer; transition: border-color .12s, background .12s; }
+  .drop:hover, .drop:focus-visible, .drop.is-over { border-color: var(--secondary); background: var(--surface-mid); outline: none; }
+  .drop .icon { color: var(--secondary); margin-bottom: 8px; }
+  .drop strong { display: block; font-size: 19px; margin-bottom: 4px; }
   .drop span { color: var(--text-muted); }
-  .privacy { margin: 14px 0 0; font-size: 13.5px; color: var(--text-muted); }
-  .progress { margin-top: 20px; }
+  .hero-actions { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 16px; }
+  .privacy { position: relative; margin: 14px auto 0; max-width: 720px; font-size: 13.5px; color: var(--text-muted); }
+  .progress { max-width: 720px; margin: 18px auto 0; text-align: left; }
   .progress-track { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
-  #progress-bar { height: 100%; width: 0; background: var(--primary); transition: width .1s; }
+  #progress-bar { height: 100%; width: 0; background: var(--secondary); transition: width .1s; }
   #progress-text { margin-top: 8px; font-size: 13.5px; color: var(--text-muted); font-family: var(--font-mono); }
-  .error { margin-top: 20px; padding: 12px 14px; border-left: 4px solid var(--poor); background: var(--surface-2); border-radius: 6px; }
-  .how { margin-top: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 22px; }
-  .how h2 { font-size: 16px; margin: 0 0 8px; }
-  .how ol { margin: 0; padding-left: 20px; }
-  .how li { margin: 4px 0; }
-  code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
-  #result { display: flex; flex-direction: column; height: 100%; }
+  .error { max-width: 720px; margin: 18px auto 0; text-align: left; padding: 12px 14px; border-left: 4px solid var(--danger); background: var(--surface-2); border-radius: var(--radius-sm); }
+
+  /* Sections */
+  .band { padding: 52px 0; }
+  .band.alt { background: var(--canvas); }
+  .section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 24px; margin-bottom: 22px; }
+  .section-head p { max-width: 460px; margin: 0; color: var(--text-muted); font-size: 14px; }
+  .center { text-align: center; }
+  .center .section-head { justify-content: center; text-align: center; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; min-width: 0; }
+  .panel-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; font: 600 11px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; background: var(--surface-2); padding: 6px 10px; border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .compare { display: grid; grid-template-columns: 5fr 7fr; gap: 16px; }
+  .raw { font: 11.5px/1.6 var(--font-mono); color: var(--text-faint); white-space: pre; overflow-x: auto; }
+  .raw .hot { color: var(--danger); }
+  .panel-foot { margin-top: 12px; font: 600 12px var(--font-mono); display: flex; align-items: center; gap: 6px; }
+  .bad-text { color: var(--danger); } .good-text { color: var(--success); }
+  .mini { background: var(--canvas); border-radius: var(--radius-sm); padding: 12px; overflow-x: auto; }
+  .mini-head, .mini-row { display: grid; grid-template-columns: 64px repeat(3, minmax(120px, 1fr)); gap: 6px; align-items: center; }
+  .actor { background: var(--surface-2); border-radius: var(--radius-sm); padding: 5px 8px; font: 600 11.5px var(--font-mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .actor small { display: block; font-weight: 400; color: var(--text-faint); font-size: 10.5px; }
+  .mini-row { position: relative; height: 52px; }
+  .mini-row.flag { background: color-mix(in srgb, var(--danger-container) 30%, transparent); border-radius: var(--radius-sm); }
+  .mini-row .t { font: 10.5px var(--font-mono); color: var(--text-faint); text-align: right; padding-right: 6px; }
+  .mini-row.flag .t { color: var(--danger); font-weight: 600; }
+  .arrow { position: absolute; top: 25px; height: 2px; background: var(--primary); }
+  .arrow::after { content: ""; position: absolute; right: -2px; top: -5px; border: 6px solid transparent; border-left: 9px solid var(--primary); border-right: 0; }
+  .arrow.dashed { background: none; border-top: 2px dashed var(--danger); height: 0; }
+  .arrow.dashed::after { border-left-color: var(--danger); top: -7px; }
+  .arrow .lbl { position: absolute; top: -21px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 600 10.5px var(--font-mono); background: var(--surface-2); padding: 0 6px; border-radius: var(--radius-sm); }
+  .arrow .tags { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; white-space: nowrap; }
+  .tag { font: 600 10px var(--font-mono); padding: 0 5px; line-height: 16px; border-radius: var(--radius-sm); border: 1px solid currentColor; text-transform: uppercase; }
+  .tone-proto { color: var(--secondary); } .tone-good { color: var(--success); } .tone-warn { color: var(--warning); } .tone-bad { color: var(--danger); } .tone-tls { color: var(--seg-tls); } .tone-plain { color: var(--text-muted); }
+  .finding { margin-top: 10px; border-left: 4px solid var(--danger); background: var(--surface-mid); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; }
+  .finding b { font: 700 10px var(--font-mono); text-transform: uppercase; background: var(--danger); color: var(--bg); padding: 1px 6px; border-radius: var(--radius-sm); margin-right: 6px; }
+  .pillars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .pillar { display: flex; flex-direction: column; }
+  .pillar .ico { width: 38px; height: 38px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--secondary) 15%, transparent); color: var(--secondary); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+  .pillar p { color: var(--text-muted); font-size: 14px; margin: 4px 0 12px; }
+  .pillar .foot { margin-top: auto; font: 600 12px var(--font-mono); color: var(--text-muted); }
+  .pillar .foot::before { content: "✦ "; color: var(--success); }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .step .num { display: inline-flex; width: 32px; height: 32px; border-radius: 50%; align-items: center; justify-content: center; background: var(--surface-2); color: var(--secondary); font: 700 13px var(--font-mono); }
+  .step .stage { float: right; font: 600 11px var(--font-mono); text-transform: uppercase; color: var(--text-faint); margin-top: 8px; }
+  .step p { color: var(--text-muted); font-size: 14px; }
+  .step .cmd { font: 12.5px var(--font-mono); color: var(--secondary); background: var(--canvas); border-radius: var(--radius-sm); padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
+  details.capture { margin-top: 18px; }
+  details.capture summary { cursor: pointer; font-weight: 600; }
+  details.capture ol { margin: 10px 0 0; padding-left: 22px; }
+  details.capture li { margin: 5px 0; }
+  .specs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .spec-row { display: grid; grid-template-columns: 130px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .spec-row:last-child { border-bottom: 0; }
+  .spec-row span:first-child { color: var(--text-muted); }
+  .pipeline { display: flex; align-items: stretch; gap: 8px; margin-top: 14px; }
+  .pipeline div { flex: 1; background: var(--surface-2); border-radius: var(--radius-sm); padding: 8px; text-align: center; font: 600 12px var(--font-mono); }
+  .pipeline small { display: block; font-weight: 400; color: var(--text-faint); font-size: 10.5px; margin-top: 2px; }
+  .pipeline .to { flex: 0; background: none; padding: 8px 0; color: var(--text-faint); align-self: center; }
+  .limits { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .limits li { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 12px; background: var(--surface-mid); border-radius: var(--radius-sm); font-size: 14px; }
+  .limits li span:last-child { color: var(--text-muted); }
+  .cta { text-align: center; }
+  .cta .cli { display: inline-block; margin-top: 18px; font: 13px var(--font-mono); background: var(--canvas); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--secondary); }
+  .ticks { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; margin-top: 16px; font-size: 13.5px; color: var(--text-muted); }
+  .ticks span::before { content: "✔ "; color: var(--success); }
+  footer.site { background: var(--canvas); border-top: 1px solid var(--border); padding: 24px 0; font-size: 13px; color: var(--text-muted); }
+  footer.site .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+
+  /* Result view */
+  #result { display: flex; flex-direction: column; height: 100vh; }
   #result[hidden] { display: none; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
-  .toolbar .brand { font-weight: 700; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .toolbar .brand { font-size: 15px; }
   .toolbar .file { color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; }
   .toolbar label { font-size: 13.5px; color: var(--text-muted); display: flex; gap: 6px; align-items: center; }
   .toolbar .spacer { flex: 1; }
-  select, button { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font: 13.5px var(--font-sans); }
-  select { max-width: 420px; }
-  button { cursor: pointer; }
-  button:hover, select:hover { border-color: var(--primary); }
-  button.primary { background: var(--primary); color: var(--bg); border-color: var(--primary); font-weight: 600; }
+  select { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font: 13.5px var(--font-sans); max-width: 420px; }
   #report-frame { flex: 1; width: 100%; border: 0; background: var(--bg); }
+
+  @media (max-width: 960px) {
+    .compare, .specs, .steps { grid-template-columns: 1fr; }
+    .pillars { grid-template-columns: 1fr 1fr; }
+    .nav-links { display: none; }
+  }
+  @media (max-width: 600px) {
+    .pillars { grid-template-columns: 1fr; }
+    .limits li, .spec-row { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
-<main id="start">
-  <h1>SocketMap</h1>
-  <p class="tagline">Drop in a network capture from Chrome or Edge to see how a page loaded: every connection, request, and delay, with what slowed it down explained in plain language.</p>
-  <div id="drop" class="drop" role="button" tabindex="0" aria-label="Choose a NetLog capture file">
-    <strong>Drop a NetLog capture here</strong>
-    <span>or click to choose the file</span>
-  </div>
-  <input type="file" id="file-input" accept=".json,application/json" hidden>
-  <p class="privacy">Your capture never leaves this computer. This page reads it locally and uploads nothing; it works with the network turned off.</p>
-  <div id="progress" class="progress" hidden>
-    <div class="progress-track"><div id="progress-bar"></div></div>
-    <div id="progress-text"></div>
-  </div>
-  <div id="error" class="error" role="alert" hidden></div>
-  <section class="how">
-    <h2>How to capture (2 minutes, any Chrome or Edge browser)</h2>
-    <ol>${CAPTURE_STEPS.map(s => `<li>${s}</li>`).join("")}</ol>
+<div id="start">
+  <nav class="nav" aria-label="SocketMap">
+    <div class="wrap">
+      <span class="brand"><span class="mark">${shellIcon("logo")}</span>SocketMap</span>
+      <div class="nav-links"><a href="#how">How it works</a><a href="#what">What you get</a><a href="#privacy">Privacy</a><a href="#limits">Limits</a></div>
+      <span class="spacer"></span>
+      <button type="button" class="primary" data-open-sample>${shellIcon("play", 14)}Try the sample capture</button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="glow" aria-hidden="true"></div>
+    <div class="chips">
+      <span class="chip ok"><span class="dot"></span>v${VERSION}</span>
+      <span class="chip">No install</span>
+      <span class="chip">Works offline</span>
+      <span class="chip">Nothing uploaded</span>
+    </div>
+    <div class="wrap">
+      <h1>See how a web page loaded and <span class="accent">what slowed it down</span></h1>
+      <p class="tagline">Drop in a network capture from Chrome or Edge to see how a page loaded: every connection, request, and delay, with what slowed it down explained in plain language.</p>
+      <div id="drop" class="drop" role="button" tabindex="0" aria-label="Choose a NetLog capture file">
+        ${shellIcon("upload", 28)}
+        <strong>Drop a NetLog capture here</strong>
+        <span>or click to choose the file (chrome-net-export-log.json)</span>
+      </div>
+      <input type="file" id="file-input" accept=".json,application/json" hidden>
+      <div class="hero-actions">
+        <button type="button" data-open-sample>${shellIcon("play", 14)}No capture yet? Try the sample</button>
+        <a class="button" href="#how">How to capture</a>
+      </div>
+      <p class="privacy">Your capture never leaves this computer. This page reads it locally and uploads nothing; it works with the network turned off.</p>
+      <div id="progress" class="progress" hidden>
+        <div class="progress-track"><div id="progress-bar"></div></div>
+        <div id="progress-text"></div>
+      </div>
+      <div id="error" class="error" role="alert" hidden></div>
+    </div>
+  </header>
+
+  <section class="band alt" aria-labelledby="compare-title">
+    <div class="wrap">
+      <div class="section-head">
+        <div><span class="eyebrow">From raw capture to clear answers</span><h2 id="compare-title">Thousands of events in, a few plain findings out</h2></div>
+        <p>A browser network log records every lookup, connection, certificate, and request as separate events. SocketMap links them together and tells you which ones slowed the page down.</p>
+      </div>
+      <div class="compare">
+        <div class="panel">
+          <div class="panel-bar"><span class="bad-text">Raw NetLog events</span><span class="muted">chrome-net-export-log.json</span></div>
+          <div class="raw">{"phase":1,"source":{"id":5,"type":5},"time":"1125","type":33}
+{"params":{"address_list":["198.51.100.99:8080"]},...}
+{"phase":2,"source":{"id":45,"type":5},"type":33,
+ "params":{"local_address":"192.0.2.10:50002"}}
+{"params":{"certificates":["-----BEGIN CERT...
+<span class="hot">{"params":{"is_issued_by_known_root":false}}</span>
+{"params":{"proxy_info":"PROXY proxy.corp:8080"}}
+{"params":{"source_dependency":{"id":43}},...}
+... 19,000 more lines</div>
+          <div class="panel-foot bad-text">Linking these by hand takes hours</div>
+        </div>
+        <div class="panel">
+          <div class="panel-bar"><span style="color:var(--secondary)">SocketMap sequence view</span><span class="muted">report.html</span></div>
+          <div class="mini" role="img" aria-label="Example of a SocketMap sequence view">
+            <div class="mini-head"><span></span><span class="actor">Browser<small>192.0.2.10</small></span><span class="actor">portal.example.com<small>198.51.100.20</small></span><span class="actor">api.example.org<small>198.51.100.99</small></span></div>
+            <div class="mini-row"><span class="t">+0ms</span><span class="arrow" style="left:calc(64px + (100% - 64px) * 0.1667);width:calc((100% - 64px) * 0.3333)"><span class="lbl">GET /sites/team/home.aspx</span><span class="tags"><span class="tag tone-proto">H2</span><span class="tag tone-good">200</span><span class="tag tone-plain">wait 500ms</span></span></span></div>
+            <div class="mini-row"><span class="t">+904ms</span><span class="arrow" style="left:calc(64px + (100% - 64px) * 0.1667);width:calc((100% - 64px) * 0.6667)"><span class="lbl">POST /v1/data</span><span class="tags"><span class="tag tone-proto">HTTP/1.1</span><span class="tag tone-good">200</span><span class="tag tone-plain">wait 200ms</span></span></span></div>
+            <div class="mini-row flag"><span class="t">+985ms</span><span class="arrow dashed" style="left:calc(64px + (100% - 64px) * 0.1667);width:calc((100% - 64px) * 0.6667)"><span class="lbl">TCP + TLS handshake</span><span class="tags"><span class="tag tone-bad">420ms</span><span class="tag tone-tls">TLS 1.2</span><span class="tag tone-bad">Private root</span></span></span></div>
+          </div>
+          <div class="finding"><b>High</b>TLS inspection: api.example.org's certificate was issued by Contoso Inspection CA, not a public authority. Who to involve: Network security.</div>
+          <div class="panel-foot good-text">${shellIcon("check", 14)}Every connection, delay, and certificate, linked and explained</div>
+        </div>
+      </div>
+    </div>
   </section>
-</main>
+
+  <section class="band center" id="what" aria-labelledby="pillars-title">
+    <div class="wrap">
+      <div class="section-head"><div><span class="eyebrow">Built for IT troubleshooting</span><h2 id="pillars-title">Simple to use, detailed enough to act on</h2><p class="muted">No installer, no account, no cloud upload.</p></div></div>
+      <div class="pillars">
+        ${PILLARS.map(([ico, eyebrow, title, text, foot]) => `
+        <article class="panel pillar" style="text-align:left"${ico === "lock" ? ' id="privacy"' : ""}>
+          <span class="ico">${shellIcon(ico)}</span>
+          <span class="eyebrow">${eyebrow}</span>
+          <h3>${title}</h3>
+          <p>${text}</p>
+          <span class="foot">${foot}</span>
+        </article>`).join("")}
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt" id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <div class="section-head"><div><span class="eyebrow">How it works</span><h2 id="how-title">From a slow page to a report in three steps</h2></div></div>
+      <div class="steps">
+        ${STEPS.map(([num, stage, title, text, cmd]) => `
+        <article class="panel step">
+          <span class="num">${num}</span><span class="stage">${stage}</span>
+          <h3>${title}</h3>
+          <p>${text}</p>
+          <div class="cmd">${cmd}</div>
+        </article>`).join("")}
+      </div>
+      <details class="capture panel" open>
+        <summary>How to capture, step by step (2 minutes, any Chrome or Edge browser)</summary>
+        <ol>${CAPTURE_STEPS.map(s => `<li>${s}</li>`).join("")}</ol>
+      </details>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="specs-title">
+    <div class="wrap">
+      <div class="specs">
+        <div>
+          <span class="eyebrow">What you get</span>
+          <h2 id="specs-title">One report, everything the capture recorded</h2>
+          <p class="muted">Every number in a report comes from the capture itself. When Chrome did not record something, the report says "not recorded" instead of guessing.</p>
+          <div class="pipeline" aria-label="How SocketMap processes a capture">
+            <div>Capture file<small>net-export JSON</small></div><span class="to">→</span>
+            <div>Streaming reader<small>one event at a time</small></div><span class="to">→</span>
+            <div>Analyzer<small>links requests, DNS, certificates</small></div><span class="to">→</span>
+            <div>Report<small>findings and explanations</small></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-bar"><span style="color:var(--primary)">Specification</span><span class="good-text">v${VERSION}</span></div>
+          ${SPECS.map(([k, v]) => `<div class="spec-row"><span>${k}</span><span>${v}</span></div>`).join("")}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band alt" id="limits" aria-labelledby="limits-title">
+    <div class="wrap">
+      <div class="section-head"><div><span class="eyebrow">Honest limits</span><h2 id="limits-title">What a network log cannot show</h2></div><p>If the network looks fine but the page is still slow, the cause is probably in one of these places.</p></div>
+      <ul class="limits">${LIMITS.map(([what, next]) => `<li><span>${what}</span><span>${next}</span></li>`).join("")}</ul>
+    </div>
+  </section>
+
+  <section class="band cta" aria-labelledby="cta-title">
+    <div class="wrap">
+      <h2 id="cta-title">Ready to look at your own page?</h2>
+      <p class="muted">Capture the slow page, then drop the file at the top of this page. Or see a finished report first.</p>
+      <div class="hero-actions"><a class="button primary" href="#drop">Choose a capture</a><button type="button" data-open-sample>${shellIcon("play", 14)}Try the sample capture</button></div>
+      <div class="cli">Power users: <span class="muted">node bin/traceviz.mjs capture.json --open</span></div>
+      <div class="ticks"><span>Nothing uploaded</span><span>No remote calls</span><span>Secrets removed from reports</span></div>
+    </div>
+  </section>
+
+  <footer class="site">
+    <div class="wrap"><span><strong>SocketMap</strong> v${VERSION} · MIT license · zero dependencies</span><span>Full instructions: README and docs/USER-GUIDE.md in the SocketMap repository.</span></div>
+  </footer>
+</div>
 <div id="result" hidden>
   <div class="toolbar">
     <span class="brand">SocketMap</span>

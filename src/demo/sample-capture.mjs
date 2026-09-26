@@ -1,5 +1,6 @@
 /**
- * Builds synthetic Chromium NetLog captures for tests.
+ * Builds synthetic Chromium NetLog captures: the viewer's "Try the sample capture",
+ * the documentation screenshots, and the test fixtures.
  *
  * Every address uses the documentation ranges from RFC 5737 (192.0.2.0/24,
  * 198.51.100.0/24, 203.0.113.0/24) plus loopback. Certificates are throwaway

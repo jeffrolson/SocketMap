@@ -30,7 +30,7 @@ export const DEFAULT_THEME = ${JSON.stringify(tokens, null, 2)};
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const expected = renderThemeModule(parseDesignTokens(readFileSync(SOURCE, "utf8")));
   if (process.argv.includes("--check")) {
-    const current = existsSync(TARGET) ? readFileSync(TARGET, "utf8") : "";
+    const current = existsSync(TARGET) ? readFileSync(TARGET, "utf8").replace(/\r\n/g, "\n") : "";
     if (current !== expected) {
       console.error("theme.generated.mjs is out of date. Run: npm run generate:theme");
       process.exit(1);

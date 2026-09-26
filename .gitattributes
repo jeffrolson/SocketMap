@@ -1,0 +1,3 @@
+# Keep LF everywhere so generated-file checks and tests behave the same on Windows
+* text=auto eol=lf
+*.png binary

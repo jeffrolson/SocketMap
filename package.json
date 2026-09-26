@@ -1,6 +1,6 @@
 {
   "name": "socketmap",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Zero-dependency, self-contained network trace visualizer and sequence diagram generator",
   "type": "module",
   "bin": {
@@ -8,10 +8,11 @@
     "traceviz": "./bin/traceviz.mjs"
   },
   "scripts": {
-    "test": "node --test tests/**/*.test.mjs",
+    "test": "node --test",
     "generate:state": "node scripts/generate-state.mjs",
     "generate:examples": "node scripts/generate-examples.mjs",
     "build:viewer": "node scripts/build-viewer.mjs",
+    "demo": "node scripts/demo-report.mjs",
     "generate:theme": "node scripts/generate-theme.mjs",
     "verify": "npm test && node scripts/generate-theme.mjs --check && node scripts/check-context-files.mjs"
   },

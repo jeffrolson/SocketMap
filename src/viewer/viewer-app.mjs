@@ -5,6 +5,9 @@
  */
 
 import { createCaptureReader, buildReport, checkCaptureStart } from "./viewer-core.mjs";
+import { buildPageLoadNetLog, toNetLogText } from "../demo/sample-capture.mjs";
+
+const SAMPLE_NAME = "sample-capture.json (synthetic example)";
 
 const YIELD_EVERY_BYTES = 8 * 1024 * 1024;
 
@@ -68,16 +71,30 @@ function init() {
   }
 
   async function open(file) {
+    await load(file.name, file.size, () => readCapture(file, (read, total) => {
+      bar.style.width = `${Math.min(100, (read / Math.max(1, total)) * 100).toFixed(1)}%`;
+      progressText.textContent = `Reading ${file.name}: ${formatMb(read)} of ${formatMb(total)}`;
+    }));
+  }
+
+  /** The built-in synthetic capture, read through the same pipeline as a dropped file. */
+  async function openSample() {
+    const text = toNetLogText(buildPageLoadNetLog());
+    await load(SAMPLE_NAME, text.length, async () => {
+      const reader = createCaptureReader();
+      reader.write(text);
+      return reader.finish();
+    });
+  }
+
+  async function load(name, bytes, read) {
     error.hidden = true;
     progress.hidden = false;
     bar.style.width = "0%";
-    progressText.textContent = `Reading ${file.name}...`;
+    progressText.textContent = `Reading ${name}...`;
     try {
-      source = { name: file.name, bytes: file.size };
-      model = await readCapture(file, (read, total) => {
-        bar.style.width = `${Math.min(100, (read / Math.max(1, total)) * 100).toFixed(1)}%`;
-        progressText.textContent = `Reading ${file.name}: ${formatMb(read)} of ${formatMb(total)}`;
-      });
+      source = { name, bytes };
+      model = await read();
       progressText.textContent = "Building the report...";
       await new Promise(resolve => setTimeout(resolve, 0));
       pageSelect.innerHTML = "";
@@ -88,7 +105,7 @@ function init() {
         pageSelect.appendChild(option);
       }
       show(null);
-      fileName.textContent = file.name;
+      fileName.textContent = name;
       start.hidden = true;
       result.hidden = false;
       progress.hidden = true;
@@ -98,6 +115,7 @@ function init() {
   }
 
   input.addEventListener("change", () => { if (input.files[0]) open(input.files[0]); });
+  document.querySelectorAll("[data-open-sample]").forEach(b => b.addEventListener("click", (ev) => { ev.preventDefault(); openSample(); }));
   drop.addEventListener("click", () => input.click());
   drop.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); input.click(); } });
   for (const type of ["dragenter", "dragover"]) {
@@ -128,6 +146,7 @@ function init() {
   $("open-another").addEventListener("click", () => {
     result.hidden = true;
     start.hidden = false;
+    window.scrollTo(0, 0);
     frame.srcdoc = "";
     input.value = "";
     model = null;

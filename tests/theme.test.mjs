@@ -12,7 +12,7 @@ import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
 import { buildViewerHtml } from "../scripts/build-viewer.mjs";
-import { buildPageLoadNetLog, toNetLogText } from "./fixtures/netlog-builder.mjs";
+import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const designMd = readFileSync(join(ROOT, "DESIGN.md"), "utf8");
