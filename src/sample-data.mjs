@@ -11,7 +11,7 @@ export const SAMPLE_TRACE = {
     status: 200,
     transferredBytes: 15420,
     protocol: "h2",
-    remoteIp: "104.16.24.81"
+    remoteIp: "203.0.113.81"
   },
   phases: [
     "Phase 01: DNS & TLS Setup",
@@ -31,7 +31,7 @@ export const SAMPLE_TRACE = {
     {
       id: "dns",
       label: "DNS Resolver",
-      sublabel: "1.1.1.1 (DoH)",
+      sublabel: "192.0.2.53 (DoH)",
       role: "infrastructure",
       color: "#8b5cf6" // Purple
     },
@@ -89,8 +89,8 @@ export const SAMPLE_TRACE = {
       id: "msg-2",
       from: "dns",
       to: "client",
-      label: "Resolved: 104.16.24.81",
-      detail: "104.16.24.81 (TTL 300s)",
+      label: "Resolved: 203.0.113.81",
+      detail: "203.0.113.81 (TTL 300s)",
       kind: "return",
       phase: 0,
       latencyMs: 4,
