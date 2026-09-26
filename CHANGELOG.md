@@ -9,6 +9,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `npm run demo` builds `demo-report.html` from the synthetic capture.
 - User guide (`docs/USER-GUIDE.md`) covering capture, the viewer, every report tab, each finding, protocols, sharing, and troubleshooting; screenshots in `docs/images/`.
 - Windows quick start in the README (winget, PowerShell commands, Download ZIP route).
+- Prebuilt `socketmap-viewer.html` published on the GitHub Releases page, so the viewer needs no Node.js.
+- MIT `LICENSE` file (copyright JR Generations).
 
 ### Changed
 - README rewritten around the troubleshooting report; the older HAR/JSON diagram documentation moved to `docs/HAR-DIAGRAM.md`.

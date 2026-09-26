@@ -25,7 +25,7 @@
     "svg",
     "zero-dependency"
   ],
-  "author": "",
+  "author": "JR Generations",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"

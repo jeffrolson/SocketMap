@@ -28,7 +28,7 @@ SocketMap reads a **NetLog**: Chrome's and Edge's own detailed record of network
 
 ## 2. Open the report
 
-**No install: the viewer.** Double-click `socketmap-viewer.html`. It opens in Chrome or Edge. Drop the capture file on the page, or click the drop area to choose it. The report appears in a few seconds, even for large captures, and the file never leaves your computer.
+**No install: the viewer.** Download `socketmap-viewer.html` from the repository's Releases page (or get it from whoever shared SocketMap with you) and double-click it. It opens in Chrome or Edge. Drop the capture file on the page, or click the drop area to choose it. The report appears in a few seconds, even for large captures, and the file never leaves your computer.
 
 Not sure what to expect? Click **Try the sample capture** on the viewer's start page: it opens a report built from a made-up capture that shows TLS inspection, a proxy, a refused call to a local agent, and a slow server.
 

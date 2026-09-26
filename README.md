@@ -31,9 +31,14 @@ The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain 
 
 ## Quick start on Windows
 
-### Option A: just open the viewer (no install)
+### Option A: download the viewer (no install)
 
-If someone has already built `socketmap-viewer.html` for you, save it anywhere, double-click it (it opens in Edge or Chrome), and drop your capture on it. Click **Try the sample capture** to see a finished report first.
+1. Open the repository's **[Releases](https://github.com/jeffrolson/SocketMap/releases/latest)** page (sign in to GitHub; the repository is private).
+2. Under **Assets**, download `socketmap-viewer.html`.
+3. Double-click it. It opens in Edge or Chrome. If Windows picks another program, right-click the file and choose **Open with > Microsoft Edge**.
+4. Drop your capture on it, or click **Try the sample capture** to see a finished report first.
+
+Nothing else is needed: no Node.js, no admin rights. You can also pass the file on to colleagues or put it on SharePoint.
 
 ![The viewer's start page](docs/images/viewer-start.png)
 
@@ -188,4 +193,4 @@ HAR files and generic JSON traces produce an older diagram view instead of the r
 
 ## License
 
-MIT, as declared in `package.json`.
+MIT. Copyright (c) 2026 JR Generations. See [LICENSE](LICENSE).
