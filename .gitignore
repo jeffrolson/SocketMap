@@ -2,3 +2,8 @@ node_modules/
 .DS_Store
 *.html
 temp-*
+
+# Real captures stay local: they contain real IPs, hostnames and URLs
+captures/
+examples/*.json
+*.netlog
