@@ -9,6 +9,7 @@ import { buildViewerHtml } from "../scripts/build-viewer.mjs";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
+import { buildComparison } from "../src/viewer/viewer-core.mjs";
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
 let dir;
@@ -44,7 +45,10 @@ describe("Drag-and-drop viewer", () => {
     assert.ok(html.includes("never leaves this computer"));
     assert.ok(html.includes("chrome://net-export"));
     assert.ok(html.includes("edge://net-export"));
-    assert.ok(html.includes("explained in plain language"));
+    assert.ok(html.includes("Copy Chrome address"));
+    assert.ok(html.includes("data-theme-toggle"));
+    assert.ok(html.includes("Browser and extension activity"));
+    assert.ok(html.includes("plain-language insights"));
     assert.ok(!html.includes("which team to talk to"));
   });
 
@@ -72,6 +76,26 @@ describe("Drag-and-drop viewer", () => {
     reader.write(text);
     const { analysis } = viewerApi.buildReport(reader.finish(), "chrome-extension://abcdefghijklmnop");
     assert.equal(analysis.page.requestCount, 1);
+  });
+
+  it("bundles the two-capture pipeline and produces the same portable comparison", () => {
+    const read = () => { const reader = viewerApi.createCaptureReader(); reader.write(text); return reader.finish(); };
+    const a = read();
+    const b = read();
+    const changed = b.requests.find(request => request.id === 1);
+    changed.durationMs += 250;
+    changed.end += 250;
+    changed.timing.wait += 250;
+    const options = { sourceA: { name: "before.json", bytes: text.length }, sourceB: { name: "after.json", bytes: text.length } };
+    const actual = viewerApi.buildComparison(a, b, options);
+    const expected = buildComparison(a, b, options);
+    assert.equal(actual.html, expected.html);
+    assert.equal(actual.comparison.counts.changed, 1);
+    assert.equal(actual.comparison.pairs.find(pair => pair.a?.id === 1).durationDeltaMs, 250);
+    assert.ok(actual.html.includes("before.json") && actual.html.includes("after.json"));
+    assert.ok(!actual.html.includes("SECRET123"));
+    assert.ok(html.includes('id="compare-files"') && html.includes('id="page-select-b"'));
+    assert.ok(html.includes('id="swap-captures"'));
   });
 
   it("recognizes a NetLog and turns away other files with a clear reason", () => {

@@ -78,12 +78,44 @@ describe("Good / Better / Best / Poor connection ratings", () => {
   it("rates a host it never reached as poor", () => {
     assert.equal(host("127.0.0.1").overall, "poor");
   });
+
+  it("keeps missing DNS, setup, and TLS evidence unknown", () => {
+    const uncertain = structuredClone(model);
+    const portalRequests = uncertain.requests.filter(r => r.host === "portal.example.com");
+    const portalConnectionIds = new Set(portalRequests.map(r => r.connectionId));
+    for (const request of portalRequests) request.reusedConnection = null;
+    for (const connection of uncertain.connections) {
+      if (!portalConnectionIds.has(connection.id)) continue;
+      connection.connectMs = null;
+      connection.tlsMs = null;
+      connection.dnsMs = null;
+      connection.tlsVersion = null;
+    }
+    uncertain.dnsLookups = uncertain.dnsLookups.filter(lookup => lookup.host !== "portal.example.com");
+    const ratings = analyzeCapture(uncertain).hosts.find(h => h.host === "portal.example.com").ratings;
+    assert.deepEqual(ratings.dns, { level: "unknown", value: "Lookup timing not recorded" });
+    assert.deepEqual(ratings.connection, { level: "unknown", value: "Setup timing not recorded" });
+    assert.deepEqual(ratings.tls, { level: "unknown", value: "TLS version not recorded" });
+  });
+
+  it("does not turn a QUIC error into an asserted TCP fallback", () => {
+    const uncertain = structuredClone(model);
+    const cdnRequests = uncertain.requests.filter(r => r.host === "cdn.example.net");
+    const cdnConnectionIds = new Set(cdnRequests.map(r => r.connectionId));
+    for (const request of cdnRequests) request.protocol = "h2";
+    for (const connection of uncertain.connections) if (cdnConnectionIds.has(connection.id)) connection.error = "ERR_QUIC_HANDSHAKE_FAILED";
+    const protocol = analyzeCapture(uncertain).hosts.find(h => h.host === "cdn.example.net").ratings.protocol;
+    assert.deepEqual(protocol, { level: "better", value: "h2" });
+    assert.doesNotMatch(protocol.value, /fell back/i);
+  });
 });
 
 describe("Findings", () => {
-  it("flags TLS inspection with the certificate issuer as evidence", () => {
+  it("flags a private root as evidence to investigate, without asserting inspection", () => {
     const f = finding("tls-inspection");
     assert.equal(f.severity, "high");
+    assert.match(f.detail, /can be TLS inspection or a privately managed certificate/);
+    assert.match(f.detail, /does not prove which/);
     assert.ok(f.evidence.some(e => e.includes("api.example.org") && e.includes("Contoso Inspection CA")));
     assert.ok(f.team);
   });
@@ -108,12 +140,28 @@ describe("Findings", () => {
 });
 
 describe("AI summary", () => {
-  it("is compact, redacted, and carries the evidence", () => {
-    const text = buildAiSummary(model, analysis);
-    assert.ok(text.length < 12000);
+  it("is portable, redacted, and carries bounded evidence and next-test instructions", () => {
+    const previousBadProxies = model.environment.proxy.badProxies;
+    model.environment.proxy.badProxies = [{ proxyUri: "PROXY bad-proxy.example:8080", badUntil: "123456789" }];
+    const text = buildAiSummary(model, analysis, { source: { name: "capture?token=SOURCESECRET.json", bytes: 4096 } });
+    model.environment.proxy.badProxies = previousBadProxies;
+    assert.ok(text.length < 24000);
     assert.ok(text.includes("portal.example.com"));
     assert.ok(text.includes("Contoso Inspection CA"));
     assert.ok(text.includes("192.0.2.10"));
+    assert.ok(text.includes("#1: GET https://portal.example.com/sites/team/home.aspx?tempauth=[REDACTED]&view=1"));
+    assert.ok(text.includes("RECORDED CONNECTION DETAILS"));
+    assert.ok(text.includes("DERIVED FROM RECORDED DATA: BUILT-IN FINDINGS"));
+    assert.ok(text.includes("RECORDED REQUEST DETAILS: FAILURES AND REDIRECTS"));
+    assert.ok(text.includes("ERR_CONNECTION_REFUSED"));
+    assert.ok(text.includes("MISSING OR LIMITED DATA"));
+    assert.ok(text.includes("WHAT THIS CAPTURE COULD AND COULD NOT SEE"));
+    assert.ok(text.indexOf("WHAT THIS CAPTURE COULD AND COULD NOT SEE") < text.indexOf("AI ANALYSIS INSTRUCTIONS"));
+    assert.ok(text.includes("AI ANALYSIS INSTRUCTIONS"));
+    assert.ok(text.includes("Source: capture?token=[REDACTED]"));
+    assert.ok(text.includes("PROXY bad-proxy.example:8080 (bad until 123456789)"));
+    assert.ok(!text.includes("[object Object]"));
     assert.ok(!text.includes("SECRET123"));
+    assert.ok(!text.includes("SOURCESECRET"));
   });
 });

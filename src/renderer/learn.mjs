@@ -69,20 +69,34 @@ export const LEARN_GROUPS = [
 
 export const GLOSSARY = [
   ["Request / response", "The browser asks a server for something (request) and the server sends it back (response). A web page is usually dozens or hundreds of these."],
+  ["GET", "A request to read something, such as a page, image, or data. It normally does not change anything on the server."],
+  ["POST", "A request that sends data for the server to process, such as a form submission or sign-in. It may create or trigger something."],
+  ["PUT / PATCH / DELETE", "Methods that ask a server to replace something, change part of it, or remove it. The method shows the browser's request, not whether the server carried it out."],
+  ["OPTIONS and CORS preflight", "OPTIONS asks what communication options a server allows. Before some cross-site requests, browsers send an OPTIONS preflight to check whether the real request is permitted."],
+  ["HEAD / CONNECT / TRACE", "HEAD asks for response headers without the body. CONNECT asks a proxy to open a tunnel, commonly for HTTPS. TRACE is a diagnostic echo method that is uncommon and often disabled."],
+  ["HTTP and HTTPS", "HTTP is the language browsers and servers use for requests and responses. HTTPS is HTTP protected by TLS encryption and server identity checks."],
   ["DNS", "The internet's phone book: turns a name like contoso.sharepoint.com into an address the computer can connect to."],
-  ["TCP", "The standard way to open a reliable connection to a server. Takes one round trip across the network."],
-  ["TLS", "The encryption that puts the padlock in the address bar. Setting it up adds a round trip and a certificate check."],
-  ["QUIC / HTTP/3", "A newer way to connect that does the connection and encryption in one step, over UDP. Some firewalls block it, which forces a slower fallback."],
-  ["HTTP/2 and HTTP/1.1", "Versions of the web protocol. HTTP/2 sends many requests over one connection; HTTP/1.1 allows only about six at a time per server."],
-  ["Certificate and root", "A certificate is the server's ID card. It is trusted because it chains up to a root authority built into the operating system or browser."],
-  ["TLS inspection", "A security device decrypts traffic, inspects it, and re-encrypts it with its own certificate. It shows up here as a certificate from a non-public root, and it adds delay."],
+  ["DNS cache", "A saved name-to-address answer. A cache hit can skip a new DNS lookup, but this capture may not show why a particular lookup was skipped."],
+  ["TCP", "The standard transport for a reliable, ordered connection. It starts with a handshake before application data can flow."],
+  ["TLS handshake", "The setup that negotiates encryption and checks the server certificate for HTTPS. A recorded attempt does not by itself prove verification or a later request succeeded."],
+  ["QUIC / HTTP/3", "QUIC is a secure transport over UDP. HTTP/3 uses it to carry web requests. It can avoid some TCP delays, but a network may block or degrade UDP and cause fallback."],
+  ["HTTP/2 and HTTP/1.1", "Versions of the web protocol. HTTP/2 can multiplex many requests over one connection; HTTP/1.1 generally needs multiple connections to handle parallel work."],
+  ["Certificate chain and root", "A certificate identifies the server and links through issuers to a trusted root certificate authority. The browser's verification result, when recorded, determines whether it was accepted."],
+  ["Private root / TLS inspection", "A non-public root can be used by a company-managed certificate or by a device that decrypts, inspects, and re-encrypts TLS traffic. This report can flag the clue but cannot prove the cause by itself."],
+  ["ALPN", "Application-Layer Protocol Negotiation: during TLS, browser and server can agree on an application protocol such as HTTP/2 (h2)."],
   ["Proxy", "A server that sits between your computer and the internet and forwards traffic, often for filtering or logging."],
-  ["PAC file", "A small script that tells the browser which proxy, if any, to use for each address. A slow PAC file delays every request."],
-  ["Server wait (time to first byte)", "Time between sending a request and the first byte of the answer. Spent at the server or at anything in front of it."],
+  ["PAC file", "A small script that tells the browser which proxy, if any, to use for each address. A slow PAC file can delay requests."],
+  ["WPAD", "Web Proxy Auto-Discovery: a way for a computer to find a PAC file automatically. It can add a proxy-discovery step before traffic starts."],
+  ["Redirect", "A server tells the browser to request a different address. Redirects are common for sign-in, canonical URLs, and moved content."],
+  ["Authentication status codes", "401 means the origin server needs authentication. 403 means it denied access. 407 means a proxy requires authentication. The code alone does not explain why."],
+  ["Server wait / time to first byte", "Time from sending a request until the first byte of its response. It includes work at the server and may include proxies, CDNs, or security gateways in the path."],
+  ["Download", "Time spent receiving the response after its first byte arrives. It is affected by response size and the available path bandwidth."],
+  ["Queueing / stalled", "Time a request waited inside the browser for scheduling or an available connection. It can occur when many requests compete at once."],
   ["Latency", "Delay. In this report, how long a step took, in milliseconds (ms). 1,000 ms is one second."],
   ["localhost / 127.0.0.1", "This computer. A page calling localhost is talking to software installed on the machine, such as a sign-in agent."],
   ["Status code", "A number the server sends back: 2xx worked, 3xx go elsewhere or use your saved copy, 4xx request problem, 5xx server problem."],
-  ["NetLog", "Chrome's detailed record of its network activity, saved from chrome://net-export. This report is built from it."]
+  ["NetLog", "Chrome's detailed record of browser network activity, saved from chrome://net-export. It records browser events, not every packet, server log, or cause outside the browser."],
+  ["NetLog boundaries", "A NetLog can show observed browser timing, protocols, errors, and some connection facts. It cannot prove server-side work, a firewall decision, packet loss, or an outcome that the capture did not record."]
 ];
 
 function esc(value) {
@@ -104,7 +118,9 @@ export function renderLearn() {
           </div>`).join("")}
       </div>
       <h3 class="sub">Glossary</h3>
-      <dl class="glossary">${GLOSSARY.map(([term, meaning]) => `<dt>${esc(term)}</dt><dd>${esc(meaning)}</dd>`).join("")}</dl>
+      <label class="search glossary-search">Search the glossary <input id="glossary-search" type="search" placeholder="Try TLS, proxy, or 401" aria-label="Search the glossary"></label>
+      <p id="glossary-status" class="note" role="status"></p>
+      <dl class="glossary">${GLOSSARY.map(([term, meaning]) => `<div class="glossary-entry" data-glossary="${esc(`${term} ${meaning}`.toLowerCase())}"><dt>${esc(term)}</dt><dd>${esc(meaning)}</dd></div>`).join("")}</dl>
       <p class="note">Links open outside the report and need internet access. The report itself works offline.</p>
     </section>`;
 }

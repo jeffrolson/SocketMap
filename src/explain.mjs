@@ -76,6 +76,66 @@ export function statusMeaning(status) {
   return null;
 }
 
+const METHOD_TIPS = {
+  GET: "GET: asks the server to send a representation, such as a page, image, or data. It normally does not change anything on the server.",
+  POST: "POST: sends data to the server for it to process, such as a form submission or a sign-in request. It may create or trigger something.",
+  OPTIONS: "OPTIONS: asks which communication options the server allows. Browsers often send it first as a CORS preflight before a cross-site request.",
+  PUT: "PUT: sends a complete replacement for a resource at this address. It may create the resource when it does not exist.",
+  PATCH: "PATCH: sends a partial change for an existing resource.",
+  DELETE: "DELETE: asks the server to remove the resource at this address.",
+  HEAD: "HEAD: asks for the same response headers as GET, but without the response body. Browsers and tools use it to check metadata efficiently.",
+  CONNECT: "CONNECT: asks a proxy to open a tunnel to another server. HTTPS traffic through an explicit proxy commonly starts this way.",
+  TRACE: "TRACE: asks the server to return the request it received for diagnostics. It is uncommon and is often disabled for security."
+};
+
+/** A short, plain-language description of an HTTP method for hover text. */
+export function methodTip(method) {
+  const normalized = String(method ?? "").trim().toUpperCase();
+  if (METHOD_TIPS[normalized]) return METHOD_TIPS[normalized];
+  return normalized
+    ? `${normalized}: an HTTP request method. This capture records the method, but not what the server is designed to do with it.`
+    : "HTTP method not recorded: the method describes what the browser asked the server to do.";
+}
+
+/**
+ * Concise hover text for sequence rows. It describes the network step, while
+ * preserving the difference between an attempt and an outcome in the capture.
+ */
+export function sequenceTip(kind, request = {}, connection = {}) {
+  const key = String(kind ?? "").trim().toLowerCase().replace(/[+_\s-]+/g, " ");
+  const failure = connection?.error || request?.netError;
+  const host = connection?.host || request?.host;
+  const destination = host ? ` to ${host}` : "";
+
+  if (/request|arrow|http/.test(key)) {
+    const method = request?.method ? String(request.method).toUpperCase() : "HTTP method not recorded";
+    const outcome = request?.netError
+      ? ` The capture records ${request.netError} before a completed response.`
+      : " This row does not by itself prove what the server did with the request.";
+    return `Request arrow: ${method} is the method the browser intended to use${destination}. ${methodTip(request?.method)}${outcome}`;
+  }
+  if (failure || /failed|error/.test(key)) {
+    return `Connection attempt${destination} failed: ${failure || "the capture records no successful connection"}. No successful connection is implied by this row.`;
+  }
+  if (/^connect(ion)?$/.test(key)) {
+    const inferredKind = connection?.kind === "quic" ? "quic" : connection?.tlsVersion || connection?.tlsMs != null ? "tcp tls" : "tcp";
+    return sequenceTip(inferredKind, request, connection);
+  }
+  if (/quic|http ?3/.test(key)) {
+    return `QUIC handshake: the browser is setting up a QUIC connection${destination}, including TLS encryption. A recorded completed handshake can carry HTTP/3 requests; this label alone does not prove a later request succeeded.`;
+  }
+  if (/tcp.*tls|tls.*tcp|secure connection/.test(key)) {
+    return `TCP + TLS handshake: the browser first opens a reliable TCP connection${destination}, then attempts to negotiate encryption and check the server certificate. A request can be sent only after the required setup succeeds.`;
+  }
+  if (/tls|ssl/.test(key)) {
+    return `TLS handshake: the browser and server attempt to agree on encryption and the browser checks the server certificate. A TLS label does not by itself prove the certificate was accepted or a request succeeded.`;
+  }
+  if (/tcp|plain connection/.test(key)) {
+    return `TCP connection: the browser is opening a reliable connection${destination}. It may be followed by TLS encryption for HTTPS; this row does not by itself show an application response.`;
+  }
+  return "Network step recorded in this capture. It shows an observed event, not an unrecorded outcome.";
+}
+
 /** Everyday name for what was requested. */
 export function describeResource(r) {
   const type = (r.contentType || "").toLowerCase();
@@ -122,13 +182,15 @@ function connectionFacts(r, conn) {
 
 /** Explanation for a connection-setup arrow. */
 export function explainConnection(r, conn) {
-  const setup = (conn.connectMs || 0) + (conn.tlsMs || 0);
+  const setupPhases = [conn.connectMs, conn.tlsMs].filter(value => typeof value === "number");
+  const setup = setupPhases.length ? setupPhases.reduce((total, value) => total + value, 0) : null;
   const isQuic = conn.kind === "quic";
   const t = THRESHOLDS.connection;
   let tone, verdict;
   if (conn.error) { tone = "bad"; verdict = `The connection failed: ${conn.error}. ${NET_ERRORS[conn.error] || ""}`.trim(); }
-  else if (conn.cert?.knownRoot === false) { tone = "bad"; verdict = `The certificate was not issued by a public authority (issuer: ${conn.cert.issuer || "unknown"}). Something between this computer and ${conn.host} is decrypting and re-encrypting the traffic. That is TLS inspection, and it adds delay.`; }
-  else if (setup > t.good) { tone = "bad"; verdict = `Slow: ${formatDuration(setup)} to open. Over ${t.good} ms usually means a long network path, packet loss, or an inspection device.`; }
+  else if (conn.cert?.knownRoot === false) { tone = "bad"; verdict = `The certificate chains to a root that is not public (issuer: ${conn.cert.issuer || "unknown"}). This is consistent with TLS inspection or a privately managed certificate. The capture alone cannot identify which one; check the certificate verification result and your network policy.`; }
+  else if (setup == null) { tone = "info"; verdict = "Connection setup timing was not recorded."; }
+  else if (setup > t.good) { tone = "bad"; verdict = `Slow: ${formatDuration(setup)} to open. Over ${t.good} ms can reflect a long network path, packet loss, or an intermediary. Compare another capture to narrow the cause.`; }
   else if (setup >= t.better) { tone = "warn"; verdict = `Acceptable: ${formatDuration(setup)} to open.`; }
   else { tone = "good"; verdict = `Fast: ${formatDuration(setup)} to open.`; }
   return {
@@ -139,7 +201,7 @@ export function explainConnection(r, conn) {
       ? `Before the browser can ask ${conn.host || r.host} for anything, it opens a connection. This one uses QUIC (HTTP/3), which sets up the connection and the encryption in a single step. It happens once; later requests to the same server reuse it.`
       : `Before the browser can ask ${conn.host || r.host} for anything, it opens a connection (TCP) and then agrees on encryption (TLS) while checking the server's certificate. It happens once; later requests to the same server reuse it.`,
     steps: [
-      conn.dnsMs ? { label: "DNS", value: formatDuration(conn.dnsMs), meaning: TIMING_MEANINGS.dns } : null,
+      conn.dnsMs != null ? { label: "DNS", value: formatDuration(conn.dnsMs), meaning: TIMING_MEANINGS.dns } : null,
       conn.connectMs != null ? { label: isQuic ? "QUIC handshake" : "TCP connect", value: formatDuration(conn.connectMs), meaning: isQuic ? "Opening the connection and setting up encryption together." : TIMING_MEANINGS.connect } : null,
       conn.tlsMs != null ? { label: "TLS handshake", value: formatDuration(conn.tlsMs), meaning: TIMING_MEANINGS.tls } : null
     ].filter(Boolean),
@@ -245,7 +307,7 @@ export function explainHost(host) {
     facts: [
       ["Certificate issuer", host.cert ? `${host.cert.issuer || "unknown"} (${host.cert.knownRoot === false ? "NOT a public root" : host.cert.knownRoot ? "public root" : "root status not recorded"})` : "not recorded"],
       ["Proxy", host.proxy || "not recorded"],
-      ["Data transferred", formatBytes(host.bytesWire) || "0 B"]
+      ["Data transferred", formatBytes(host.bytesWire) || "Not recorded"]
     ]
   };
 }
@@ -351,5 +413,5 @@ export const TAG_TIPS = {
   size: "Size of the answer as it crossed the network (often compressed).",
   tls: "Encryption version. TLS 1.3 is the newest and fastest to set up; TLS 1.2 is still acceptable; older versions are outdated.",
   setup: "Time to open the connection: TCP plus TLS, or the QUIC handshake.",
-  privateRoot: "The server's certificate chains to a root that is not a public certificate authority. A security device between this computer and the server is decrypting the traffic (TLS inspection)."
+  privateRoot: "The server's certificate chains to a root that is not a public certificate authority. This can indicate TLS inspection or a privately managed certificate; the capture alone cannot prove which."
 };

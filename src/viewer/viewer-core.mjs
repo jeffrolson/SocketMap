@@ -7,15 +7,18 @@ import { createNetLogTokenizer } from "../parsers/netlog-stream.mjs";
 import { createNetLogAnalyzer } from "../parsers/netlog-analyzer.mjs";
 import { analyzeCapture } from "../analysis.mjs";
 import { renderReportHtml } from "../renderer/report.html.mjs";
+import { compareCaptures } from "../comparison.mjs";
+import { renderComparisonHtml } from "../renderer/comparison.html.mjs";
 
 /** Incremental reader: write() text chunks as they arrive, then finish() for the capture model. */
-export function createCaptureReader() {
+export function createCaptureReader({ constants } = {}) {
   const analyzer = createNetLogAnalyzer();
+  if (constants) analyzer.setTopLevel("constants", constants);
   const tokenizer = createNetLogTokenizer({ onTopLevel: analyzer.setTopLevel, onEvent: analyzer.addEvent });
   return {
     write: (chunk) => tokenizer.write(chunk),
     finish: () => {
-      tokenizer.end();
+      analyzer.setTopLevel("captureIntegrity", tokenizer.end());
       return analyzer.finish();
     }
   };
@@ -34,6 +37,12 @@ export function buildReport(model, site, theme, source) {
   return { analysis, html: renderReportHtml(model, analysis, options) };
 }
 
+/** Both capture models stay local. The resulting comparison is a standalone HTML document. */
+export function buildComparison(modelA, modelB, options = {}) {
+  const comparison = compareCaptures(modelA, modelB, options);
+  return { comparison, html: renderComparisonHtml(comparison, options.theme ? { theme: options.theme } : {}) };
+}
+
 /** Checks the first few KB of a file before reading all of it. */
 export function checkCaptureStart(head) {
   const text = String(head || "");
@@ -41,5 +50,8 @@ export function checkCaptureStart(head) {
   if (text.includes('"log"') && (text.includes('"entries"') || text.includes('"creator"'))) {
     return { ok: false, reason: "This is a HAR file. The viewer reads NetLog captures from chrome://net-export or edge://net-export. HAR files work with the command-line tool." };
   }
+  // A long comment can precede the NetLog keys. Let the streaming analyzer
+  // validate plausible JSON rather than rejecting it from a short prefix.
+  if (text.trimStart().startsWith("{")) return { ok: true };
   return { ok: false, reason: "This does not look like a NetLog capture. Save one from chrome://net-export or edge://net-export and drop that file here." };
 }

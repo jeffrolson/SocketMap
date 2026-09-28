@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseDesignTokens, themeCss } from "../src/theme.mjs";
+import { parseDesignTokens, themeCss, themeModeCss, themePreferenceScript } from "../src/theme.mjs";
 import { DEFAULT_THEME } from "../src/renderer/theme.generated.mjs";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
@@ -64,6 +64,22 @@ describe("Design tokens", () => {
     assert.ok(css.includes('--font-sans: "Inter", -apple-system'));
     assert.ok(css.includes('--font-mono: "JetBrains Mono", "Cascadia Mono"'));
     assert.ok(css.includes("--poor: var(--danger)"));
+  });
+
+  it("derives a token-based light appearance and a local theme preference boot script", () => {
+    const light = themeModeCss(DEFAULT_THEME);
+    assert.ok(light.includes('html[data-theme="light"]'));
+    assert.ok(light.includes("--color-background: #ffffff;"));
+    assert.ok(light.includes("--color-chart-tls: #6d28d9;"));
+    const customLight = themeModeCss({ "light-colors": { primary: "#123456" } }, DEFAULT_THEME);
+    assert.ok(customLight.includes("--color-primary: #123456;"));
+    assert.ok(customLight.includes("--color-background: #ffffff;"), "custom light tokens extend the default light palette");
+    const boot = themePreferenceScript();
+    assert.ok(boot.includes("socketmap-theme"));
+    assert.ok(boot.includes("prefers-color-scheme: light"));
+    assert.ok(boot.includes("socketmap:theme"));
+    assert.ok(boot.includes("event.source !== window.parent"));
+    assert.ok(boot.includes("apply(root.dataset.theme, false)"), "labels update after controls enter the DOM");
   });
 
   it("drops token values that could break out of the style block", () => {

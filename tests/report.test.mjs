@@ -1,5 +1,6 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,13 @@ before(async () => {
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("Report HTML", () => {
+  it("emits executable scripts that compile after HTML extraction", () => {
+    for (const [, attributes, script] of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
+      if (attributes.includes("application/json")) continue;
+      assert.doesNotThrow(() => new vm.Script(script));
+    }
+  });
+
   it("is one self-contained file with no remote resources", () => {
     assert.ok(html.startsWith("<!DOCTYPE html>"));
     assert.ok(!/<script[^>]+src=/i.test(html), "no external scripts");

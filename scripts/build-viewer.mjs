@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseDesignTokens, themeCss } from "../src/theme.mjs";
+import { parseDesignTokens, themeCss, themeModeCss, themePreferenceScript } from "../src/theme.mjs";
 import { DEFAULT_THEME } from "../src/renderer/theme.generated.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -87,7 +87,7 @@ const CAPTURE_STEPS = [
   "Close other tabs so their traffic does not mix in.",
   "Open a new tab and go to <code>chrome://net-export</code> (in Edge: <code>edge://net-export</code>).",
   "Keep <strong>Strip private information</strong> selected and click <strong>Start Logging to Disk</strong>. Save the file.",
-  "In another tab, load the slow page or repeat the slow action.",
+  "In another tab, load the page or perform the action you want to understand.",
   "Go back and click <strong>Stop Logging</strong>. Drop the saved file on this page."
 ];
 
@@ -114,7 +114,7 @@ const PILLARS = [
 ];
 
 const STEPS = [
-  ["01", "Capture", "Record the slow page", "In Chrome or Edge, start a network log, load the slow page, and stop the log. Two minutes, nothing to install.", "chrome://net-export"],
+  ["01", "Capture", "Record the page load", "In Chrome or Edge, start a network log, load the page, and stop the log. Nothing to install.", "chrome://net-export"],
   ["02", "Drop", "Drop the file here", "The report builds in your browser. A 5 MB capture takes about a tenth of a second; a 300 MB capture about two seconds.", "chrome-net-export-log.json"],
   ["03", "Read and share", "Follow the findings", "Start with Findings, then open the Sequence tab and click any row. Save report creates one HTML file you can email or attach to a ticket.", "Save report → socketmap-report-site.html"]
 ];
@@ -145,11 +145,12 @@ export function buildViewerHtml({ theme } = {}) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="generator" content="SocketMap ${VERSION}">
-<title>SocketMap: see what slowed a web page down</title>
+<title>SocketMap: data-driven insights into a page load</title>
 <style>
   :root {
     ${themeCss(theme || DEFAULT_THEME)}
   }
+  ${themeModeCss(theme || DEFAULT_THEME, DEFAULT_THEME)}
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; scroll-padding-top: 72px; }
   html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-sans); }
@@ -176,6 +177,7 @@ export function buildViewerHtml({ theme } = {}) {
   .nav-links a { color: var(--text-muted); text-decoration: none; padding: 6px 10px; border-radius: var(--radius); font-size: 14px; }
   .nav-links a:hover { background: var(--surface-2); color: var(--text); }
   .nav .spacer { flex: 1; }
+  .theme-toggle { white-space: nowrap; }
 
   /* Hero */
   .hero { position: relative; padding: 36px 0 44px; text-align: center; overflow: hidden; }
@@ -197,6 +199,13 @@ export function buildViewerHtml({ theme } = {}) {
   #progress-bar { height: 100%; width: 0; background: var(--secondary); transition: width .1s; }
   #progress-text { margin-top: 8px; font-size: 13.5px; color: var(--text-muted); font-family: var(--font-mono); }
   .error { max-width: 720px; margin: 18px auto 0; text-align: left; padding: 12px 14px; border-left: 4px solid var(--danger); background: var(--surface-2); border-radius: var(--radius-sm); }
+  .load-feedback { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 50; width: min(720px, calc(100% - 24px)); padding: 16px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
+  .load-feedback .progress, .load-feedback .error { margin: 0; }
+  .load-feedback button { margin-top: 10px; }
+  .capture-shortcut { position: relative; max-width: 720px; margin: 0 auto 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); text-align: left; }
+  .capture-shortcut strong { font-size: 13.5px; }
+  .capture-shortcut code { user-select: all; color: var(--secondary); font-size: 14px; }
+  .copy-status { min-height: 1.4em; flex-basis: 100%; text-align: center; color: var(--text-muted); font-size: 12.5px; }
 
   /* Sections */
   .band { padding: 52px 0; }
@@ -268,22 +277,39 @@ export function buildViewerHtml({ theme } = {}) {
   #result[hidden] { display: none; }
   .toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
   .toolbar .brand { font-size: 15px; }
-  .toolbar .file { color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; }
+  .toolbar .file { color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .toolbar label { font-size: 13.5px; color: var(--text-muted); display: flex; gap: 6px; align-items: center; }
+  .page-picker { min-width: 0; flex: 1 1 390px; max-width: 100%; }
+  .page-picker select { min-width: 0; flex: 1; }
+  .comparison-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .comparison-controls[hidden], .page-picker[hidden] { display: none; }
+  .comparison-controls button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .comparison-hint { margin: 0; padding: 6px 16px; font-size: 12px; color: var(--text-muted); background: var(--surface); border-bottom: 1px solid var(--border); }
+  .comparison-entry { margin: 12px auto 0; max-width: 720px; color: var(--text-muted); font-size: 13px; }
+  .comparison-entry button { margin-right: 8px; }
+  .capture-fast-steps { list-style: none; padding: 0; margin: 12px auto 16px; max-width: 720px; display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; font-size: 13px; color: var(--text-muted); }
+  .capture-fast-steps strong { color: var(--text); }
+  .page-context { min-width: 0; max-width: min(100%, 360px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font-mono); color: var(--text-muted); }
   .toolbar .spacer { flex: 1; }
   select { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font: 13.5px var(--font-sans); max-width: 420px; }
   #report-frame { flex: 1; width: 100%; border: 0; background: var(--bg); }
 
   @media (max-width: 960px) {
     .compare, .specs, .steps { grid-template-columns: 1fr; }
+    .specs > * { min-width: 0; }
+    .pipeline { flex-wrap: wrap; }
     .pillars { grid-template-columns: 1fr 1fr; }
     .nav-links { display: none; }
   }
   @media (max-width: 600px) {
+    .nav .wrap { height: auto; min-height: 60px; padding-top: 10px; padding-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .nav .brand { margin-right: auto; }
+    .nav .spacer { display: none; }
     .pillars { grid-template-columns: 1fr; }
     .limits li, .spec-row { grid-template-columns: 1fr; }
   }
 </style>
+${themePreferenceScript()}
 </head>
 <body>
 <div id="start">
@@ -292,6 +318,7 @@ export function buildViewerHtml({ theme } = {}) {
       <span class="brand"><span class="mark">${shellIcon("logo")}</span>SocketMap</span>
       <div class="nav-links"><a href="#how">How it works</a><a href="#what">What you get</a><a href="#privacy">Privacy</a><a href="#limits">Limits</a></div>
       <span class="spacer"></span>
+      <button type="button" class="theme-toggle" data-theme-toggle>Theme</button>
       <button type="button" class="primary" data-open-sample>${shellIcon("play", 14)}Try the sample capture</button>
     </div>
   </nav>
@@ -305,32 +332,38 @@ export function buildViewerHtml({ theme } = {}) {
       <span class="chip">Nothing uploaded</span>
     </div>
     <div class="wrap">
-      <h1>See how a web page loaded and <span class="accent">what slowed it down</span></h1>
-      <p class="tagline">Drop in a network capture from Chrome or Edge to see how a page loaded: every connection, request, and delay, with what slowed it down explained in plain language.</p>
+      <h1>Data-driven insights into <span class="accent">a page load</span></h1>
+      <p class="tagline">Drop in a network capture from Chrome or Edge to understand how a page loaded. Explore recorded connections, requests, and timings through visualizations and plain-language insights that help you decide what to investigate next.</p>
+      <div class="capture-shortcut" aria-label="Start a Chrome network capture">
+        <strong>First, open</strong> <code id="capture-address">chrome://net-export</code>
+        <button type="button" id="copy-capture-address">Copy Chrome address</button>
+        <span class="copy-status" id="copy-status" aria-live="polite">Copy, then paste into Chrome's address bar and press Enter.</span>
+      </div>
+      <ol class="capture-fast-steps" aria-label="Quick capture steps">
+        <li><strong>1. Start Logging to Disk</strong><br>Keep Strip private information selected.</li>
+        <li><strong>2. Load the page</strong><br>Use another tab while logging.</li>
+        <li><strong>3. Stop Logging</strong><br>Drop the saved file below.</li>
+      </ol>
       <div id="drop" class="drop" role="button" tabindex="0" aria-label="Choose a NetLog capture file">
         ${shellIcon("upload", 28)}
         <strong>Drop a NetLog capture here</strong>
         <span>or click to choose the file (chrome-net-export-log.json)</span>
       </div>
-      <input type="file" id="file-input" accept=".json,application/json" hidden>
+      <input type="file" id="file-input" accept=".json,application/json" multiple hidden>
+      <p class="comparison-entry"><button type="button" id="compare-files">Compare two captures</button>Choose or drop two NetLog files. First file is A (baseline), second is B (comparison). You can swap them.</p>
       <div class="hero-actions">
         <button type="button" data-open-sample>${shellIcon("play", 14)}No capture yet? Try the sample</button>
         <a class="button" href="#how">How to capture</a>
       </div>
       <p class="privacy">Your capture never leaves this computer. This page reads it locally and uploads nothing; it works with the network turned off.</p>
-      <div id="progress" class="progress" hidden>
-        <div class="progress-track"><div id="progress-bar"></div></div>
-        <div id="progress-text"></div>
-      </div>
-      <div id="error" class="error" role="alert" hidden></div>
     </div>
   </header>
 
   <section class="band alt" aria-labelledby="compare-title">
     <div class="wrap">
       <div class="section-head">
-        <div><span class="eyebrow">From raw capture to clear answers</span><h2 id="compare-title">Thousands of events in, a few plain findings out</h2></div>
-        <p>A browser network log records every lookup, connection, certificate, and request as separate events. SocketMap links them together and tells you which ones slowed the page down.</p>
+        <div><span class="eyebrow">From raw capture to clear insights</span><h2 id="compare-title">Recorded events become visual, actionable insights</h2></div>
+        <p>A browser network log records lookups, connections, certificates, and requests as separate events. SocketMap links the recorded activity together so you can understand timings, spot patterns, and decide what to investigate next.</p>
       </div>
       <div class="compare">
         <div class="panel">
@@ -363,7 +396,7 @@ export function buildViewerHtml({ theme } = {}) {
 
   <section class="band center" id="what" aria-labelledby="pillars-title">
     <div class="wrap">
-      <div class="section-head"><div><span class="eyebrow">Built for IT troubleshooting</span><h2 id="pillars-title">Simple to use, detailed enough to act on</h2><p class="muted">No installer, no account, no cloud upload.</p></div></div>
+      <div class="section-head"><div><span class="eyebrow">Built for informed decisions</span><h2 id="pillars-title">Simple to use, detailed enough to act on</h2><p class="muted">No installer, no account, no cloud upload.</p></div></div>
       <div class="pillars">
         ${PILLARS.map(([ico, eyebrow, title, text, foot]) => `
         <article class="panel pillar" style="text-align:left"${ico === "lock" ? ' id="privacy"' : ""}>
@@ -379,7 +412,7 @@ export function buildViewerHtml({ theme } = {}) {
 
   <section class="band alt" id="how" aria-labelledby="how-title">
     <div class="wrap">
-      <div class="section-head"><div><span class="eyebrow">How it works</span><h2 id="how-title">From a slow page to a report in three steps</h2></div></div>
+      <div class="section-head"><div><span class="eyebrow">How it works</span><h2 id="how-title">From a page load to insights in three steps</h2></div></div>
       <div class="steps">
         ${STEPS.map(([num, stage, title, text, cmd]) => `
         <article class="panel step">
@@ -420,7 +453,7 @@ export function buildViewerHtml({ theme } = {}) {
 
   <section class="band alt" id="limits" aria-labelledby="limits-title">
     <div class="wrap">
-      <div class="section-head"><div><span class="eyebrow">Honest limits</span><h2 id="limits-title">What a network log cannot show</h2></div><p>If the network looks fine but the page is still slow, the cause is probably in one of these places.</p></div>
+      <div class="section-head"><div><span class="eyebrow">Honest limits</span><h2 id="limits-title">What a network log cannot show</h2></div><p>A page load involves more than network activity. These areas need additional evidence to understand.</p></div>
       <ul class="limits">${LIMITS.map(([what, next]) => `<li><span>${what}</span><span>${next}</span></li>`).join("")}</ul>
     </div>
   </section>
@@ -428,7 +461,7 @@ export function buildViewerHtml({ theme } = {}) {
   <section class="band cta" aria-labelledby="cta-title">
     <div class="wrap">
       <h2 id="cta-title">Ready to look at your own page?</h2>
-      <p class="muted">Capture the slow page, then drop the file at the top of this page. Or see a finished report first.</p>
+      <p class="muted">Capture a page load, then drop the file at the top of this page. Or see a finished report first.</p>
       <div class="hero-actions"><a class="button primary" href="#drop">Choose a capture</a><button type="button" data-open-sample>${shellIcon("play", 14)}Try the sample capture</button></div>
       <div class="cli">Power users: <span class="muted">node bin/traceviz.mjs capture.json --open</span></div>
       <div class="ticks"><span>Nothing uploaded</span><span>No remote calls</span><span>Secrets removed from reports</span></div>
@@ -439,15 +472,38 @@ export function buildViewerHtml({ theme } = {}) {
     <div class="wrap"><span><strong>SocketMap</strong> v${VERSION} · MIT license · zero dependencies</span><span>Full instructions: README and docs/USER-GUIDE.md in the SocketMap repository.</span></div>
   </footer>
 </div>
+<input type="file" id="compare-input" accept=".json,application/json" multiple hidden>
+<input type="file" id="second-input" accept=".json,application/json" hidden>
+<div id="load-feedback" class="load-feedback" hidden>
+  <div id="progress" class="progress" hidden>
+    <div class="progress-track"><div id="progress-bar"></div></div>
+    <div id="progress-text" role="status"></div>
+  </div>
+  <div id="error" class="error" role="alert" hidden></div>
+  <button type="button" id="dismiss-error" hidden>Dismiss</button>
+</div>
 <div id="result" hidden>
   <div class="toolbar">
     <span class="brand">SocketMap</span>
     <span class="file" id="file-name"></span>
-    <label>Page <select id="page-select" aria-label="Page to analyze"></select></label>
     <span class="spacer"></span>
+    <button type="button" id="add-comparison">Compare with another capture</button>
+    <button type="button" data-theme-toggle>Theme</button>
     <button type="button" id="open-another">Open another capture</button>
     <button type="button" id="save-report" class="primary">Save report</button>
   </div>
+  <div class="toolbar">
+    <div id="comparison-controls" class="comparison-controls" role="group" aria-label="Comparison views" hidden>
+      <button type="button" id="view-comparison" aria-pressed="true">Comparison</button>
+      <button type="button" id="view-a" aria-pressed="false">A report</button>
+      <button type="button" id="view-b" aria-pressed="false">B report</button>
+      <button type="button" id="swap-captures">Swap A / B</button>
+    </div>
+    <label class="page-picker"><span id="page-label">Page / site</span> <select id="page-select" aria-label="Page or site to analyze"></select></label>
+    <label class="page-picker" id="page-picker-b" hidden>B page / site <select id="page-select-b" aria-label="B page or site to analyze"></select></label>
+    <span class="page-context" id="page-context" title=""></span>
+  </div>
+  <p id="comparison-hint" class="comparison-hint" hidden>A is the baseline. Changes show B minus A. Select the same page or action in each capture for a useful comparison.</p>
   <iframe id="report-frame" title="SocketMap report"></iframe>
 </div>
 ${themeOverride}<script id="socketmap-bundle">${bundle}</script>

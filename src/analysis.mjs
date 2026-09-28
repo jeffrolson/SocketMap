@@ -8,6 +8,9 @@
  */
 
 import { formatDuration, formatBytes } from "./normalizer.mjs";
+import { redactCapturedText } from "./redact.mjs";
+import { buildDiagnosticEvidenceText } from "./diagnostic-insights.mjs";
+import { buildCoverage, coverageText } from "./coverage.mjs";
 
 const RANK = { best: 0, better: 1, good: 2, poor: 3 };
 const TIMING_KEYS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
@@ -37,7 +40,13 @@ const SEVERITY_ORDER = { high: 0, medium: 1, info: 2 };
 
 const rating = (level, value) => ({ level, value });
 const worst = (levels) => levels.filter(l => l in RANK).sort((a, b) => RANK[b] - RANK[a])[0] || "unknown";
-const ms = (v) => (v == null ? "n/a" : formatDuration(v));
+const ms = (v) => (v == null ? "not recorded" : formatDuration(v));
+
+/** Connection timing is absent unless the capture recorded at least one setup phase. */
+function connectionSetupMs(connection) {
+  const phases = [connection?.connectMs, connection?.tlsMs].filter(value => typeof value === "number");
+  return phases.length ? phases.reduce((total, value) => total + value, 0) : null;
+}
 
 function median(values) {
   const v = values.filter(x => x != null).sort((a, b) => a - b);
@@ -59,7 +68,7 @@ function shortUrl(url, max = 120) {
 export function selectPageSite(model) {
   const sites = model.pages.filter(p => !p.isBackground);
   const loaded = sites.filter(p => p.url);
-  return (loaded[0] || sites[0] || model.pages[0]).site;
+  return (loaded[0] || sites[0] || model.pages[0])?.site ?? null;
 }
 
 function rateHost(host, requests, connections, dnsLookups) {
@@ -71,10 +80,11 @@ function rateHost(host, requests, connections, dnsLookups) {
   const protoCounts = {};
   for (const r of requests) if (r.protocol) protoCounts[r.protocol] = (protoCounts[r.protocol] || 0) + 1;
   const protoList = Object.entries(protoCounts).sort((a, b) => b[1] - a[1]);
-  const quicFailed = conns.some(c => c.kind === "quic" && c.error) && protoCounts["h3"] === undefined;
   let protocol;
-  if (quicFailed) protocol = rating("poor", "QUIC failed, fell back to TCP");
-  else if (!protoList.length) protocol = rating("unknown", "Not recorded");
+  if (!protoList.length) {
+    const quicError = conns.find(c => c.kind === "quic" && c.error);
+    protocol = rating("unknown", quicError ? `Protocol not recorded; QUIC error: ${quicError.error}` : "Not recorded");
+  }
   else {
     const dominant = protoList[0][0];
     const value = protoList.map(([p, n]) => (protoList.length > 1 ? `${p} (${n})` : p)).join(", ");
@@ -85,7 +95,9 @@ function rateHost(host, requests, connections, dnsLookups) {
   const versions = [...new Set(conns.map(c => c.tlsVersion).filter(Boolean))];
   let tls;
   if (!versions.length) {
-    tls = requests.every(r => r.scheme === "http") ? rating("unknown", "Not encrypted (http)") : rating("unknown", "Not recorded (connection opened before capture)");
+    tls = requests.length && requests.every(r => r.scheme === "http")
+      ? rating("unknown", "Not encrypted (HTTP)")
+      : rating("unknown", "TLS version not recorded");
   } else {
     const levelOf = (v) => (v.includes("1.3") ? "best" : v.includes("1.2") ? "better" : "poor");
     const weakest = versions.sort((a, b) => RANK[levelOf(b)] - RANK[levelOf(a)])[0];
@@ -95,10 +107,14 @@ function rateHost(host, requests, connections, dnsLookups) {
   // Connection setup: slowest new connection made during the capture.
   let connection;
   const failedConn = conns.find(c => c.error);
+  const linkedRequests = requests.filter(r => r.connectionId && connections.has(r.connectionId));
+  const allExplicitlyReused = linkedRequests.length > 0 && linkedRequests.every(r => r.reusedConnection === true);
+  const setupTimes = fresh.map(connectionSetupMs).filter(value => value != null);
   if (failedConn) connection = rating("poor", `Failed: ${failedConn.error}`);
-  else if (!fresh.length) connection = rating("best", "Reused existing connection");
+  else if (allExplicitlyReused) connection = rating("best", "Reused existing connection");
+  else if (!setupTimes.length) connection = rating("unknown", "Setup timing not recorded");
   else {
-    const setup = Math.max(...fresh.map(c => (c.connectMs || 0) + (c.tlsMs || 0)));
+    const setup = Math.max(...setupTimes);
     const t = THRESHOLDS.connection;
     connection = rating(setup < t.better ? "better" : setup <= t.good ? "good" : "poor", `${ms(setup)} to set up`);
   }
@@ -109,19 +125,19 @@ function rateHost(host, requests, connections, dnsLookups) {
   const dnsError = lookups.find(d => d.error);
   let dns;
   if (dnsError) dns = rating("poor", `Lookup failed: ${dnsError.error}`);
-  else if (!dnsTimes.length || Math.max(...dnsTimes) === 0) dns = rating("best", "Cached (no lookup needed)");
+  else if (!dnsTimes.length) dns = rating("unknown", "Lookup timing not recorded");
   else {
     const slowest = Math.max(...dnsTimes);
     const t = THRESHOLDS.dns;
     dns = rating(slowest < t.better ? "better" : slowest <= t.good ? "good" : "poor", `${ms(slowest)} lookup`);
   }
 
-  // Path: direct, through a proxy, or re-signed by a private root (inspection).
+  // Path: direct, through a proxy, or a private-root certificate that needs review.
   const proxies = [...new Set(requests.map(r => r.proxy).filter(Boolean))];
   const viaProxy = proxies.find(p => p !== "DIRECT");
   const inspected = conns.find(c => c.cert?.knownRoot === false);
   let path;
-  if (inspected) path = rating("poor", `Certificate from private root: ${inspected.cert.issuer || "unknown issuer"}`);
+  if (inspected) path = rating("poor", `Private-root certificate: ${inspected.cert.issuer || "unknown issuer"}`);
   else if (viaProxy) path = rating("better", `Via ${viaProxy}`);
   else if (proxies.includes("DIRECT") || conns.some(c => c.kind === "quic")) path = rating("best", "Direct");
   else path = rating("unknown", "Not recorded");
@@ -143,7 +159,7 @@ function rateHost(host, requests, connections, dnsLookups) {
     ips,
     proxy: viaProxy || (proxies.includes("DIRECT") ? "DIRECT" : null),
     cert: cert ? { issuer: cert.issuer, issuerOrg: cert.issuerOrg, root: cert.root, knownRoot: cert.knownRoot } : null,
-    bytesWire: requests.reduce((s, r) => s + (r.bytesWire || 0), 0),
+    bytesWire: requests.some(r => r.bytesWire != null) ? requests.reduce((s, r) => s + (r.bytesWire || 0), 0) : null,
     totalMs: requests.reduce((s, r) => s + (r.durationMs || 0), 0),
     medianWaitMs: medianWait,
     ratings,
@@ -160,8 +176,8 @@ function buildFindings(pageRequests, hosts, connections, dnsLookups) {
   add({
     id: "tls-inspection",
     severity: "high",
-    title: "TLS inspection: certificates signed by a private root",
-    detail: "The browser was handed certificates that chain to a root it does not recognize as public. That is what TLS inspection (SSL decryption) by a proxy or security agent looks like. Inspection adds processing to every connection and can break or slow protocols.",
+    title: "Private-root certificates observed",
+    detail: "The capture records certificates that chain to a non-public root. This can be TLS inspection or a privately managed certificate; the capture alone does not prove which. Check the certificate verification result and your organization’s certificate policy before treating it as inspection.",
     evidence: usedConns.filter(c => c.cert?.knownRoot === false).map(c =>
       `${c.host} (${c.remoteIp}): issued by ${c.cert.issuer || "unknown"}${c.cert.issuerOrg ? ` (${c.cert.issuerOrg})` : ""}, root ${c.cert.root || "unknown"}`),
     team: "Network security (proxy / SSL inspection policy)"
@@ -238,8 +254,8 @@ function buildFindings(pageRequests, hosts, connections, dnsLookups) {
     id: "slow-connection",
     severity: "medium",
     title: "Slow connection setup",
-    detail: `New connections that took over ${THRESHOLDS.connection.good} ms to open (TCP plus TLS, or the QUIC handshake). Distance, packet loss, or inspection devices are typical causes.`,
-    evidence: freshConns.filter(c => (c.connectMs || 0) + (c.tlsMs || 0) > THRESHOLDS.connection.good).map(c =>
+    detail: `New connections with recorded setup time over ${THRESHOLDS.connection.good} ms (TCP plus TLS, or the QUIC handshake). Distance, packet loss, or an intermediary are possibilities; compare another capture to narrow the cause.`,
+    evidence: freshConns.filter(c => connectionSetupMs(c) > THRESHOLDS.connection.good).map(c =>
       `${c.host} (${c.remoteIp}): connect ${ms(c.connectMs)}${c.tlsMs != null ? ` + TLS ${ms(c.tlsMs)}` : ""}`),
     team: "Network"
   });
@@ -258,7 +274,7 @@ function buildFindings(pageRequests, hosts, connections, dnsLookups) {
     id: "quic-failed",
     severity: "medium",
     title: "QUIC (HTTP/3) connections failed",
-    detail: "QUIC runs over UDP port 443. Firewalls or inspection devices that block or interfere with it force a slower fallback to TCP.",
+    detail: "The capture records QUIC connection errors. A firewall, UDP path, server behavior, or a transient network condition could contribute. This alone does not prove a block or a TCP fallback; compare a successful capture or inspect the matching request protocol.",
     evidence: usedConns.filter(c => c.kind === "quic" && c.error).map(c => `${c.host} (${c.remoteIp || "no address"}): ${c.error}`),
     team: "Network (firewall / UDP 443)"
   });
@@ -293,6 +309,12 @@ function buildFindings(pageRequests, hosts, connections, dnsLookups) {
 export function analyzeCapture(model, { site } = {}) {
   const pageSite = site || selectPageSite(model);
   const pageRequests = model.requests.filter(r => r.site === pageSite);
+  if (!model.requests.length && !site) {
+    return {
+      page: { site: "capture", url: "No page-level HTTP requests recorded", startMs: null, endMs: null, loadMs: null, requestCount: 0, hostCount: 0, bytesWire: null },
+      pageRequests: [], hosts: [], breakdown: Object.fromEntries(TIMING_KEYS.map(key => [key, null])), findings: [], slowest: [], background: []
+    };
+  }
   if (!pageRequests.length) {
     throw new Error(`No requests for page "${pageSite}". Pages in this capture: ${model.pages.map(p => p.site).join(", ")}`);
   }
@@ -306,9 +328,14 @@ export function analyzeCapture(model, { site } = {}) {
   const hosts = [...byHost].map(([h, reqs]) => rateHost(h, reqs, connections, model.dnsLookups))
     .sort((a, b) => RANK[b.overall] - RANK[a.overall] || b.totalMs - a.totalMs);
 
-  const breakdown = Object.fromEntries(TIMING_KEYS.map(k => [k, pageRequests.reduce((s, r) => s + (r.timing[k] || 0), 0)]));
+  const breakdown = Object.fromEntries(TIMING_KEYS.map(k => {
+    const values = pageRequests.map(r => r.timing[k]).filter(value => value != null);
+    return [k, values.length ? values.reduce((sum, value) => sum + value, 0) : null];
+  }));
   const startMs = Math.min(...pageRequests.map(r => r.start));
-  const endMs = Math.max(...pageRequests.map(r => r.end));
+  const complete = pageRequests.every(r => r.end != null && r.endRecorded !== false);
+  const endMs = complete ? Math.max(...pageRequests.map(r => r.end)) : null;
+  const observedEndMs = Math.max(...pageRequests.map(r => r.observedEnd ?? r.end ?? r.start));
   const pageInfo = model.pages.find(p => p.site === pageSite);
 
   return {
@@ -317,10 +344,11 @@ export function analyzeCapture(model, { site } = {}) {
       url: pageInfo?.url || pageRequests[0].url,
       startMs,
       endMs,
-      loadMs: endMs - startMs,
+      loadMs: endMs == null ? null : endMs - startMs,
+      observedSpanMs: observedEndMs - startMs,
       requestCount: pageRequests.length,
       hostCount: hosts.length,
-      bytesWire: pageRequests.reduce((s, r) => s + (r.bytesWire || 0), 0)
+      bytesWire: pageRequests.some(r => r.bytesWire != null) ? pageRequests.reduce((s, r) => s + (r.bytesWire || 0), 0) : null
     },
     pageRequests,
     hosts,
@@ -331,48 +359,130 @@ export function analyzeCapture(model, { site } = {}) {
   };
 }
 
+const SUMMARY_FINDING_EVIDENCE_LIMIT = 6;
+const SUMMARY_HOST_LIMIT = 12;
+const SUMMARY_REQUEST_LIMIT = 15;
+const SUMMARY_CONNECTION_LIMIT = 12;
+
+function bounded(items, limit) {
+  return { shown: items.slice(0, limit), omitted: Math.max(0, items.length - limit) };
+}
+
+function listOrRecorded(values) {
+  if (!Array.isArray(values) || !values.length) return "not recorded";
+  return values.map(value => {
+    if (typeof value === "string") return value;
+    if (value && typeof value === "object") {
+      return `${value.proxyUri || "proxy URI not recorded"}${value.badUntil != null ? ` (bad until ${value.badUntil})` : ""}`;
+    }
+    return String(value);
+  }).join(", ");
+}
+
+function requestSummary(r) {
+  const phases = TIMING_KEYS.filter(k => r.timing[k] != null)
+    .map(k => `${TIMING_LABELS[k]}=${formatDuration(r.timing[k])}`).join(", ");
+  const outcome = r.netError || (r.status != null ? `HTTP ${r.status}${r.statusText ? ` ${r.statusText}` : ""}` : r.fromCache ? "cache" : "not recorded");
+  return `#${r.id}: ${r.method || "method not recorded"} ${r.url || "URL not recorded"}; ${outcome}; protocol ${r.protocol || "not recorded"}; total ${r.endRecorded === false ? "not recorded (request end absent)" : formatDuration(r.durationMs)}; connection ${r.connectionId || "not recorded"}${r.reusedConnection == null ? " (reuse not recorded)" : r.reusedConnection ? " (reused)" : " (new)"}${r.proxy ? `; proxy ${r.proxy}` : ""}${r.redirects?.length ? `; redirects ${r.redirects.join(" -> ")}` : ""}${phases ? `; ${phases}` : ""}`;
+}
+
+function connectionSummary(c) {
+  const cert = c.cert
+    ? `${c.cert.subject || "subject not recorded"}, issuer ${c.cert.issuer || "not recorded"}, root ${c.cert.root || "not recorded"}, public root ${c.cert.knownRoot == null ? "not recorded" : c.cert.knownRoot ? "yes" : "no"}`
+    : "not recorded";
+  return `${c.id}: ${c.kind || "kind not recorded"}; host ${c.host || "not recorded"}; remote ${c.remoteIp || "not recorded"}${c.remotePort != null ? `:${c.remotePort}` : ""}; DNS ${ms(c.dnsMs)}, connect ${ms(c.connectMs)}, TLS ${ms(c.tlsMs)}; ${c.tlsVersion || "TLS not recorded"}${c.alpn ? ` / ${c.alpn}` : ""}; certificate ${cert}${c.error ? `; error ${c.error}` : ""}`;
+}
+
+function missingCaptureData(model, analysis) {
+  const env = model.environment || {};
+  const missing = [];
+  if (!env.polledDataPresent) missing.push("polledData was absent, so browser DNS and proxy configuration was not recorded");
+  if (!env.browser) missing.push("browser identity");
+  if (!env.os) missing.push("operating system");
+  if (!env.captureStartedAt || env.captureDurationMs == null) missing.push("capture wall-clock timing");
+  if (!env.localAddresses?.length) missing.push("local address");
+  if (!env.dns?.servers?.length) missing.push("DNS servers");
+  if (!env.proxy?.mode || env.proxy.mode === "unknown") missing.push("proxy configuration");
+  const noConnection = analysis.pageRequests.filter(r => !r.connectionId).length;
+  if (noConnection) missing.push(`${noConnection} analyzed request(s) without a linked connection`);
+  const noOutcome = analysis.pageRequests.filter(r => r.status == null && !r.netError && !r.fromCache).length;
+  if (noOutcome) missing.push(`${noOutcome} analyzed request(s) without a recorded outcome`);
+  const unfinished = analysis.pageRequests.filter(r => r.endRecorded === false).length;
+  if (unfinished) missing.push(`${unfinished} analyzed request(s) without a recorded end; completion duration is unavailable`);
+  return missing;
+}
+
 /** Plain-text summary sized to paste into an AI assistant. */
-export function buildAiSummary(model, analysis) {
+export function buildAiSummary(model, analysis, { source } = {}) {
   const env = model.environment;
   const { page } = analysis;
   const lines = [];
-  lines.push("SocketMap summary of a Chrome NetLog capture (secrets removed).");
-  lines.push("Question: why is this page slow, and which team should look at it?");
+  const sourceName = typeof source?.name === "string" ? redactCapturedText(source.name) : null;
+  lines.push("SocketMap NetLog evidence packet (secrets removed).");
+  lines.push("Purpose: provide data-driven insights into a page load using recorded browser network data.");
   lines.push("");
-  lines.push(`Capture: ${env.browser || "unknown browser"} on ${env.os || "unknown OS"}, started ${env.captureStartedAt || "unknown"}, mode ${env.captureMode || "unknown"}.`);
-  lines.push(`Client: local IP ${env.localAddresses.join(", ") || "not recorded"}; DNS servers ${env.dns.servers.join(", ") || "not recorded"}${env.dns.search.length ? ` (search: ${env.dns.search.join(", ")})` : ""}; proxy mode ${env.proxy.mode}${env.proxy.detail ? ` (${env.proxy.detail})` : ""}.`);
-  lines.push(`Page: ${page.url} : ${page.requestCount} requests to ${page.hostCount} hosts, ${formatDuration(page.loadMs)} from first request to last response, ${formatBytes(page.bytesWire) || "0 B"} transferred.`);
+  lines.push("CAPTURE PROVENANCE AND SCOPE");
+  lines.push(`Source: ${sourceName || "not recorded"}${source?.bytes != null ? ` (${formatBytes(source.bytes)})` : ""}.`);
+  lines.push(`Capture: ${env.browser || "unknown browser"}${env.browserInfo?.channel ? `, channel ${env.browserInfo.channel}` : ""}${env.browserInfo?.build ? `, build ${env.browserInfo.build}` : ""}; OS ${env.os || "unknown OS"}; started ${env.captureStartedAt || "not recorded"}; duration ${ms(env.captureDurationMs)}; mode ${env.captureMode || "not recorded"}.`);
+  lines.push(`Capture totals: ${model.requests.length} request(s), ${model.connections.length} linked connection(s), ${model.dnsLookups.length} DNS lookup(s), ${model.stats?.events ?? "not recorded"} NetLog event(s), ${model.stats?.sources ?? "not recorded"} source(s).`);
+  lines.push(`Analyzed page: site ${page.site || "not recorded"}; URL ${page.url || "not recorded"}; ${page.requestCount} request(s) to ${page.hostCount} host(s); ${ms(page.loadMs)} from first request to last response; ${formatBytes(page.bytesWire) || "not recorded"} transferred.`);
+  lines.push(`Excluded scope: ${analysis.background.length ? `${analysis.background.reduce((sum, item) => sum + item.requestCount, 0)} request(s) across ${analysis.background.length} other site(s): ${analysis.background.map(item => `${item.site} (${item.requestCount})`).join(", ")}` : "none recorded"}.`);
+  lines.push(`Client and resolver: local address ${listOrRecorded(env.localAddresses)}; DNS servers ${listOrRecorded(env.dns?.servers)}${env.dns?.serverAddresses?.length ? ` (recorded addresses ${env.dns.serverAddresses.join(", ")})` : ""}${env.dns?.search?.length ? `; search ${env.dns.search.join(", ")}` : ""}; secure DNS ${env.dns?.secureDns || "not recorded"}; DoH ${listOrRecorded(env.dns?.dohServers)}.`);
+  lines.push(`DNS configuration: timeout ${env.dns?.timeoutSeconds == null ? "not recorded" : `${env.dns.timeoutSeconds} seconds`}; attempts ${env.dns?.attempts ?? "not recorded"}; rotate ${env.dns?.rotate == null ? "not recorded" : env.dns.rotate}; hosts entries ${env.dns?.hostsPresent == null ? "not recorded" : env.dns.hostsPresent ? "present" : "none recorded"}.`);
+  lines.push(`Proxy configuration: ${env.proxy?.mode || "not recorded"}${env.proxy?.detail ? ` (${env.proxy.detail})` : ""}; PAC ${env.proxy?.pacUrl || "not recorded"}; auto-detect ${env.proxy?.autoDetect == null ? "not recorded" : env.proxy.autoDetect}; fixed servers ${listOrRecorded(env.proxy?.fixedServers)}; bad proxies ${listOrRecorded(env.proxy?.badProxies)}.`);
   lines.push("");
-  lines.push("Where the time went (summed across requests):");
+  lines.push("DERIVED FROM RECORDED REQUEST TIMINGS: TOTALS (summed across overlapping requests)");
   for (const [k, v] of Object.entries(analysis.breakdown).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])) {
     lines.push(`- ${TIMING_LABELS[k]}: ${formatDuration(v)}`);
   }
   lines.push("");
-  lines.push("Findings:");
+  lines.push("DERIVED FROM RECORDED DATA: BUILT-IN FINDINGS");
   if (!analysis.findings.length) lines.push("- None of the built-in checks fired.");
   for (const f of analysis.findings) {
     lines.push(`- [${f.severity.toUpperCase()}] ${f.title}. Team: ${f.team}.`);
-    for (const e of f.evidence.slice(0, 8)) lines.push(`  - ${e}`);
-    if (f.evidence.length > 8) lines.push(`  - ...and ${f.evidence.length - 8} more`);
+    const evidence = bounded(f.evidence, SUMMARY_FINDING_EVIDENCE_LIMIT);
+    for (const e of evidence.shown) lines.push(`  - ${e}`);
+    if (evidence.omitted) lines.push(`  - ...${evidence.omitted} more matching observation(s) omitted`);
   }
   lines.push("");
-  lines.push("Hosts (ratings: best / better / good / poor):");
-  for (const h of analysis.hosts) {
+  lines.push("DERIVED FROM RECORDED DATA: HOST RATINGS (best / better / good / poor)");
+  const hosts = bounded(analysis.hosts, SUMMARY_HOST_LIMIT);
+  for (const h of hosts.shown) {
     const r = h.ratings;
     const cert = h.cert ? `${h.cert.issuer || "unknown issuer"}${h.cert.knownRoot === false ? " (PRIVATE ROOT)" : h.cert.knownRoot ? " (public root)" : ""}` : "not recorded";
-    lines.push(`- ${h.host} [${h.overall}] IPs ${h.ips.join(", ") || "n/a"}; ${h.requests} req; protocol ${r.protocol.value} (${r.protocol.level}); ${r.tls.value} (${r.tls.level}); cert ${cert}; connection ${r.connection.value} (${r.connection.level}); DNS ${r.dns.value} (${r.dns.level}); path ${r.path.value} (${r.path.level}); server ${r.server.value} (${r.server.level})`);
+    lines.push(`- ${h.host} [${h.overall}] IPs ${h.ips.join(", ") || "not recorded"}; ${h.requests} req; protocol ${r.protocol.value} (${r.protocol.level}); ${r.tls.value} (${r.tls.level}); cert ${cert}; connection ${r.connection.value} (${r.connection.level}); DNS ${r.dns.value} (${r.dns.level}); path ${r.path.value} (${r.path.level}); server ${r.server.value} (${r.server.level})`);
   }
+  if (hosts.omitted) lines.push(`- ...${hosts.omitted} more host(s) omitted`);
   lines.push("");
-  lines.push("Slowest requests (total, then non-zero phases):");
-  analysis.slowest.forEach((r, i) => {
-    const phases = TIMING_KEYS.filter(k => r.timing[k]).map(k => `${TIMING_LABELS[k]} ${formatDuration(r.timing[k])}`).join(", ");
-    lines.push(`${i + 1}. ${r.method || ""} ${shortUrl(r.url)} : ${r.netError || r.status || (r.fromCache ? "cache" : "n/a")}, ${r.protocol || "n/a"}, total ${formatDuration(r.durationMs)}${phases ? `: ${phases}` : ""}`);
-  });
-  if (analysis.background.length) {
+  lines.push("RECORDED CONNECTION DETAILS");
+  const pageConnectionIds = new Set(analysis.pageRequests.map(r => r.connectionId).filter(Boolean));
+  const connections = bounded(model.connections.filter(c => pageConnectionIds.has(c.id)), SUMMARY_CONNECTION_LIMIT);
+  for (const c of connections.shown) lines.push(`- ${connectionSummary(c)}`);
+  if (connections.omitted) lines.push(`- ...${connections.omitted} more connection(s) omitted`);
+  lines.push("");
+  lines.push("RECORDED REQUEST DETAILS: SLOWEST ANALYZED REQUESTS (full redacted URLs)");
+  const requests = bounded([...analysis.pageRequests].sort((a, b) => b.durationMs - a.durationMs), SUMMARY_REQUEST_LIMIT);
+  for (const r of requests.shown) lines.push(`- ${requestSummary(r)}`);
+  if (requests.omitted) lines.push(`- ...${requests.omitted} more request(s) omitted`);
+  lines.push("");
+  const exceptional = analysis.pageRequests.filter(r => r.netError || (r.status != null && r.status >= 400) || r.redirects?.length);
+  if (exceptional.length) {
+    lines.push("RECORDED REQUEST DETAILS: FAILURES AND REDIRECTS");
+    const exceptions = bounded(exceptional, SUMMARY_REQUEST_LIMIT);
+    for (const r of exceptions.shown) lines.push(`- ${requestSummary(r)}`);
+    if (exceptions.omitted) lines.push(`- ...${exceptions.omitted} more failure or redirect observation(s) omitted`);
     lines.push("");
-    lines.push(`Other activity in the capture (not analyzed above): ${analysis.background.map(p => `${p.site} (${p.requestCount})`).join(", ")}`);
   }
+  const missing = missingCaptureData(model, analysis);
+  lines.push(buildDiagnosticEvidenceText(model));
   lines.push("");
-  lines.push("Limits: NetLog shows network activity only. It does not show page JavaScript/CPU time or security software acting inside the browser.");
+  lines.push(coverageText(buildCoverage(model)));
+  lines.push("");
+  lines.push(`MISSING OR LIMITED DATA: ${missing.length ? missing.join("; ") : "No additional capture-model gaps identified by SocketMap"}. NetLog shows network activity only, not page JavaScript/CPU time, packet retransmissions, server internals, or security software acting inside the browser.`);
+  lines.push("");
+  lines.push("AI ANALYSIS INSTRUCTIONS");
+  lines.push("1. Treat RECORDED sections as capture evidence. Treat DERIVED sections as SocketMap calculations or rule-based classifications, not independent observations. Do not turn missing values into defaults or facts.");
+  lines.push("2. Label any causal explanation as a hypothesis, tie it to recorded evidence or a named derived rule, and state confidence.");
+  lines.push("3. Recommend the smallest next test that could distinguish competing hypotheses, including the owner or team to involve.");
   return lines.join("\n");
 }

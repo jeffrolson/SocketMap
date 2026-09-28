@@ -94,3 +94,63 @@ export function themeCss(tokens = {}) {
   for (const [k, v] of Object.entries(charts)) lines.push(`--seg-${k}: ${c(`chart-${k}`, v)};`);
   return lines.join("\n    ");
 }
+
+/**
+ * Semantic overrides for the light appearance. These deliberately derive from
+ * the same DESIGN.md tokens as the dark appearance, so a company theme keeps
+ * its identity in both modes.
+ */
+export function themeModeCss(tokens = {}, defaultTokens = tokens) {
+  const colors = { ...(defaultTokens["light-colors"] || {}), ...(tokens["light-colors"] || {}) };
+  const lines = [];
+  for (const [name, value] of Object.entries(colors)) {
+    if (/^[a-z0-9-]+$/i.test(name) && safe(value)) lines.push(`--color-${name}: ${value};`);
+  }
+  return `
+  html[data-theme="light"] {
+    ${lines.join("\n    ")}
+  }`;
+}
+
+/**
+ * Inline, browser-only boot code shared by the standalone viewer and reports.
+ * It is intentionally static: no capture contents reach this script.
+ */
+export function themePreferenceScript() {
+  return `<script>(function () {
+  var key = "socketmap-theme";
+  var root = document.documentElement;
+  function valid(value) { return value === "light" || value === "dark"; }
+  function preferred() {
+    if (valid(root.dataset.theme)) return root.dataset.theme;
+    try { var saved = localStorage.getItem(key); if (valid(saved)) return saved; } catch (_) {}
+    return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  function apply(theme, save) {
+    if (!valid(theme)) return;
+    root.dataset.theme = theme;
+    document.querySelectorAll("[data-theme-toggle]").forEach(function (button) {
+      var next = theme === "dark" ? "light" : "dark";
+      button.setAttribute("aria-pressed", String(theme === "dark"));
+      button.setAttribute("aria-label", "Switch to " + next + " theme");
+      button.textContent = theme === "dark" ? "Light theme" : "Dark theme";
+    });
+    if (save) try { localStorage.setItem(key, theme); } catch (_) {}
+    window.dispatchEvent(new CustomEvent("socketmap:themechange", { detail: { theme: theme } }));
+    if (save && window.parent !== window) window.parent.postMessage({ type: "socketmap:theme", theme: theme }, "*");
+  }
+  apply(preferred(), false);
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("[data-theme-toggle]").forEach(function (button) {
+      button.addEventListener("click", function () { apply(root.dataset.theme === "dark" ? "light" : "dark", true); });
+    });
+    apply(root.dataset.theme, false);
+  });
+  window.addEventListener("message", function (event) {
+    var data = event && event.data;
+    if (event.source !== window.parent || !data || data.type !== "socketmap:theme" || !valid(data.theme)) return;
+    apply(data.theme, false);
+  });
+  window.SocketMapTheme = { set: function (theme) { apply(theme, false); }, get: function () { return root.dataset.theme; } };
+})();</script>`;
+}
