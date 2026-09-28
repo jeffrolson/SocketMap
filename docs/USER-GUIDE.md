@@ -1,8 +1,8 @@
 # SocketMap user guide
 
-This guide is for anyone troubleshooting a slow web page, whether or not you work in networking. It covers capturing the problem, opening the report, reading every part of it, and what to do next.
+This guide is for anyone seeking data-driven insights into a page load, whether or not you work in networking. It covers capturing a page load, opening the report, understanding the recorded activity, and deciding what to investigate next.
 
-- [1. Capture the slow page](#1-capture-the-slow-page)
+- [1. Capture a page load](#1-capture-a-page-load)
 - [2. Open the report](#2-open-the-report)
 - [3. Read the report](#3-read-the-report)
 - [4. What each finding means](#4-what-each-finding-means)
@@ -13,7 +13,9 @@ This guide is for anyone troubleshooting a slow web page, whether or not you wor
 
 ---
 
-## 1. Capture the slow page
+## 1. Capture a page load
+
+Open the viewer and click **Copy Chrome address** near the top. Paste `chrome://net-export` into Chrome's address bar. The short checklist beside the drop area takes you through starting the log, reproducing the problem in another tab, and stopping the log before dropping the saved file into SocketMap.
 
 SocketMap reads a **NetLog**: Chrome's and Edge's own detailed record of network activity. Recording one takes about two minutes and needs nothing installed.
 
@@ -21,10 +23,10 @@ SocketMap reads a **NetLog**: Chrome's and Edge's own detailed record of network
 2. Open a new tab and type `chrome://net-export` in the address bar (in Microsoft Edge: `edge://net-export`).
 3. Leave **Strip private information** selected. SocketMap does not need cookies or passwords.
 4. Click **Start Logging to Disk** and choose where to save the file. The default name is `chrome-net-export-log.json`.
-5. In another tab, load the slow page, or repeat the slow action (open the document, sign in, click the button).
+5. In another tab, load the page, or perform the action you want to understand (open the document, sign in, click the button).
 6. Wait until the page finishes, then go back to the net-export tab and click **Stop Logging**.
 
-**Capture twice when you can.** The same page from two places (office and home, VPN on and off, your machine and a colleague's) gives two reports to compare. Whatever differs usually points at the cause.
+**Capture twice when you can.** Repeat the same page or action from two places (office and home, VPN on and off, your machine and a colleague's). The comparison shows what changed; a controlled follow-up test helps establish the cause.
 
 ## 2. Open the report
 
@@ -37,7 +39,27 @@ Not sure what to expect? Click **Try the sample capture** on the viewer's start 
 - Windows (PowerShell): `node bin\traceviz.mjs "$env:USERPROFILE\Downloads\chrome-net-export-log.json" -o report.html --open`
 - macOS: `node bin/traceviz.mjs ~/Downloads/chrome-net-export-log.json -o report.html --open`
 
-**The page SocketMap picks.** A capture often contains other tabs and background traffic. SocketMap analyzes the site you loaded (the one with a full page load and the most requests). To analyze another site from the same capture, use the **Page** menu at the top of the viewer, or `--page https://site.example.com` on the command line. Everything else is listed under **Environment > Other activity in this capture**.
+**The page SocketMap picks.** A capture often contains other tabs and background traffic. SocketMap analyzes the site you loaded (the one with a full page load and the most requests). Use the **Page / site** menu at the top to switch sites. It groups websites separately from browser and extension activity, shows request counts, and displays the selected page URL beside the menu. These are groups of requests by site, not a list of every visited URL. The CLI equivalent is `--page https://site.example.com`. Other activity is also listed under **Environment**.
+
+**Choose an appearance.** Use **Light theme** or **Dark theme** in the viewer or report. The choice is remembered when browser storage is available; the initial appearance follows your system preference. A saved report includes the selected theme and still lets its reader switch.
+
+### Compare two captures
+
+The comparison also shows browser-wide snapshot changes and source-family activity. Source IDs belong to individual captures and are never paired across files. Snapshot differences are evidence of changed recorded state, not proof of a root cause.
+
+Click **Compare two captures** on the start page and select two NetLog JSON files, or drop both files together. The first file is **A (baseline)** and the second is **B (comparison)**. To compare against a report already open, click **Compare with another capture**, or drop the second file onto the report. **Replace B capture** changes the second file while keeping A.
+
+Use the separate **A page / site** and **B page / site** menus to select the same page or action. B starts with A's site when that site exists in both files. If the selected sites or page URLs differ, the comparison says so. **Swap A / B** reverses the baseline and the direction of the changes. **A report** and **B report** open each capture's full waterfall, sequence, environment, and other views.
+
+The comparison shows:
+
+- Recorded activity span, median request duration, server wait, request counts, known failures, and recorded bytes. Changes are **B minus A**, with coverage shown where data is missing. The activity span is network evidence, not a browser rendering or page-ready measurement.
+- Paired request bars using the same scale within each row, with filters for changed requests and requests present only in A or B. Expand a row for recorded timing phases and response details.
+- Environment settings side by side and a copyable/downloadable summary with evidence for an AI assistant.
+
+Requests pair by method and redacted URL, preserving query parameters and ignoring URL fragments. Repeated requests pair in capture order. Missing methods or URLs remain unpaired; redaction and repeated requests can make matches ambiguous. A missing request is not automatically an improvement or a regression. Incomplete request durations are shown as not recorded.
+
+Click **Save comparison** while the Comparison view is selected to create one self-contained HTML file. It includes both sides of the selected comparison, search, filters, themes, and the text summary, and opens offline without the original files. The viewer can read two capture models in memory, but streams each input separately and does not retain the raw event lists. Saved comparisons are reports, not capture inputs; choose the original NetLog files when starting a new comparison.
 
 ## 3. Read the report
 
@@ -56,7 +78,7 @@ The report is one HTML file with six tabs down the left side (across the top on 
 | Encryption (TLS) | 1.3 | 1.2 | | Below 1.2 |
 | Connection setup | Reused an open connection | New, under 100 ms | 100 to 300 ms | Over 300 ms, or failed |
 | DNS lookup | From cache | Under 20 ms | 20 to 100 ms | Over 100 ms, or failed |
-| Network path | Direct | Through a proxy | | Certificate from a private root (TLS inspection) |
+| Network path | Direct | Through a proxy | | Certificate from a private root (investigate inspection or private PKI) |
 | Server response (median wait) | Under 200 ms | 200 to 500 ms | 500 ms to 1 s | Over 1 s |
 
 "Not recorded" means the capture did not contain that value, for example certificate details for a connection that was already open before the capture started. SocketMap never guesses.
@@ -78,7 +100,7 @@ Every request in the order it started. The colored bar shows where each request'
 | Server wait | Waiting for the server to start answering |
 | Download | Receiving the answer |
 
-Click a row to see its plain-language summary, timing, connection and certificate details, and the request and response headers (with secrets removed). Hover the protocol or status for its meaning.
+The timing color key stays pinned below the report header while you scroll. Hover or focus a phase for its meaning. Click a row for timing, connection and certificate details, and the redacted headers. Hover an HTTP method such as **GET**, **POST**, or **OPTIONS** to learn what the browser is asking the server to do; protocols and statuses also have explanations.
 
 ### Sequence
 
@@ -89,7 +111,7 @@ The page load drawn as a conversation. The left column is your browser; each oth
 - **Red row:** a failure, or a connection whose certificate points to TLS inspection.
 - **Amber row:** slow.
 
-Click any row or server heading: the **Details** panel explains it in four tabs (Explained, Timing, Connection, Headers). Use **Hide details panel** to give the diagram the full width; clicking a row brings the panel back.
+Hover a label above an arrow, such as **TCP + TLS handshake**, for a brief explanation of what the browser is attempting. Click a row or server heading for four detail tabs (Explained, Timing, Connection, Headers). Use **Hide details panel** in the panel itself or beside the Sequence heading to give the diagram the full width. **Show details panel** restores it; selecting a row also brings it back. On narrower screens the panel sits below the diagram.
 
 ### Filter
 
@@ -103,21 +125,46 @@ On the Waterfall and Sequence tabs, the bar under the header narrows both views:
 
 ### Environment
 
-The browser, operating system, local IP address, DNS servers, DNS search domains, secure DNS setting, and proxy setup at the time of the capture, plus the other sites and background traffic in the capture.
+Recorded browser version, channel and build, operating system, local addresses, DNS server addresses and ports, resolver timeout and attempts, DNS rotation and hosts-file presence, secure DNS endpoints, PAC address, automatic proxy discovery, and fixed or unavailable proxies. Fields vary by browser and capture; absent values say **Not recorded**. These describe the captured computer, not the computer currently viewing the report. Credential-bearing command-line and environment values are sanitized.
+
+### Coverage
+
+A map of the request path (page code, browser, network stack, network path, server) that shows what this capture recorded at each stage. Every row has one of four labels, shown as text and an icon:
+
+- **Recorded:** the capture has the data.
+- **Partial:** some of it, with the count (for example, 36 of 46 requests).
+- **Not in this file:** a NetLog can record it, but this file has none. Recapturing may fix it.
+- **Never in a NetLog:** it needs another tool, such as JavaScript time, packet loss, or what the server did.
+
+The counts come from your capture; the "never" rows are facts about the NetLog format. Not recorded does not mean it was fine. **Worth capturing next** lists other data to collect separately (a Chrome Performance profile, a request ID for the server team, a HAR, Lighthouse, a packet capture, a route trace, or a second capture to compare). SocketMap does not read those yet. The same summary is included in the AI summary.
+
+### Diagnostics and Events
+
+**Diagnostics** includes browser-wide activity beyond the selected page. Start with **What to investigate next**: each observation has a next check and, where available, an **Inspect source** button. These are investigation leads, not proven causes.
+
+Use the timeline buttons to view event volume, errors, sent/received bytes, observed active connections/requests/DNS jobs, and disk-cache activity. The range sliders narrow the time window; hover for bucket values. The chart uses bounded time buckets, so inspect Events for precise individual timestamps. Missing measurements stay unavailable.
+
+Browser snapshot tabs expose DNS, proxy, sockets, stream pools, Alt-Svc, HTTP/2, QUIC, reporting, cache, modules and prerender data when the browser recorded it. Expand a field for its recorded table or JSON. A snapshot describes browser state at collection time; it does not prove that state was constant throughout the capture.
+
+Search and sort **All captured sources**, then select a source ID to inspect its events. **Events** supports multiple source IDs, event/source type, text and errors-only filters. It decodes recorded names and streams the original file again for each query, retaining only a page of results. Source dependency buttons follow related work. A saved report retains snapshots and summaries; attach the original NetLog locally for full event inspection. The original capture is not embedded in the HTML.
+
+No requests in the capture? Diagnostics still opens. An incomplete-capture notice means some evidence is missing, not that the absent operations succeeded.
 
 ### AI summary
 
-A compact text version of the report. Click **Copy summary** and paste it into your AI assistant with a question such as "What is slowing this page down, and who should look at it?"
+A detailed handoff with the source file, capture scope, environment, timing breakdown, findings, hosts, connection details, request IDs and full redacted URLs, failures, redirects, and missing-data limitations. Long evidence lists state how many items were omitted. Recorded facts and derived findings are labeled separately, with instructions for the assistant to distinguish evidence, hypotheses, and the next test.
+
+Use **Copy summary** to paste it into your approved AI assistant, or **Save summary (.txt)** to keep it for later. The summary retains internal addresses and paths; use the same sharing care as for the report.
 
 ### Learn
 
-Next steps, links to deeper tools and guidance, and a glossary of every term the report uses.
+Next steps, links to deeper tools and guidance, and an expanded glossary. Search for a term such as **TLS**, **preflight**, or **401** to narrow the definitions.
 
 ## 4. What each finding means
 
 | Finding | What it means | Usual cause | Who to involve |
 |---|---|---|---|
-| **TLS inspection** (high) | A server's certificate was issued by a private root, not a public certificate authority | A proxy or security agent decrypts and re-encrypts traffic (SSL inspection). Microsoft, for example, recommends excluding Microsoft 365 traffic from it | Network security |
+| **Private-root certificates observed** (high) | The recorded chain uses a non-public root | Could be TLS inspection or a privately managed certificate. Check verification results and certificate policy before deciding | Network security |
 | **Proxy asked for authentication** (high) | The proxy answered with HTTP 407 | Proxy sign-in on every connection | Network (proxy) |
 | **Called a service on this computer or local network** | The page talked to `localhost` or a private address | Sign-in agents (such as Okta Verify), sync clients, or security tools listening locally | Endpoint / desktop engineering, identity |
 | **Traffic goes through a proxy** | Requests went via a proxy server | Proxy or PAC configuration. Check whether these destinations should bypass it | Network (proxy / PAC) |
@@ -126,7 +173,7 @@ Next steps, links to deeper tools and guidance, and a glossary of every term the
 | **Servers that were slow to respond** | Over 1 second between request and first byte | Server load, or something in front of the server (CDN, proxy, gateway) | Application owner or vendor |
 | **Slow connection setup** | A new connection took over 300 ms | Distance, packet loss, VPN, or an inspection device | Network |
 | **Slow or failed DNS** | A lookup took over 100 ms or failed | Slow or distant DNS servers (listed under Environment) | Network (DNS) |
-| **QUIC connections failed** | HTTP/3 attempts failed | A firewall blocking UDP port 443, forcing a fallback to HTTP/2 | Network (firewall) |
+| **QUIC connections failed** | QUIC attempts failed | Check the recorded error and any subsequent connection. A failed attempt alone does not prove UDP blocking or TCP fallback | Network |
 | **Requests waited inside the browser** (info) | Over 100 ms before a connection was available | Too many requests to one server, HTTP/1.1, or a busy proxy | Usually none |
 | **Hosts using HTTP/1.1** (info) | A server was reached over HTTP/1.1 | The server or a proxy on the path does not support HTTP/2 | Network (proxy) or application owner |
 

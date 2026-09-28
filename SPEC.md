@@ -18,22 +18,23 @@ and the code disagree, this file wins and the code gets fixed.
   - Support regex filtering on URLs and methods.
 - Acceptance criteria: For each request, reports the real protocol, status, server IP, TLS version, certificate issuer and public-root status, and timing phases (redirect, queue, proxy lookup, DNS, connect, TLS, waiting for connection, send, server wait, download).
 
-### NetLog Troubleshooting Report
-- Purpose: Tell enterprise IT staff why a page loaded slowly and which team to involve.
+### NetLog Page Load Insights Report
+- Purpose: Provide data-driven insights into a page load through visualizations, recorded evidence, and suggested next checks.
 - Inputs: NetLog capture model; optional page site (`--page`).
 - Outputs: Standalone HTML report.
 - Business rules:
   - Page selection: the non-background site with a main-frame load and the most requests, unless `--page` names one. Other sites are listed as other activity.
+  - Coverage view: a map of the request path (page code, browser, network stack, network path, server). Each item is Recorded, Partial, Not in this file, or Never in a NetLog; statuses are computed from the capture and shown as text plus an icon. Lists other data worth collecting separately and adds the same summary to the AI handoff.
   - Environment card: browser, OS, capture time and mode, local IP, DNS servers and search domains, secure DNS, proxy setup, bad proxies.
   - Host ratings (Best / Better / Good / Poor; "not recorded" when the capture has no data):
-    - Protocol (most used): HTTP/3 Best, HTTP/2 Better, HTTP/1.1 Good; QUIC failed with TCP fallback Poor.
+    - Protocol (most used): HTTP/3 Best, HTTP/2 Better, HTTP/1.1 Good; unrecorded protocols remain unknown. A failed QUIC attempt is reported without assuming TCP fallback.
     - TLS (weakest): 1.3 Best, 1.2 Better, older Poor.
     - Connection setup (slowest new connection): reused only Best, under 100 ms Better, 100 to 300 ms Good, over 300 ms or failed Poor.
     - DNS (slowest lookup): cached Best, under 20 ms Better, 20 to 100 ms Good, over 100 ms or failed Poor.
     - Path: direct Best, through a proxy Better, certificate chaining to a non-public root Poor.
     - Server wait (median time to first byte): under 200 ms Best, 200 to 500 ms Better, 500 ms to 1 s Good, over 1 s Poor.
   - Findings, each with severity, evidence lines from the capture, and the team to involve: TLS inspection, proxy authentication (407), calls to this computer or local network, proxy use, slow proxy lookup, failed requests, slow server, slow connection, slow DNS, QUIC failure, browser queueing, HTTP/1.1 hosts.
-  - Layout: sidebar views (Overview, Waterfall, Sequence, Environment, AI summary, Learn), top bar with capture file, size, load time, findings count, and the filter, and a status bar. Views switch in place; the report works without script by showing every view.
+  - Layout: sidebar views (Overview, Waterfall, Sequence, Environment, Coverage, Diagnostics, Events, AI summary, Learn), top bar with capture file, size, load time, findings count, and the filter, and a status bar. Views switch in place; the report works without script by showing every view.
   - Every protocol, result, wait, size, TLS, and rating label explains itself on hover or keyboard focus; a collapsible guide compares HTTP/1.1, HTTP/2, and HTTP/3 and lists how many requests on the page used each.
   - Filter: text search over host, URL, status, and protocol, plus chips (Problems = failures or inspection, Slow = server wait over 500 ms or total over 1 s, TLS inspection, Local calls), applied to the waterfall and the sequence.
   - Styling comes from DESIGN.md tokens; `--theme` applies another design.md. Nothing is loaded remotely; fonts fall back to system faces.
@@ -43,6 +44,30 @@ and the code disagree, this file wins and the code gets fixed.
   - Learn tab with next steps, verified outbound links, and a glossary. Links open in a new tab; the report itself loads nothing remote.
   - AI summary: compact plain text with environment, time breakdown, findings, host ratings, and slowest requests.
 - Acceptance criteria: Opens offline with no remote resources; contains no credentials; contains no value that is not in the capture.
+
+### Capture-wide NetLog Diagnostics
+- Preserve every recorded source family and top-level snapshot field, including unknown types and captures with no page requests.
+- Show recorded browser state with structured tables and safe JSON details across reference viewer categories.
+- Provide bounded timeline aggregation and observed source windows, with missing data distinct from zero and incomplete evidence labeled.
+- Pair recorded diagnostic observations with next checks and links to event evidence.
+- Stream original local files on demand for filtered, paginated event inspection; decode dictionaries from that capture and follow source dependencies.
+- Saved reports retain summaries and snapshots; original-file attachment enables event inspection without a server or remote request.
+- Retain no raw event archive; bound query results and unmatched timing-pair tracking.
+
+### Two-Capture NetLog Comparison
+- Purpose: Visually compare the same page or action across two captures without uploading either file.
+- Inputs: Two Chrome/Edge NetLog files and an independent page/site selection for each.
+- Outputs: Standalone comparison HTML and copyable/downloadable evidence text.
+- Business rules:
+  - A is the baseline and B is the comparison. Deltas are B minus A; swapping exchanges files and selected pages together.
+  - Stream each input separately. A failed replacement preserves the last working report.
+  - Pair exact methods and redacted URLs, retaining query values but ignoring fragments; pair repeated occurrences chronologically. Missing identifiers remain unpaired.
+  - Show timing, request count, known failures, recorded bytes, and environment differences. Missing values stay unknown; metrics show measurement coverage.
+  - Completion-based durations require an actual recorded request end. The observed request span is not a browser rendering or page-ready measurement.
+  - Show paired duration bars on the same scale within each row, filters for changed/unpaired requests, and expandable recorded details. Search considers every row, including rows outside the initial display limit.
+  - Warn when selected pages differ and explain that matching is heuristic and differences do not prove cause.
+  - The viewer can open each full report. Saved comparison HTML includes the selected comparison and its own interactions, without raw captures or an external viewer.
+- Acceptance criteria: Identical captures give zero comparable deltas; swapping reverses deltas; missing endings are not treated as completion; both inputs remain redacted; saved HTML works offline with themes, filters, and text export.
 
 ### Signal-Flow SVG Layout Engine
 - Purpose: Calculate geometry and render dark signal-flow sequence diagrams.
@@ -127,7 +152,7 @@ and the code disagree, this file wins and the code gets fixed.
 
 ### Functional
 - Ingest Chromium NetLog, HAR, and generic JSON execution traces.
-- Produce a troubleshooting report from a NetLog capture.
+- Produce a page load insights report from a NetLog capture.
 - Auto-detect input format without manual flags.
 - Redact credentials by default.
 - Produce standalone HTML file matching visual specifications.

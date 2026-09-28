@@ -3,6 +3,33 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-28
+### Added
+- Coverage tab: a map of the request path showing what the capture recorded at each stage (Recorded, Partial, Not in this file, Never in a NetLog), what a NetLog cannot see, and other data worth collecting separately. The same summary is in the AI handoff.
+- Capture-wide Diagnostics for the reference NetLog viewer's browser snapshots, source families, errors and timeline series, including background-only captures and unknown event types.
+- Local streaming event inspection with source/type/text/error filters, pagination, dependency navigation and recorded enum decoding; saved reports can attach the original NetLog for deeper inspection.
+- Actionable diagnostic evidence cards, capture integrity notices, browser-state and source-family A/B comparisons, and diagnostic context in the AI handoff.
+- A reference coverage matrix in `docs/NETLOG-PARITY.md` and a synthetic browser-wide diagnostic fixture.
+- Compare two NetLog captures inside the standalone viewer: independent page selection, A/B swapping, timing differences, paired request bars, environment changes, and a portable comparison report and text summary.
+- Light and dark themes for the viewer and NetLog reports, with a remembered preference and the selected appearance included in saved reports.
+- A prominent copy button for `chrome://net-export` and a short capture checklist on the viewer's start page.
+- A pinned waterfall timing key, explanations for HTTP methods and sequence labels, and a hide-details control inside the sequence inspector.
+- A searchable glossary, additional recorded browser/DNS/proxy details, and a detailed AI handoff that can be copied or saved as text.
+
+### Changed
+- Describe SocketMap as providing data-driven insights into a page load across the viewer, AI summary, and capture documentation.
+- The page selector groups websites separately from browser and extension activity and shows the selected page URL.
+- At narrower widths, sequence details sit below the diagram instead of covering it.
+
+### Fixed
+- Missing request ends, TLS versions and cache evidence remain unknown; absence of a send event no longer claims a cache hit.
+- Constants appearing after events trigger a bounded second pass, and scalar capture metadata is retained.
+- Recursive sanitization covers diagnostic snapshots, event parameters and numeric credential values while preserving protocol session data and enum dictionaries.
+- Comparison timings distinguish completed requests from requests whose end event was not captured; unknown values are not treated as zero.
+- Redact credential-bearing command-line switches and environment URLs before including them in reports and AI summaries.
+- Clipboard fallback reports when manual copying is needed instead of claiming success.
+- Diagnostics snapshots no longer render the same recorded data two or three times: tables are capped at 100 rows with the cap stated, and nested cells no longer repeat their JSON. A real capture's report drops from 11.6 MB to 8.1 MB.
+
 ## [0.6.0] - 2026-09-26
 ### Added
 - The viewer's start page explains what SocketMap does, how it works, what it shows, and what it cannot see, with a **Try the sample capture** button that opens a report from the built-in synthetic capture.

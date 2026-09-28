@@ -1,8 +1,8 @@
 # SocketMap
 
-**See how a web page loaded, and what slowed it down.**
+**Data-driven insights into a page load.**
 
-SocketMap turns a browser network capture from Chrome or Edge (`chrome://net-export`) into a single, self-contained HTML report: every connection, DNS lookup, certificate, and request, linked together, rated, and explained in plain language. It flags the usual enterprise culprits (TLS inspection, proxies, calls to agents on the local machine, slow DNS, slow servers, blocked QUIC) with the evidence and the team to involve.
+SocketMap turns a browser network capture from Chrome or Edge (`chrome://net-export`) into a single, self-contained HTML report: recorded connections, DNS lookups, certificates, and requests linked together and explained in plain language. It highlights private certificate roots, proxy use, local-agent calls, slow DNS, slow responses and recorded failures with evidence and a suggested next check.
 
 - **Nothing to install for most people.** Open `socketmap-viewer.html` in Chrome or Edge and drop in a capture.
 - **Private.** Captures are read locally and never uploaded. Reports strip passwords, cookies, auth headers, and tokens.
@@ -17,7 +17,7 @@ SocketMap turns a browser network capture from Chrome or Edge (`chrome://net-exp
 
 - [Quick start on Windows](#quick-start-on-windows)
 - [Quick start on macOS](#quick-start-on-macos)
-- [Capture a slow page](#capture-a-slow-page)
+- [Capture a page load](#capture-a-page-load)
 - [Read the report](#read-the-report)
 - [Share safely](#share-safely)
 - [Company branding](#company-branding)
@@ -25,7 +25,7 @@ SocketMap turns a browser network capture from Chrome or Edge (`chrome://net-exp
 - [Command reference](#command-reference)
 - [For developers](#for-developers)
 
-The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain language.
+The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain language. **Coverage** shows what the capture recorded and what a NetLog cannot see, with what to collect next. **Diagnostics** adds capture-wide timelines, browser snapshots, sources and next checks. **Events** inspects the original local event stream on demand. The [reference coverage matrix](docs/NETLOG-PARITY.md) documents how this maps to Chromium NetLog Viewer and where the interfaces differ.
 
 ---
 
@@ -37,6 +37,10 @@ The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain 
 2. Under **Assets**, download `socketmap-viewer.html`.
 3. Double-click it. It opens in Edge or Chrome. If Windows picks another program, right-click the file and choose **Open with > Microsoft Edge**.
 4. Drop your capture on it, or click **Try the sample capture** to see a finished report first.
+
+The start page has a **Copy Chrome address** button for `chrome://net-export` and a short capture checklist. Use **Light theme** or **Dark theme** to change the viewer and report together; saved reports keep the selected appearance.
+
+To see what changed, choose **Compare two captures** or drop two NetLog files together. The viewer compares selected pages with paired request bars, timing and environment differences, and independent access to each full report. **Save comparison** bundles the selected comparison into one HTML file that opens offline. You can also add a second file to a report already open.
 
 Nothing else is needed: no Node.js, no admin rights. You can also pass the file on to colleagues or put it on SharePoint.
 
@@ -94,14 +98,14 @@ Want to see a report without capturing anything? `npm run demo` writes `demo-rep
 
 ---
 
-## Capture a slow page
+## Capture a page load
 
 A NetLog records far more than DevTools does: the proxy decision, DNS, every connection, and the certificate each server presented. It works in any Chrome or Edge browser.
 
 1. Close other tabs, so their traffic does not mix into the capture.
 2. Open a new tab and go to `chrome://net-export` (in Edge: `edge://net-export`).
 3. Leave **Strip private information** selected and click **Start Logging to Disk**. Save the file (the default name is `chrome-net-export-log.json`).
-4. In another tab, load the slow page, or repeat the slow action.
+4. In another tab, load the page, or perform the action you want to understand.
 5. Go back to the net-export tab and click **Stop Logging**.
 
 Tip: capture the same page twice, for example on the office network and at home, or with and without the VPN. Comparing the two reports usually points straight at the cause.
@@ -118,6 +122,7 @@ The report has six tabs:
 | **Waterfall** | Every request in start order with its time split into phases. Click a row for timing, connection, certificate, and headers |
 | **Sequence** | The page load as conversations between the browser and each server. Click any row or column heading for a plain-language explanation; hover any label (H2, 200, wait) for a definition |
 | **Environment** | Browser, OS, local IP, DNS servers and search domains, secure DNS, and proxy setup at capture time |
+| **Coverage** | A map of the request path showing what this capture recorded, what it could not, and what to collect next |
 | **AI summary** | A compact text version to paste into your AI assistant |
 | **Learn** | Next steps, links to deeper tools (Web Vitals, DevTools, Microsoft 365 networking, Wireshark), and a glossary |
 
@@ -131,7 +136,7 @@ Host ratings:
 | TLS | 1.3 | 1.2 | | Below 1.2 |
 | Connection setup | Reused an open connection | New, under 100 ms | 100 to 300 ms | Over 300 ms, or failed |
 | DNS | From cache | Under 20 ms | 20 to 100 ms | Over 100 ms, or failed |
-| Path | Direct | Through a proxy | | Certificate from a private root (TLS inspection) |
+| Path | Direct | Through a proxy | | Certificate from a private root (investigate inspection or private PKI) |
 | Server wait (median) | Under 200 ms | 200 to 500 ms | 500 ms to 1 s | Over 1 s |
 
 ## Share safely
@@ -157,7 +162,7 @@ Fonts are used only if installed on the viewer's machine; nothing is downloaded.
 
 ## What SocketMap cannot see
 
-A NetLog records network activity only. It cannot show time spent running the page's own code (use a Chrome DevTools Performance profile), security software acting inside the browser, packet-level problems such as retransmissions (use Wireshark), or what servers do internally. The report says so rather than guessing.
+A NetLog records network activity only. It cannot show time spent running the page's own code (use a Chrome DevTools Performance profile), security software acting inside the browser, packet-level problems such as retransmissions (use Wireshark), or what servers do internally. The report says so rather than guessing, and its **Coverage** tab shows what was and was not recorded, with suggestions for what to collect next.
 
 ---
 

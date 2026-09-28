@@ -3,8 +3,8 @@
 Forward plan. Dated entries. Reorder as priorities shift. Shipped items move
 to `CHANGELOG.md`.
 
-Direction (set 2026-09-26): SocketMap is a troubleshooting tool for enterprise IT staff
-diagnosing slow page loads (first target: M365 SharePoint and Office web apps). The
+Direction (set 2026-09-28): SocketMap provides data-driven insights into a page load,
+using visualizations and recorded evidence to inform decisions (first target: M365 SharePoint and Office web apps). The
 capture is `chrome://net-export` or `edge://net-export`. Reports are self-contained
 HTML anyone can open. Redaction strips secrets (passwords, auth headers, cookies,
 tokens) and keeps everything else, including IPs. Real captures never enter the repo.
@@ -13,6 +13,7 @@ tokens) and keeps everything else, including IPs. Real captures never enter the 
 Actively being built.
 
 - Try SocketMap on Windows and with colleagues; collect what confuses people.
+- Two-capture comparison (shipped in 0.7.0): validate with real user workflows.
 - Phase 2: Microsoft 365 detectors (TLS inspection via certificate issuer, proxy and PAC
   cost, QUIC fallback, localhost calls, sign-in redirect chains, embedded Microsoft 365
   endpoint list). Needs a real SharePoint capture from work.
@@ -29,7 +30,6 @@ Planned but not scheduled.
 
 - Phase 4: capture helper script (Windows PowerShell and macOS shell) that records
   machine name, public IP and a TCP traceroute to the slowest hosts
-- Phase 5: compare two captures (on network vs off, inspection on vs bypassed)
 
 ## Parking lot
 Ideas, deferred features, nice-to-haves. No commitment.

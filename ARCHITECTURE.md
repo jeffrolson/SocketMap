@@ -28,9 +28,17 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/parsers/netlog-stream.mjs` | Incremental tokenizer: emits each NetLog event and top-level block (`constants`, `polledData`) as it completes | Node.js or browser |
 | `src/parsers/netlog-analyzer.mjs` | Keeps a small summary per relevant NetLog source, follows `source_dependency` links, builds the capture model (environment, pages, requests, connections, DNS lookups) | Node.js or browser |
 | `src/parsers/netlog-parser.mjs` | Node entry point: streams the file from disk through tokenizer and analyzer | Node.js |
-| `src/redact.mjs` | Secret redaction for URLs and header lines | Node.js or browser |
+| `src/parsers/netlog-evidence.mjs` | Capture-wide source/event aggregates, sanitized snapshots, bounded timeline bins and integrity | Node.js or browser |
+| `src/diagnostic-insights.mjs` | Evidence-based next checks and bounded diagnostic AI handoff | Node.js or browser |
+| `src/coverage.mjs` | Coverage model: per-stage Recorded / Partial / Not in this file / Never in a NetLog statuses computed from the capture, next-capture suggestions, AI handoff text | Node.js or browser |
+| `src/renderer/coverage.mjs` | Coverage tab: request-path map, per-stage rows, suggestions (HTML and CSS only, no script) | Node.js or browser |
+| `src/renderer/diagnostics.mjs` | Capture-wide charts, snapshot tables, source search and sorting | Node.js or browser |
+| `src/viewer/event-replay.mjs` | On-demand streaming event queries, decoded names, source navigation, bounded pages | Browser or pure matcher tests |
+| `src/redact.mjs` | Recursive credential redaction for captured parameters, snapshots, URLs and headers | Node.js or browser |
 | `src/cert.mjs` | Minimal X.509 reader: subject, issuer, root, expiry from PEM | Node.js or browser |
 | `src/analysis.mjs` | Page selection, Good / Better / Best / Poor host ratings, findings, time breakdown, AI summary text | Node.js or browser |
+| `src/comparison.mjs` | Compares selected pages from two capture models: request matching, recorded metric deltas and coverage, environment differences | Node.js or browser |
+| `src/renderer/comparison.html.mjs` | Standalone A/B comparison, paired timing bars, request filters, environment table, evidence summary | Node.js or browser |
 | `src/demo/sample-capture.mjs` | Synthetic NetLog capture (documentation IPs, throwaway certificates): the viewer's sample, `npm run demo`, and test fixtures | Node.js or browser |
 | `src/theme.mjs` | Reads DESIGN.md front matter; turns tokens into CSS variables with semantic roles and local font fallbacks | Node.js or browser |
 | `src/renderer/theme.generated.mjs` | Default theme compiled from DESIGN.md (`npm run generate:theme`; `verify` checks it is current) | Node.js or browser |
@@ -59,6 +67,16 @@ NetLog capture, end to end:
 
 The drag-and-drop viewer runs steps 2 to 6 in the browser: `File.stream()` feeds decoded chunks to the same tokenizer and analyzer, and the report renders into an iframe.
 
+The viewer and report share a theme preference script and token-based light/dark CSS. The initial appearance follows a saved preference or the operating system; validated parent/frame messages synchronize changes without rebuilding the report. Saved HTML embeds the selected mode. `DESIGN.md` provides the dark `colors` map and the light `light-colors` map; company themes can override either.
+
+The environment model allowlists recorded browser, DNS, and proxy fields and sanitizes credential-bearing metadata before it reaches the renderer or AI summary. The summary separates recorded request/connection details from derived findings and ratings, limits long lists with omission counts, and can be exported as plain text.
+
+The viewer can retain two capture models with independent source metadata and site selections. It streams their files sequentially and only replaces the active state after parsing and report generation succeed. A/B comparisons match exact method and redacted URL (fragment ignored), then pair repeated occurrences chronologically; unknown identifiers stay unpaired. `request.endRecorded` distinguishes an actual end event from an unfinished request. Unrecorded ends and durations are null; separate observed spans support drawing without claiming completion. Completion-based comparison metrics require recorded ends, and partial measurements show coverage. Swapping exchanges the entire capture state. Comparison HTML embeds only the selected rendered evidence, has its own filtering and theme controls, and works without the original files or viewer. Full A/B reports are available in the viewer; they are not embedded in the saved comparison.
+
+The analyzer also sends every event to `netlog-evidence`, including source families it does not understand as page requests. The index retains counts, dependencies, first/last sanitized parameter samples per event type, every sanitized `polledData` field, constants and scalar top-level metadata. It never retains the raw event list. Timeline bins reaggregate with bounded storage; byte/event totals and observed activity states remain distinct. Incomplete JSON and malformed entries produce integrity warnings. Files with constants after events get a second streaming pass with the captured dictionary seeded; no raw-event queue is used.
+
+Event inspection rescans the original local `File` only when requested, keeps one page of sanitized matches, and bounds open duration-pair tracking. Viewer reports request that File through a source-validated parent-frame message; standalone saved reports offer a local file picker. The original capture is never embedded or uploaded. Snapshot and source summaries remain available in a saved report without that file. Captures with no page requests open directly in Diagnostics. Capture comparisons also compare recorded snapshot values and independent source-family totals; source IDs are never matched across different captures.
+
 HAR or generic JSON, end to end:
 
 1. User invokes `traceviz input-trace.json` via CLI.
@@ -76,7 +94,7 @@ HAR or generic JSON, end to end:
 - NetLog phases come from `constants.logEventPhase`: `PHASE_BEGIN` is 1 and `PHASE_END` is 2 in current Chrome. Do not hard-code them.
 - The response status line is always written as `HTTP/1.1 <code>`, even for HTTP/2 and HTTP/3. The protocol comes from which send-headers event fired (`HTTP_TRANSACTION_HTTP2_SEND_REQUEST_HEADERS`, `..._QUIC_...`, or the plain one).
 - The page a request belongs to is the top-frame site: the first token of `network_isolation_key` on `URL_REQUEST_START_JOB`. Sites that are not `http(s)://` (new tab page, extensions, `null`) are background traffic.
-- `CERT_VERIFIER_JOB` carries both the presented chain (begin) and `is_issued_by_known_root` (end). A chain to a root that is not a known public root is the TLS inspection signal. It covers QUIC too, whose sessions do not log PEM chains themselves.
+- `CERT_VERIFIER_JOB` carries both the presented chain (begin) and `is_issued_by_known_root` (end). A chain to a root that is not a known public root is a reason to investigate TLS inspection or a privately managed certificate; it does not establish the cause. It covers QUIC too, whose sessions do not log PEM chains themselves.
 - A connection counts as new for a request only if it finished setting up after that request started waiting for a stream. Only new connections contribute DNS, connect, and TLS time to a request.
 - Redirects followed inside one request share a source. Timing phases describe the last leg; the time before it is reported as `redirect`.
 - A capture Chrome never finished writing still parses: complete events are kept, `polledData` is simply absent.
@@ -108,14 +126,14 @@ HAR or generic JSON, end to end:
 ### Truthful Capture Model
 - Status: Accepted
 - Decision: The NetLog path reports only what the capture recorded. Missing values are null and shown as "not recorded".
-- Rationale: This is a troubleshooting tool. A default that looks like data (a fixed latency, an assumed TLS version, an invented proxy hop) sends people to the wrong team.
+- Rationale: Insights must be grounded in recorded evidence. A default that looks like data (a fixed latency, an assumed TLS version, an invented proxy hop) can lead to the wrong decision.
 - Alternatives considered: Filling gaps with typical values for a nicer diagram (the original implementation).
 - Trade-offs accepted: Some cells are empty, for example certificate details for connections opened before the capture started.
 
 ### Report, Not Only a Diagram, for NetLogs
 - Status: Accepted
 - Decision: NetLog captures produce a report: findings, host ratings, waterfall, then the sequence diagram as a drill-down.
-- Rationale: The audience is enterprise IT staff asking "why is this page slow and whom do I call". A waterfall and per-host ratings answer that; a sequence diagram of hundreds of requests does not.
+- Rationale: The audience needs data-driven insights into how a page loaded and what to investigate next. Findings, a waterfall, and per-host ratings provide context for those decisions alongside the detailed sequence diagram.
 - Alternatives considered: Sequence diagram as the only view.
 - Trade-offs accepted: Two renderers (`report.html.mjs` for NetLog, `template.html.mjs` for HAR/JSON) until HAR moves to the report.
 
@@ -165,4 +183,5 @@ HAR or generic JSON, end to end:
 - HAR/JSON diagrams with thousands of requests are tall. Mitigation: `--filter`, and the HAR parser's entry limit.
 - The HAR parser still uses the fixed four-lifeline model and adds an invented upstream hop and default values. It does not yet meet the Truthful Capture Model decision.
 - Pages with tens of thousands of requests produce a report HTML of tens of megabytes (every waterfall row carries its detail).
+- The Diagnostics view embeds recorded evidence: raw snapshot JSON and first/last event samples per source. On a 5 MB real capture it is most of an 8 MB report, versus a few hundred KB before Diagnostics existed. Snapshot and DNS tables are capped at 100 rows (the raw JSON keeps every row). Capping event samples for sources beyond the first 250 is the next lever, at the cost of that evidence in saved reports.
 - NetLog cannot see page JavaScript/CPU time or security software inside the browser; findings say so rather than guess.
