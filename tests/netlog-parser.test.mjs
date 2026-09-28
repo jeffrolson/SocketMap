@@ -31,7 +31,7 @@ describe("NetLog tokenizer", () => {
       onEvent: (ev) => out.events.push(ev)
     });
     for (let i = 0; i < text.length; i += chunkSize) t.write(text.slice(i, i + chunkSize));
-    t.end();
+    out.integrity = t.end();
     return out;
   }
 
@@ -64,9 +64,42 @@ describe("NetLog tokenizer", () => {
     assert.equal(out.events.length, netlog.events.length);
     assert.equal(out.top.polledData, undefined);
   });
+
+  it("emits top-level scalar metadata without mistaking values for keys", () => {
+    const text = '{"userComments":"Try the \\"VPN\\" route","captureId":7,"captureEnabled":true,"optional":null,"constants":{},"events":[]}';
+    const out = tokenize(text, 5);
+    assert.equal(out.top.userComments, 'Try the "VPN" route');
+    assert.equal(out.top.captureId, 7);
+    assert.equal(out.top.captureEnabled, true);
+    assert.equal(out.top.optional, null);
+    assert.deepEqual(out.integrity, { complete: true, discardedPartial: false, malformedEntries: 0 });
+  });
+
+  it("reports an incomplete JSON tail separately from malformed complete entries", () => {
+    const incomplete = tokenize('{"constants":{},"events":[{"type":1,"params":{"note":"unfinished', 3);
+    assert.equal(incomplete.integrity.complete, false);
+    assert.equal(incomplete.integrity.discardedPartial, true);
+    assert.equal(incomplete.integrity.malformedEntries, 0);
+
+    const malformed = tokenize('{"constants":{},"events":[{"type":nope}]}', 4);
+    assert.equal(malformed.integrity.complete, true);
+    assert.equal(malformed.integrity.discardedPartial, false);
+    assert.equal(malformed.integrity.malformedEntries, 1);
+  });
 });
 
 describe("NetLog capture model", () => {
+  it("re-streams a late-constants capture with recorded constants instead of buffering its events", async () => {
+    const netlog = buildPageLoadNetLog();
+    const late = { events: netlog.events, constants: netlog.constants, polledData: netlog.polledData };
+    const path = join(dir, "late-constants.json");
+    writeFileSync(path, toNetLogText(late));
+    const result = await parseNetLog(path);
+    assert.equal(result.stats.events, netlog.events.length);
+    assert.ok(result.requests.some(request => request.url?.startsWith("https://portal.example.com/")));
+    assert.equal(result.diagnostics.constantsLate, false, "the returned second pass has decoded event names");
+  });
+
   it("describes the capture environment", () => {
     const env = model.environment;
     assert.equal(env.browser, "Google Chrome 153.0.1.0");
@@ -80,6 +113,40 @@ describe("NetLog capture model", () => {
     assert.ok(env.captureStartedAt.startsWith("2026-"));
   });
 
+  it("keeps recorded environment metadata while redacting credential-bearing values", async () => {
+    const netlog = buildPageLoadNetLog();
+    netlog.constants.clientInfo.version_mod = "stable";
+    netlog.constants.clientInfo.cl = "153.0.1.0-abc";
+    netlog.constants.clientInfo.official = "official";
+    netlog.constants.clientInfo.command_line = "chrome --auth-token=COMMANDSECRET --proxy-pac-url=https://pac.example/proxy.pac?token=PACSECRET";
+    netlog.polledData.proxySettings.effective.pac_url = "https://pac.example/proxy.pac?token=PACSECRET";
+    netlog.polledData.badProxies = [{ proxy_uri: "https://bad-proxy.example?token=BADSECRET", bad_until: "2026-10-01T00:00:00Z" }];
+    netlog.polledData.hostResolverInfo.dns_config = {
+      ...netlog.polledData.hostResolverInfo.dns_config,
+      nameservers: ["192.0.2.53:53", "https://resolver.example/dns-query?token=DNSSECRET"],
+      timeout: 2,
+      attempts: 3,
+      rotate: true,
+      num_hosts: 1,
+      doh_config: { servers: [{ server_template: "https://doh.example/dns-query?token=DOHSECRET" }] }
+    };
+    const path = join(dir, "environment-metadata.json");
+    writeFileSync(path, toNetLogText(netlog));
+    const environment = (await parseNetLog(path)).environment;
+
+    assert.deepEqual(environment.browserInfo, { name: "Google Chrome", version: "153.0.1.0", channel: "stable", build: "153.0.1.0-abc", official: "official" });
+    assert.equal(environment.dns.timeoutSeconds, 2);
+    assert.equal(environment.dns.attempts, 3);
+    assert.equal(environment.dns.rotate, true);
+    assert.equal(environment.dns.hostsPresent, true);
+    assert.ok(environment.dns.dohServers[0].includes("token=[REDACTED]"));
+    assert.ok(environment.proxy.pacUrl.includes("token=[REDACTED]"));
+    assert.ok(environment.proxy.badProxies[0].proxyUri.includes("token=[REDACTED]"));
+    assert.equal(environment.proxy.badProxies[0].badUntil, "2026-10-01T00:00:00Z");
+    const text = JSON.stringify(environment);
+    for (const secret of ["COMMANDSECRET", "PACSECRET", "BADSECRET", "DNSSECRET", "DOHSECRET"]) assert.ok(!text.includes(secret), secret);
+  });
+
   it("finds the page and separates background traffic", () => {
     const page = model.pages.find(p => p.site === "https://portal.example.com");
     assert.ok(page);
@@ -88,7 +155,20 @@ describe("NetLog capture model", () => {
     const ext = model.pages.find(p => p.site.startsWith("chrome-extension://"));
     assert.ok(ext.isBackground);
     assert.equal(req(50).isBackground, true);
-    assert.equal(req(50).fromCache, true);
+    assert.equal(req(50).fromCache, null, "absence of a send event does not prove cache use");
+  });
+
+  it("distinguishes a request end event from the capture-end fallback", async () => {
+    const netlog = buildPageLoadNetLog();
+    netlog.events = netlog.events.filter(event => !(event.source.id === 1 && event.type === netlog.constants.logEventTypes.REQUEST_ALIVE && event.phase === netlog.constants.logEventPhase.PHASE_END));
+    const path = join(dir, "unfinished-request.json");
+    writeFileSync(path, toNetLogText(netlog));
+    const unfinished = (await parseNetLog(path)).requests.find(request => request.id === 1);
+    assert.equal(unfinished.endRecorded, false);
+    assert.equal(unfinished.durationMs, null, "unrecorded completion stays unknown");
+    assert.equal(unfinished.end, null);
+    assert.equal(unfinished.timing.download, null);
+    assert.ok(unfinished.observedDurationMs > req(1).durationMs, "observed span is available separately for drawing");
   });
 
   it("breaks the main document into real timing phases", () => {
@@ -99,6 +179,7 @@ describe("NetLog capture model", () => {
     assert.equal(r.status, 200);
     assert.equal(r.proxy, "DIRECT");
     assert.equal(r.reusedConnection, false);
+    assert.equal(r.endRecorded, true);
     assert.equal(r.durationMs, 850);
     assert.deepEqual(r.timing, {
       redirect: null, queue: 5, proxy: 40, dns: 80, connect: 40, tls: 120, stalled: 5, send: 1, wait: 500, download: 59
@@ -135,7 +216,7 @@ describe("NetLog capture model", () => {
     assert.equal(c.remoteIp, "203.0.113.5");
     assert.equal(c.dnsMs, 5);
     assert.equal(c.connectMs, 30);
-    assert.equal(c.tlsVersion, "TLS 1.3");
+    assert.equal(c.tlsVersion, null, "a QUIC handshake alone does not record a TLS version field");
     assert.equal(c.cert.issuer, "Example Public CA");
   });
 

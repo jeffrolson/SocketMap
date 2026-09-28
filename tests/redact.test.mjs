@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { redactUrl, redactHeaderLines } from "../src/redact.mjs";
+import { createEvidenceSanitizer, redactCapturedText, redactUrl, redactHeaderLines } from "../src/redact.mjs";
 import { summarizeCertificateChain } from "../src/cert.mjs";
 import { TEST_CERTS } from "../src/demo/sample-capture.mjs";
 
@@ -40,6 +40,45 @@ describe("Header redaction", () => {
   });
 });
 
+describe("Captured metadata redaction", () => {
+  it("masks secrets in a command line while preserving non-secret switches", () => {
+    const out = redactCapturedText('chrome --proxy-pac-url=https://pac.example/pac?token=PACSECRET --auth-token=COMMANDSECRET --profile-directory=Work');
+    assert.ok(out.includes("token=[REDACTED]"));
+    assert.ok(out.includes("--auth-token=[REDACTED]"));
+    assert.ok(out.includes("--profile-directory=Work"));
+    assert.ok(!out.includes("PACSECRET"));
+    assert.ok(!out.includes("COMMANDSECRET"));
+  });
+
+  it("scrubs nested diagnostic snapshots without dropping addresses or paths", () => {
+    const sanitize = createEvidenceSanitizer();
+    const snapshot = sanitize({
+      remote_ip: "198.51.100.9",
+      url: "https://api.example.test/a/path?token=URLSECRET",
+      auth: "AUTHSECRET",
+      session: { id: "SESSIONSECRET" },
+      nested: {
+        headers: [
+          "Cookie: COOKIESECRET",
+          { name: "Authorization", value: "Bearer HEADERSECRET" },
+          { header_name: "X-RequestDigest", header_value: "DIGESTSECRET" },
+          { key: "X-Api-Key", value: "KEYSECRET" }
+        ],
+        error: { response_body: "BODYSECRET", access_token: "TOKENSECRET" }
+      }
+    });
+    const text = JSON.stringify(snapshot);
+    for (const secret of ["URLSECRET", "AUTHSECRET", "SESSIONSECRET", "COOKIESECRET", "HEADERSECRET", "DIGESTSECRET", "KEYSECRET", "BODYSECRET", "TOKENSECRET"]) {
+      assert.ok(!text.includes(secret), secret);
+    }
+    assert.equal(snapshot.remote_ip, "198.51.100.9");
+    assert.ok(snapshot.url.includes("api.example.test/a/path"));
+    assert.equal(snapshot.nested.headers[1].value, "[REDACTED]");
+    assert.equal(snapshot.nested.headers[2].header_value, "[REDACTED]");
+    assert.equal(snapshot.nested.headers[3].value, "[REDACTED]");
+  });
+});
+
 describe("Certificate summary", () => {
   it("reads subject, issuer, and root from a PEM chain", () => {
     const s = summarizeCertificateChain([TEST_CERTS.apiLeaf, TEST_CERTS.inspectionCa]);
@@ -54,4 +93,24 @@ describe("Certificate summary", () => {
     assert.equal(summarizeCertificateChain(["garbage"]), null);
     assert.equal(summarizeCertificateChain([]), null);
   });
+});
+
+it("preserves protocol session snapshots and enum IDs while removing numeric credentials", () => {
+  const sanitize = createEvidenceSanitizer();
+  const result = sanitize({
+    spdySessionInfo: [{ host_port_pair: "portal.example.test:443" }],
+    quicInfo: { sessions: [{ peer_address: "198.51.100.44:443" }] },
+    constants: { logEventTypes: { AUTH_TOKEN_GENERATED: 105 }, logSourceType: { HTTP2_SESSION: 12 } },
+    token: 123456, password: 678910, token_count: 2, has_token: true, digest_policy: 2, certPathBuilderDigestPolicy: { WEAK_ALLOW_SHA1: 2 }
+  });
+  assert.equal(result.spdySessionInfo[0].host_port_pair, "portal.example.test:443");
+  assert.equal(result.quicInfo.sessions[0].peer_address, "198.51.100.44:443");
+  assert.equal(result.constants.logEventTypes.AUTH_TOKEN_GENERATED, 105);
+  assert.equal(result.constants.logSourceType.HTTP2_SESSION, 12);
+  assert.equal(result.token, "[REDACTED]");
+  assert.equal(result.password, "[REDACTED]");
+  assert.equal(result.token_count, 2);
+  assert.equal(result.digest_policy, 2);
+  assert.equal(result.certPathBuilderDigestPolicy.WEAK_ALLOW_SHA1, 2);
+  assert.equal(result.has_token, true);
 });

@@ -13,8 +13,9 @@
  * No Node APIs: the same analyzer runs in the browser.
  */
 
-import { redactUrl, redactHeaderLines } from "../redact.mjs";
+import { redactCapturedText, redactUrl, redactHeaderLines, createEvidenceSanitizer } from "../redact.mjs";
 import { summarizeCertificateChain } from "../cert.mjs";
+import { createNetLogEvidence } from "./netlog-evidence.mjs";
 
 const CONNECT_JOB_TYPES = new Set([
   "CONNECT_JOB", "SSL_CONNECT_JOB", "TRANSPORT_CONNECT_JOB", "HTTP_PROXY_CONNECT_JOB", "SOCKS_CONNECT_JOB"
@@ -27,7 +28,7 @@ const SEND_HEADER_EVENTS = {
 };
 
 function invert(map) {
-  const out = {};
+  const out = Object.create(null);
   for (const [name, id] of Object.entries(map || {})) out[id] = name;
   return out;
 }
@@ -67,12 +68,13 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
   const filterRegex = filter ? new RegExp(filter, "i") : null;
   let constants = null;
   let polledData = null;
-  let eventNames = null;
-  let sourceNames = null;
+  let eventNames = Object.create(null);
+  let sourceNames = Object.create(null);
   let netErrors = {};
   let phaseBegin = 1;
   let phaseEnd = 2;
-  let pending = [];
+  const evidence = createNetLogEvidence();
+  const sanitize = createEvidenceSanitizer();
   let eventCount = 0;
   let firstTime = Infinity;
   let lastTime = -Infinity;
@@ -89,6 +91,7 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
   const errorName = (code) => (code == null || code === 0 ? null : netErrors[code] || `NET_ERROR ${code}`);
 
   function setTopLevel(key, value) {
+    evidence.setTopLevel(key, value);
     if (key === "constants") {
       constants = value || {};
       eventNames = invert(constants.logEventTypes);
@@ -96,27 +99,22 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
       netErrors = invert(constants.netError);
       phaseBegin = constants.logEventPhase?.PHASE_BEGIN ?? 1;
       phaseEnd = constants.logEventPhase?.PHASE_END ?? 2;
-      const queued = pending;
-      pending = [];
-      for (const ev of queued) addEvent(ev);
     } else if (key === "polledData") {
       polledData = value || {};
     }
   }
 
   function addEvent(ev) {
-    if (!eventNames) {
-      pending.push(ev);
-      return;
-    }
+    if (!ev || typeof ev !== "object") return;
+    evidence.addEvent(ev);
     eventCount++;
     const name = eventNames[ev.type] ?? String(ev.type);
     const sourceType = sourceNames[ev.source?.type] ?? String(ev.source?.type);
     const id = ev.source?.id;
-    const t = Number(ev.time);
-    if (t < firstTime) firstTime = t;
-    if (t > lastTime) lastTime = t;
-    const p = ev.params || {};
+    const t = ev.time == null || ev.time === "" || !Number.isFinite(Number(ev.time)) ? null : Number(ev.time);
+    if (t != null && t < firstTime) firstTime = t;
+    if (t != null && t > lastTime) lastTime = t;
+    const p = sanitize(ev.params || {});
     const begin = ev.phase === phaseBegin;
     const end = ev.phase === phaseEnd;
 
@@ -375,6 +373,7 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
         start: rel(cj?.dnsStart ?? s.tcpStart),
         ready: s.tlsEnd ?? s.tcpEnd ?? null,
         dnsMs: diff(cj?.dnsStart, cj?.dnsEnd) ?? (cj?.dnsCached ? 0 : null),
+        dnsCached: cj?.dnsCached ?? null,
         connectMs: diff(s.tcpStart, s.tcpEnd),
         tlsMs: diff(s.tlsStart, s.tlsEnd),
         tlsVersion: s.tlsVersion ?? null,
@@ -406,10 +405,11 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
         start: rel(pool?.dnsStart ?? q.start),
         ready: q.handshakeAt ?? null,
         dnsMs: diff(pool?.dnsStart, pool?.dnsEnd) ?? (pool?.dnsCached ? 0 : null),
+        dnsCached: pool?.dnsCached ?? null,
         connectMs: diff(q.start, q.handshakeAt),
         tlsMs: null,
-        tlsVersion: q.handshakeAt != null ? "TLS 1.3" : null,
-        alpn: "h3",
+        tlsVersion: q.tlsVersion ?? null,
+        alpn: q.alpn ?? null,
         resumed: null,
         cert: certFrom(q.certJob, null),
         error: errorName(q.error) ?? q.failure ?? null
@@ -452,13 +452,14 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
       const connect = fresh ? conn.connectMs : null;
       const tls = fresh ? conn.tlsMs : null;
       const streamMs = diff(r.streamStart, r.streamEnd);
-      const stalled = streamMs == null ? null
-        : Math.max(0, streamMs - (proxy || 0) - (dns || 0) - (connect || 0) - (tls || 0));
+      const remainingStreamMs = streamMs == null ? null
+        : streamMs - (proxy || 0) - (dns || 0) - (connect || 0) - (tls || 0);
+      const stalled = remainingStreamMs != null && remainingStreamMs >= 0 ? remainingStreamMs : null;
 
       const status = /^HTTP\/[\d.]+\s+(\d{3})\s*(.*)$/i.exec(r.responseHeaders?.[0] || "");
       const site = String(r.nik || "").split(" ")[0];
       const pageSite = site && site !== "null" ? site : (r.initiator && r.initiator !== "not an origin" ? r.initiator : "unknown");
-      const end = r.end ?? lastTime;
+      const observedEnd = r.end ?? (Number.isFinite(lastTime) ? lastTime : null);
 
       requests.push({
         id: r.id,
@@ -473,8 +474,11 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
         isBackground: !/^https?:\/\//.test(pageSite),
         priority: r.priority ?? null,
         start: rel(r.start),
-        end: rel(end),
-        durationMs: end - r.start,
+        end: rel(r.end),
+        observedEnd: rel(observedEnd),
+        observedDurationMs: diff(r.start, observedEnd),
+        endRecorded: r.end != null,
+        durationMs: diff(r.start, r.end),
         timing: {
           redirect: r.redirects?.length ? legStart - r.start : null,
           queue: diff(legStart, r.streamStart),
@@ -485,13 +489,15 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
           stalled,
           send: diff(r.sendStart, r.sendEnd),
           wait: diff(r.sendEnd, r.headersEnd),
-          download: r.headersEnd != null ? end - r.headersEnd : null
+          download: diff(r.headersEnd, r.end)
         },
         protocol: r.protocol ?? null,
         status: status ? Number(status[1]) : null,
         statusText: status ? status[2] || null : null,
         netError: errorName(r.netError),
-        fromCache: r.sendStart == null && r.netError == null,
+        // An absent send event does not prove a cache hit. It can also mean an
+        // incomplete capture, cancellation, extension activity, or missing data.
+        fromCache: r.sendStart != null ? false : null,
         bytesWire: r.bytesWire ?? null,
         bytesDecoded: r.bytesDecoded ?? null,
         contentType: headerValue(r.responseHeaders, "content-type"),
@@ -505,8 +511,9 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
       });
     }
 
-    if (requests.length === 0) {
-      throw new Error(filterRegex ? "No matching HTTP requests found in NetLog capture." : "No HTTP requests found in this NetLog capture.");
+    const diagnostics = evidence.finish();
+    if (requests.length === 0 && filterRegex && !diagnostics.constantsLate) {
+      throw new Error("No matching HTTP requests found in NetLog capture.");
     }
     requests.sort((a, b) => a.start - b.start || a.id - b.id);
 
@@ -532,14 +539,15 @@ export function createNetLogAnalyzer({ filter = null } = {}) {
 
     return {
       format: "socketmap-capture/1",
-      environment: buildEnvironment(constants, polledData, t0, lastTime, localAddresses),
+      environment: buildEnvironment(constants, polledData, firstTime, lastTime, localAddresses),
       pages: [...pages.values()].sort((a, b) => b.requestCount - a.requestCount),
       requests,
       connections: [...connections.values()]
         .filter(c => usedConnections.has(c.id))
         .map(({ ready, ...c }) => c),
       dnsLookups,
-      stats: { events: eventCount, sources: sources.size }
+      stats: { events: eventCount, sources: diagnostics.sources.length },
+      diagnostics
     };
   }
 
@@ -554,36 +562,89 @@ function headerValue(lines, name) {
 
 function describeProxy(settings) {
   const eff = settings?.effective;
-  if (!eff) return { mode: "unknown", detail: null };
-  if (eff.pac_url) return { mode: "PAC script", detail: eff.pac_url };
-  if (eff.auto_detect) return { mode: "Auto-detect (WPAD)", detail: null };
+  if (!eff) return { mode: "unknown", detail: null, pacUrl: null, autoDetect: null, fixedServers: [] };
+  const pacUrl = typeof eff.pac_url === "string" ? redactCapturedText(eff.pac_url) : null;
+  const autoDetect = typeof eff.auto_detect === "boolean" ? eff.auto_detect : null;
+  const fixed = eff.single_proxy || eff.proxy_per_scheme;
+  const fixedServers = typeof fixed === "string"
+    ? [redactCapturedText(fixed)]
+    : fixed && typeof fixed === "object"
+      ? Object.entries(fixed).filter(([, value]) => typeof value === "string")
+        .map(([scheme, value]) => `${scheme}: ${redactCapturedText(value)}`)
+      : [];
+  if (pacUrl) return { mode: "PAC script", detail: pacUrl, pacUrl, autoDetect, fixedServers };
+  if (autoDetect === true) return { mode: "Auto-detect (WPAD)", detail: null, pacUrl, autoDetect, fixedServers };
   if (eff.single_proxy || eff.proxy_per_scheme) {
-    return { mode: "Fixed proxy", detail: JSON.stringify(eff.single_proxy || eff.proxy_per_scheme) };
+    return { mode: "Fixed proxy", detail: fixedServers.join(", ") || null, pacUrl, autoDetect, fixedServers };
   }
-  if (eff.from_system) return { mode: "System settings", detail: "Chrome follows the operating system proxy settings" };
-  if (Object.keys(eff).length === 0) return { mode: "Direct", detail: null };
-  return { mode: "Other", detail: JSON.stringify(eff) };
+  if (eff.from_system) return { mode: "System settings", detail: "Chrome follows the operating system proxy settings", pacUrl, autoDetect, fixedServers };
+  if (Object.keys(eff).length === 0) return { mode: "Direct", detail: null, pacUrl, autoDetect, fixedServers };
+  return { mode: "Other", detail: null, pacUrl, autoDetect, fixedServers };
+}
+
+function capturedStrings(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter(item => typeof item === "string").map(redactCapturedText);
+}
+
+function describeBadProxies(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(entry => {
+    if (typeof entry === "string") return redactCapturedText(entry);
+    if (!entry || typeof entry !== "object") return null;
+    const uri = entry.proxy_chain_uri ?? entry.proxy_uri ?? entry.proxy ?? entry.uri ?? null;
+    const until = entry.bad_until ?? entry.badUntil ?? null;
+    if (typeof uri !== "string" && until == null) return null;
+    return {
+      proxyUri: typeof uri === "string" ? redactCapturedText(uri) : null,
+      badUntil: typeof until === "string" ? redactCapturedText(until) : until
+    };
+  }).filter(Boolean);
+}
+
+function hasOwn(value, key) {
+  return Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function buildEnvironment(constants, polledData, t0, lastTime, localAddresses) {
   const info = constants.clientInfo || {};
   const dnsConfig = polledData?.hostResolverInfo?.dns_config || {};
   const secureModes = invert(constants.secureDnsMode);
-  const offset = Number(constants.timeTickOffset);
+  const offset = constants.timeTickOffset == null || constants.timeTickOffset === "" ? NaN : Number(constants.timeTickOffset);
+  const proxy = describeProxy(polledData?.proxySettings);
+  const dohEntries = dnsConfig.doh_config?.servers || dnsConfig.doh_servers || dnsConfig.secure_dns_templates || [];
+  const dohServers = Array.isArray(dohEntries)
+    ? dohEntries.map(entry => typeof entry === "string" ? entry : entry?.server_template || entry?.template || null)
+      .filter(value => typeof value === "string").map(redactCapturedText)
+    : [];
   return {
     browser: [info.name, info.version].filter(Boolean).join(" ") || null,
+    browserInfo: {
+      name: info.name ?? null,
+      version: info.version ?? null,
+      channel: info.version_mod ?? null,
+      build: info.cl ?? null,
+      official: info.official ?? null
+    },
     os: info.os_type ?? null,
-    commandLine: info.command_line ?? null,
+    commandLine: redactCapturedText(info.command_line ?? null),
     captureMode: constants.logCaptureMode ?? null,
-    captureStartedAt: Number.isFinite(offset) ? new Date(offset + t0).toISOString() : null,
-    captureDurationMs: Number.isFinite(lastTime) ? lastTime - t0 : null,
+    captureStartedAt: Number.isFinite(offset + t0) && Math.abs(offset + t0) <= 8640000000000000 ? new Date(offset + t0).toISOString() : null,
+    captureDurationMs: Number.isFinite(lastTime - t0) ? lastTime - t0 : null,
     localAddresses: [...localAddresses].sort(),
-    proxy: { ...describeProxy(polledData?.proxySettings), badProxies: polledData?.badProxies ?? [] },
+    proxy: { ...proxy, badProxies: describeBadProxies(polledData?.badProxies) },
     dns: {
-      servers: (dnsConfig.nameservers || []).map(s => splitAddress(s).ip),
+      servers: (dnsConfig.nameservers || []).map(s => splitAddress(redactCapturedText(s)).ip),
+      serverAddresses: capturedStrings(dnsConfig.nameservers),
       search: dnsConfig.search || [],
       secureDns: dnsConfig.secure_dns_mode != null ? (secureModes[dnsConfig.secure_dns_mode] ?? String(dnsConfig.secure_dns_mode)) : null,
-      dohServers: (dnsConfig.doh_config?.servers || []).map(s => s.server_template || s.template || JSON.stringify(s))
+      dohServers,
+      timeoutSeconds: dnsConfig.timeout ?? null,
+      attempts: dnsConfig.attempts ?? null,
+      rotate: typeof dnsConfig.rotate === "boolean" ? dnsConfig.rotate : null,
+      hostsPresent: hasOwn(dnsConfig, "num_hosts")
+        ? Number(dnsConfig.num_hosts) > 0
+        : null
     },
     polledDataPresent: Boolean(polledData)
   };

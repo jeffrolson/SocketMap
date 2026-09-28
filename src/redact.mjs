@@ -22,11 +22,21 @@ const USERINFO_RE = /(\/\/[^/:@\s]+:)[^@/\s]+@/g;
 // Header names whose values are credentials.
 const SECRET_HEADER_RE = /cookie|authorization|token|secret|password|api[-_]?key|digest|signature|session/i;
 const URL_HEADER_RE = /^(:path|location|referer|origin|content-location)$/i;
+// NetLog metadata can include the Chrome command line. Keep useful non-secret
+// switches, but never carry a credential passed as a switch value into a model
+// or shareable report.
+const COMMAND_SECRET_RE = /((?:--?)(?:access[-_]?token|auth[-_]?token|refresh[-_]?token|id[-_]?token|token|auth(?:orization)?|password|passwd|pwd|secret|api[-_]?key|cookie|session|credential)(?:=|\s+))(?:(?:"[^"]*")|(?:'[^']*')|\S+)/gi;
 
 /** Masks secret parameter values and embedded passwords in a URL or path. */
 export function redactUrl(url) {
   if (typeof url !== "string") return url;
   return url.replace(USERINFO_RE, `$1${MASK}@`).replace(PARAM_RE, `$1${MASK}`);
+}
+
+/** Redacts URLs and credential-like command-line switches in captured metadata. */
+export function redactCapturedText(value) {
+  if (typeof value !== "string") return value;
+  return redactUrl(value).replace(COMMAND_SECRET_RE, `$1${MASK}`);
 }
 
 /** Masks credential headers in Chrome's "name: value" header line format. */
@@ -41,4 +51,47 @@ export function redactHeaderLines(lines) {
     if (URL_HEADER_RE.test(name)) return `${line.slice(0, idx)}:${redactUrl(line.slice(idx + 1))}`;
     return line;
   });
+}
+
+/**
+ * Recursive redaction for diagnostic snapshots and arbitrary NetLog parameters.
+ * This factory is self-contained so the offline event inspector can embed the
+ * exact same sanitizer without fetching code or retaining a raw event archive.
+ */
+export function createEvidenceSanitizer() {
+  const mask = "[REDACTED]";
+  const secretName = /authorization|cookie|password|passwd|(?:^|[_-])pwd(?:$|[_-])|token|secret|credentials?|private[_-]?key|(?:^session$|session[_-]?(?:id|ticket)$)|api[_-]?key|digest|signature|saml|assertion|(?:^|[_-])auth(?:$|[_-]|entication)|auth[_-]?(?:data|value|challenge|response)|^challenge$/i;
+  const secretParam = /([?&#;](?:tempauth|access_token|id_token|refresh_token|token|code|client_secret|samlrequest|samlresponse|sig|signature|x-amz-signature|x-amz-credential|x-amz-security-token|password|pwd|passwd|api_key|apikey|key|secret|session|sessionid|auth|assertion)=)[^&#\s"']*/gi;
+  function text(value) {
+    return value
+      .replace(/(\/\/[^/:@\s]+:)[^@/\s]+@/g, "$1" + mask + "@")
+      .replace(secretParam, "$1" + mask)
+      .replace(/((?:--?)(?:access[-_]?token|auth[-_]?token|refresh[-_]?token|id[-_]?token|token|auth(?:orization)?|password|passwd|pwd|secret|api[-_]?key|cookie|session|credential)(?:=|\s+))(?:(?:"[^"]*")|(?:'[^']*')|\S+)/gi, "$1" + mask)
+      .replace(/\b(Bearer|Basic|Negotiate|NTLM)\s+[A-Za-z0-9+/_=.-]+/gi, "$1 " + mask)
+      .replace(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g, mask)
+      .split(/\r?\n/).map(line => {
+        const colon = line.indexOf(":", line.startsWith(":") ? 1 : 0);
+        return colon >= 0 && secretName.test(line.slice(0, colon).trim()) ? line.slice(0, colon + 1) + " " + mask : line;
+      }).join("\n");
+  }
+  function sanitize(value, key = "", enumMap = false) {
+    // Recorded enum dictionaries and explicit counters are metadata. A numeric
+    // password or token value is still a credential and must be removed.
+    const enumContainer = /^(?:logEventTypes|logSourceType|logEventPhase|netError|loadFlag|loadState|certStatusFlag|certVerifierFlags|certVerifyFlags|certPathBuilderDigestPolicy|addressFamily|dnsQueryType|secureDnsMode|logCaptureMode|quicError|quicRstStreamError)$/i.test(key);
+    const metadata = enumMap || /(?:count|length|size|enabled|disabled|present|available|supported|digest_policy)$/i.test(key);
+    if (!enumContainer && secretName.test(key) && value != null && typeof value !== "boolean" && !(metadata && typeof value === "number")) return mask;
+    if (/^(?:bytes|hex_encoded_bytes|raw_bytes|payload|body|request_body|response_body|server_info)$/i.test(key) && value != null) return "[Payload omitted: may contain credentials]";
+    if (typeof value === "string") return text(value);
+    if (Array.isArray(value)) return value.map(item => sanitize(item, key, enumMap));
+    if (value && typeof value === "object") {
+      const namedSecret = [value.name, value.header, value.header_name, value.headerName, value.key]
+        .some(name => typeof name === "string" && secretName.test(name));
+      return Object.fromEntries(Object.entries(value).map(([name, item]) => [
+        name,
+        namedSecret && /^(value|values|header_value|headerValue)$/i.test(name) ? mask : sanitize(item, name, enumMap || enumContainer)
+      ]));
+    }
+    return value;
+  }
+  return sanitize;
 }

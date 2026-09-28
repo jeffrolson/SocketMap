@@ -16,7 +16,19 @@ import { createNetLogAnalyzer } from "./netlog-analyzer.mjs";
  * @param {{ filter?: string }} options  filter: regex matched against URL or method
  */
 export async function parseNetLog(filePath, options = {}) {
+  const first = await parseOnce(filePath, options);
+  // A NetLog normally declares constants first. If it does not, the first pass
+  // deliberately records that condition instead of buffering every event. A
+  // second stream can then decode events with the recorded constants.
+  if (first.diagnostics?.constantsLate || first.constantsLate) {
+    return parseOnce(filePath, options, first.diagnostics?.constants ?? first.constants);
+  }
+  return first;
+}
+
+async function parseOnce(filePath, options, constants) {
   const analyzer = createNetLogAnalyzer({ filter: options.filter });
+  if (constants) analyzer.setTopLevel("constants", constants);
   const tokenizer = createNetLogTokenizer({
     onTopLevel: analyzer.setTopLevel,
     onEvent: analyzer.addEvent
@@ -28,7 +40,7 @@ export async function parseNetLog(filePath, options = {}) {
     stream.on("end", resolve);
     stream.on("error", reject);
   });
-  tokenizer.end();
+  analyzer.setTopLevel("captureIntegrity", tokenizer.end());
 
   return analyzer.finish();
 }
