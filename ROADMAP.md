@@ -32,9 +32,9 @@ Queued, priority-ordered.
 ## Later (this quarter)
 Planned but not scheduled.
 
-- Policy tab follow-ups: confirm against a real managed Chrome export and an Edge export (the
-  managed per-policy fields are taken from Chromium's source and tested, Edge's metadata keys
-  are inferred, and the only real export seen was unmanaged); grow the
+- Policy tab follow-ups: confirm against an Edge export (Edge's keys are inferred; a managed Chrome 134 export
+  and an unmanaged Chrome 153 export are confirmed, and the two use different top-level
+  keys, so Edge may differ too); grow the
   catalog only from vendor pages, keep the review date current, run `npm run
   check:policy-links` before each release (added 2026-09-29)
 - Performance profile follow-ups: alignment is validated on one real same-session pair
@@ -65,11 +65,11 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-29: Policy tab reads Chrome 134's policyGroups exports (0.12.1)
 - 2026-09-29: Policy tab reports what a managed browser flags per policy (ignored, deprecated, future, overridden, restart needed), shape checked against Chromium's exporter (0.12.0)
 - 2026-09-29: Profile alignment validated on a real same-session NetLog and trace pair; profile now finds the page when blank or internal tabs navigate after it (0.11.1)
 - 2026-09-29: Optional Performance profile: what the page's code was doing (long tasks, scripts by main-thread time, paint milestones, waterfall main-thread band), aligned to the NetLog by shared requests (0.11.0)
 - 2026-09-29: Optional HAR alongside the NetLog: initiators, resource types, cache and service worker answers, load milestones; redaction by parameter name pattern (0.10.0)
-- 2026-09-29: Policy tab: optional chrome://policy or edge://policy export checked against a dated, vendor-linked catalog (0.9.0)
 - 2026-09-26: Design system from DESIGN.md, company theming, tabbed report, filters, HTML sequence view with docked inspector
 - 2026-09-26: Drag-and-drop viewer that builds the report in the browser
 - 2026-09-26: Truthful NetLog troubleshooting report (streaming parser, ratings, findings, plain-language explanations)

@@ -25,7 +25,7 @@ import { buildPolicyEvidence } from "../policy/engine.mjs";
 import { renderServerInsights, renderServerDetail, renderServerMark, serverInsightsCss } from "./server-insights.mjs";
 import { eventReplayMarkup, eventReplayScript } from "../viewer/event-replay.mjs";
 
-const VERSION = "0.12.0";
+const VERSION = "0.12.1";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const MAX_SEQUENCE_HOSTS = 8;
 const MAX_SEQUENCE_REQUESTS = 1000; // display limit for the sequence view only; the waterfall shows every request

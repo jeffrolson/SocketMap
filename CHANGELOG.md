@@ -3,6 +3,12 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-09-29
+### Fixed
+- **Policy tab rejected exports from Chrome 134 and earlier** with "does not look like a browser policy export". Those versions write the policy list under `policyGroups`; newer Chrome writes `policyValues`. Both are read now, with the same structure.
+- When a file is not recognized, the message now lists the file's top-level section names (never values), so the cause is visible.
+- Confirmed from a real cloud-managed Chrome 134 export on macOS: per-policy `level`, `scope`, `source`, `value`, and `error` fields, and an enrollment token value that is redacted (policy names containing "token" are treated as secrets).
+
 ## [0.12.0] - 2026-09-29
 ### Added
 - **Policy tab reads what a managed browser adds to each policy.** Chrome and Edge exports from a managed machine carry per-policy flags an unmanaged export lacks. The tab now reports, in the browser's own words and labeled "Browser reported": a policy that is **ignored** (set but not in effect), one the browser flags as **deprecated** or as a **future** policy, an **info** message, a value that **overrides** or is **superseded by** other sources, and a **restart needed** notice. A deprecation the catalog already explains is not repeated.
