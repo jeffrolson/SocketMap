@@ -194,6 +194,7 @@ You get:
 
 - **What is set:** the policies that shape the network path (proxy and PAC, QUIC, DNS, prediction, certificate revocation, connection limits, caching, background running), each value in plain words, and where it comes from.
 - **Deprecated in use:** policies the vendor has retired, with the replacement.
+- **Browser reported:** what the browser itself says about a policy in the export: errors and warnings, ignored (set but not in effect), deprecated or future, overridden or superseded by another source, restart needed.
 - **Cross-checks:** where a policy and this capture disagree, for example QUIC blocked by policy while the capture used HTTP/3. The export may be from another machine or time.
 - **Worth considering:** suggestions that appear only when this capture gives evidence, such as a slow proxy lookup. They are things to test, not instructions.
 

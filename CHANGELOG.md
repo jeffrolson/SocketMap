@@ -3,6 +3,15 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-09-29
+### Added
+- **Policy tab reads what a managed browser adds to each policy.** Chrome and Edge exports from a managed machine carry per-policy flags an unmanaged export lacks. The tab now reports, in the browser's own words and labeled "Browser reported": a policy that is **ignored** (set but not in effect), one the browser flags as **deprecated** or as a **future** policy, an **info** message, a value that **overrides** or is **superseded by** other sources, and a **restart needed** notice. A deprecation the catalog already explains is not repeated.
+
+### Validated
+- The managed export shape was checked against Chromium's own export code (`policy_conversions_client.cc`, `json_generation.cc`), not guessed: `policyValues`, `chromeMetadata` (application, version, OS, revision) and `status`; per policy `value`, `scope`, `level`, `source`, and the optional flags above; extension policies under their extension ids. Tests use that shape.
+- Edge: Microsoft documents the Export to JSON button on `edge://policy` but not the file's schema. Edge shares Chromium's exporter and the tab identifies it by the product name the browser writes ("Microsoft Edge"), so it should read the same way; that is an inference until a real Edge export is seen.
+- All policy links in the catalog resolve.
+
 ## [0.11.1] - 2026-09-29
 ### Fixed
 - **A Performance profile now finds the page when other tabs navigate after it.** A profile recorded from a session that later touched blank tabs, `chrome://` pages or extension pages picked one of those as "the page", so the profile showed nothing and was not placed on the timeline. The page is now the last navigation to a web (`http` or `https`) document.
