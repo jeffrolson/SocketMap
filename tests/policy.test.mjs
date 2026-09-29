@@ -106,6 +106,44 @@ describe("errors and warnings the browser reports", () => {
   });
 });
 
+// Shapes taken from Chromium's own export code (policy_conversions_client.cc, json_generation.cc):
+// a managed browser adds ignored, deprecated, future, info, restartRequired, conflicts and superseded.
+describe("what a managed browser adds to each policy", () => {
+  const managed = {
+    ProxyMode: entry("pac_script", { source: "cloud", allSourcesMerged: true }),
+    ProxyPacUrl: entry("http://wpad.corp.example.com/proxy.pac", { conflicts: [entry("http://old.corp.example.com/p.pac", { source: "platform" })] }),
+    MaxConnectionsPerProxy: entry(32, { superseded: [entry(16, { level: "recommended", scope: "user" })], restartRequired: true }),
+    DnsOverHttpsMode: entry("off", { ignored: true, info: "Set by an older platform policy" }),
+    SomeRetiredPolicy: entry(true, { deprecated: true }),
+    SomeFuturePolicy: entry(true, { future: true })
+  };
+  const texts = (result) => result.notes.filter(n => n.kind === "reported").map(n => `${n.name}: ${n.text}`);
+  it("reports each flag once, as the browser's statement rather than a judgment", () => {
+    const list = texts(evaluate(managed));
+    for (const expected of [/DnsOverHttpsMode: .*ignored/, /DnsOverHttpsMode: .*older platform policy/, /SomeRetiredPolicy: .*deprecated/, /SomeFuturePolicy: .*future/, /ProxyPacUrl: .*overrides 1/, /MaxConnectionsPerProxy: .*supersedes 1 other value/, /MaxConnectionsPerProxy: .*restart/]) {
+      assert.equal(list.filter(t => expected.test(t)).length, 1, String(expected));
+    }
+    assert.equal(list.filter(t => /^ProxyMode:/.test(t)).length, 0, "a cleanly merged policy adds no note");
+  });
+  it("does not repeat a deprecation the catalog already explains", () => {
+    const result = evaluate({ ProxyMode: entry("pac_script", { deprecated: true }) });
+    assert.ok(result.deprecated.some(d => d.name === "ProxyMode"), "the catalog marks it deprecated");
+    assert.equal(texts(result).filter(t => /^ProxyMode: .*deprecated/.test(t)).length, 0, "no second note");
+  });
+  it("reads an Edge export the same way, by the product name the browser writes", () => {
+    const result = evaluate(managed, {}, "Microsoft Edge");
+    assert.equal(result.browser, "edge");
+    assert.equal(result.meta.application, "Microsoft Edge");
+    assert.ok(result.rows.length >= 3);
+  });
+  it("finds extension policies under their own extension ids and counts them as browser policies", () => {
+    const input = chromeExport({ ProxyMode: entry("system") });
+    input.policyValues.extensions = { abcdefghijklmnopabcdefghijklmnop: { name: "Example extension", policies: { ExamplePolicy: entry("x") } } };
+    const norm = engine.normalize(input);
+    assert.ok(norm.policies.some(p => p.name === "ExamplePolicy" && p.section === "extensions"));
+  });
+});
+
 describe("whose documentation a statement comes from", () => {
   it("says so when the paraphrase came from the other browser's page", () => {
     const edgeRows = evaluate({ EnableOnlineRevocationChecks: entry(true) }, {}, "Microsoft Edge").rows;

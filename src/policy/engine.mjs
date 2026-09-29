@@ -49,7 +49,7 @@ export function createPolicyEngine(sanitize) {
         const raw = dict[name];
         const shaped = raw && typeof raw === "object" && !Array.isArray(raw) && ("value" in raw || "level" in raw || "scope" in raw || "source" in raw);
         const entry = shaped ? raw : { value: raw };
-        policies.push({ name, section, level: entry.level ?? null, scope: entry.scope ?? null, source: entry.source ?? null, value: sanitize(entry.value, name), error: entry.error ?? null, warning: entry.warning ?? null });
+        policies.push({ name, section, level: entry.level ?? null, scope: entry.scope ?? null, source: entry.source ?? null, value: sanitize(entry.value, name), error: entry.error ?? null, warning: entry.warning ?? null, info: entry.info ?? null, ignored: entry.ignored === true, flaggedDeprecated: entry.deprecated === true, flaggedFuture: entry.future === true, restartRequired: entry.restartRequired === true, overrides: Array.isArray(entry.conflicts) ? entry.conflicts.length : 0, supersedes: Array.isArray(entry.superseded) ? entry.superseded.length : 0 });
       }
     }
     let recognized = false;
@@ -110,6 +110,13 @@ export function createPolicyEngine(sanitize) {
     for (const p of browserPolicies) {
       if (p.error) notes.push({ kind: "reported", name: p.name, text: `The browser reports an error: ${show(p.error)}` });
       if (p.warning) notes.push({ kind: "reported", name: p.name, text: `The browser reports a warning: ${show(p.warning)}` });
+      if (p.info) notes.push({ kind: "reported", name: p.name, text: `The browser reports: ${show(p.info)}` });
+      if (p.ignored) notes.push({ kind: "reported", name: p.name, text: "The browser marks this policy as ignored, so it is set but not in effect." });
+      if (p.flaggedDeprecated && !deprecated.some(d => d.name.toLowerCase() === p.name.toLowerCase())) notes.push({ kind: "reported", name: p.name, text: "The browser flags this policy as deprecated." });
+      if (p.flaggedFuture) notes.push({ kind: "reported", name: p.name, text: "The browser flags this policy as not yet in effect for this version (a future policy)." });
+      if (p.overrides) notes.push({ kind: "reported", name: p.name, text: `Another source also sets this policy and this value overrides ${p.overrides} of them (${plural(p.overrides, "conflict", "conflicts")} in the export).` });
+      if (p.supersedes) notes.push({ kind: "reported", name: p.name, text: `A higher-precedence source supersedes ${p.supersedes} other ${plural(p.supersedes, "value", "values")} for this policy.` });
+      if (p.restartRequired) notes.push({ kind: "reported", name: p.name, text: "The browser reports that a restart is needed before this value takes effect." });
     }
     const other = browserPolicies.filter(p => !known.has(p.name.toLowerCase()));
     return {
