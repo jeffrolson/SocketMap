@@ -3,6 +3,17 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-09-29
+### Added
+- **Optional HAR alongside the NetLog.** Record a HAR at the same time (DevTools, Network tab, Export HAR sanitized) and add it in the viewer (drop it with the NetLog, or use **Add a HAR** once the report opens) or on the command line with `--har`. Requests match by method and URL, pairing repeated URLs by the nearest start time on the shared wall clock. On a real pair, 29 of 30 entries matched and starts agreed to a median of 1 ms.
+- **What the page is made of:** an Overview panel with the join quality, resource types sized by bytes, the scripts and the HTML parser that requested the most, and the answers that never reached the network log (memory cache, disk cache, service worker). A request's detail says what requested it and how it was answered; the waterfall shows each request's type and dashed lines for DOMContentLoaded and load.
+- Coverage: with a HAR, "Which script started a request", "Cache result" and a new "Type of each request" row are measured, and load milestones make "Rendering" partial. The tool comparison says SocketMap reads a HAR as an optional second file.
+- The HAR is read as a stream, one entry at a time. Response bodies, headers, cookies and page titles are never read or kept; URLs are redacted. A 4.6 MB HAR with bodies reduces to about 33 KB.
+- With a HAR loaded, the default page is the one the HAR describes. The AI summary gains a labeled HAR section. "Try the sample capture" includes a made-up HAR.
+
+### Fixed
+- URL parameter redaction now matches by name pattern instead of an exact list, so `session_id`, `sessionToken`, `csrf_token`, `auth_token` and similar variants are masked everywhere they appeared, including the Diagnostics tables and search text. Ordinary parameters are untouched.
+
 ## [0.9.0] - 2026-09-29
 ### Added
 - **Policy tab:** an optional upload area for a `chrome://policy` or `edge://policy` JSON export. It lists the policies that shape the network path (proxy and PAC, QUIC, DNS, prediction, certificate revocation, connection limits, caching, background running) with each value in plain words, flags policies the vendor has deprecated with their replacement, notes a documented override (Chrome: `ProxyMode` is ignored when `ProxySettings` is set), cross-checks a policy against the capture (for example QUIC blocked by policy while the capture used HTTP/3), and suggests policies worth considering only when this capture provides evidence. The export is read in the page only, secrets are removed, and nothing is uploaded or saved into the report. Every entry links to its Chrome Enterprise or Microsoft Edge documentation page and is labeled **Documented** (paraphrased from the vendor) or **SocketMap guidance** (our judgment), with a note when the paraphrase came from the other browser's page. Policies outside the catalog are counted, not judged. The catalog carries a review date. `npm run check:policy-links` confirms every vendor link still resolves. Policies that report an error or warning in the export are surfaced as "Browser reported". Validated so far against unmanaged Chrome exports and synthetic data; managed-device and Edge exports are expected to work but are not yet confirmed.

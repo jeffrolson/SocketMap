@@ -26,6 +26,14 @@ SocketMap reads a **NetLog**: Chrome's and Edge's own detailed record of network
 5. In another tab, load the page, or perform the action you want to understand (open the document, sign in, click the button).
 6. Wait until the page finishes, then go back to the net-export tab and click **Stop Logging**.
 
+**Optional: record a HAR at the same time.** A HAR adds what a NetLog cannot show: which script or the HTML parser asked for each request, each request's type (script, stylesheet, image, font), and which answers came from the cache or a service worker.
+
+1. Before you load the page, open DevTools (F12) and choose the **Network** tab.
+2. Load the page or run the action while the NetLog is logging.
+3. In the Network tab, choose **Export HAR (sanitized)** (the download arrow) and save the file.
+
+Drop it with the NetLog, or click **Add a HAR** once the report opens. From the command line, add `--har network.har`. SocketMap reads the HAR as a stream and never reads response bodies, headers or cookies. It is never uploaded.
+
 **Capture twice when you can.** Repeat the same page or action from two places (office and home, VPN on and off, your machine and a colleague's). The comparison shows what changed; a controlled follow-up test helps establish the cause.
 
 ## 2. Open the report
@@ -82,6 +90,12 @@ The report is one HTML file with six tabs down the left side (across the top on 
 | Server response (median wait) | Under 200 ms | 200 to 500 ms | 500 ms to 1 s | Over 1 s |
 
 "Not recorded" means the capture did not contain that value, for example certificate details for a connection that was already open before the capture started. SocketMap never guesses.
+
+### What the page is made of (with a HAR)
+
+Only shown when you add a HAR. It reports how well the HAR joined to the NetLog (entries matched, and how closely the two files' clocks agree), the page by resource type sized by bytes, who asked for what (the HTML parser, scripts by the file at the top of the call stack, the browser itself), and the answers that never reached the network log (memory cache, disk cache, service worker). Entries in the HAR with no NetLog request are explained: redirect steps, cache and service worker answers, or not in the NetLog.
+
+Open a request in the waterfall for **From the HAR**: its type, what requested it and how it was answered. The waterfall marks each request's type and draws dashed lines for DOMContentLoaded and load. Paint, LCP and layout shift are not in a HAR. Requests match by method and URL, pairing repeated URLs by nearest start time, so a request the HAR recorded but the NetLog did not is shown, not forced into a match.
 
 ### What the servers said
 

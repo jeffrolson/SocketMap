@@ -32,6 +32,9 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/diagnostic-insights.mjs` | Evidence-based next checks and bounded diagnostic AI handoff | Node.js or browser |
 | `src/server-insights.mjs` | Reads Server-Timing, CDN and cache headers, timing-like headers and request IDs from recorded response headers; rolls them up per page | Node.js or browser |
 | `src/renderer/server-insights.mjs` | Overview panel, per-request block and waterfall marker for server-reported evidence (HTML and CSS only) | Node.js or browser |
+| `src/parsers/har-stream.mjs` | Streaming HAR tokenizer and per-entry summary: whitelists fields, drops bodies, headers, cookies and titles, redacts URLs | Node.js or browser |
+| `src/enrichment.mjs` | Joins a summarized HAR to the capture model: nearest-start pairing, alignment quality, resource types, requesters, cache answers, load milestones | Node.js or browser |
+| `src/renderer/enrichment.mjs` | HAR Overview panel, per-request block, waterfall type chips and milestone lines | Node.js or browser |
 | `src/policy/catalog.mjs` | Curated, dated catalog of network and page-load policies, each with its vendor page per browser, status, paraphrased documentation and evidence-gated suggestions | Node.js or browser |
 | `src/policy/engine.mjs` | Reads a policy export, matches it to the catalog, flags deprecated policies, cross-checks against the capture, renders results. Self-contained so the report embeds the same code | Node.js or browser |
 | `src/renderer/policy.mjs` | Policy tab shell, upload area and the in-page script that embeds the engine | Node.js or browser |
@@ -111,6 +114,8 @@ HAR or generic JSON, end to end:
 - The sequence diagram in the report has display limits (`MAX_SEQUENCE_HOSTS`, `MAX_SEQUENCE_REQUESTS` in `report.html.mjs`). The waterfall and analysis always include every request.
 - Chromium NetLog event types and source types are often numeric IDs mapped to strings via `constants.logEventTypes` and `constants.logSourceType`. The parser dynamically inverts these constants to resolve event names regardless of numeric assignment across Chrome versions.
 - All SVG filters and markers are encapsulated inside `<defs>` with unique IDs. Text elements use `paint-order: stroke` to create an outline buffer, ensuring arrow labels remain legible when crossing lifelines and grid dots.
+
+- The HAR is an optional enrichment, never a second source of truth. `attachHar` sets `model.enrichment`; every view reads it from there, and absent data stays absent. Requests join on method plus redacted URL, pairing repeated URLs by nearest start on the wall clock (NetLog `captureStartedAt` plus request start against the HAR `startedDateTime`); a HAR entry with no partner stays unmatched and is explained (redirect step, cache, service worker). URLs are kept whole for matching because login URLs are long.
 
 ## Key decisions
 

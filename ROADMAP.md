@@ -33,11 +33,6 @@ Queued, priority-ordered.
 - Bring the HAR diagram up to the "only real values" rule, or route HAR files into the report
 - SharePoint's own timing headers: confirm names and meaning in a real SharePoint capture,
   then interpret them (until then they appear raw under "Other timing headers")
-- Optional HAR alongside the NetLog: which script started each request, resource type,
-  memory, disk and service worker cache flags, DOMContentLoaded and load milestones, and a
-  join panel showing matched and unmatched requests. Streams one entry at a time, keeps only
-  whitelisted fields, ignores bodies. Needs a real NetLog and sanitized HAR pair
-  (added 2026-09-28)
 
 ## Later (this quarter)
 Planned but not scheduled.
@@ -75,6 +70,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-29: Optional HAR alongside the NetLog: initiators, resource types, cache and service worker answers, load milestones; redaction by parameter name pattern (0.10.0)
 - 2026-09-29: Policy tab: optional chrome://policy or edge://policy export checked against a dated, vendor-linked catalog (0.9.0)
 - 2026-09-29: "What the servers said": Server-Timing, CDN and cache headers, timing-like headers and request IDs from response headers already in the capture (0.8.0)
 - 2026-09-26: Viewer start page explains SocketMap, with a sample capture; README and user guide rewritten; Windows support
