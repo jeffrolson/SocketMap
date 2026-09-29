@@ -4,7 +4,7 @@ Forward plan. Dated entries. Reorder as priorities shift. Shipped items move
 to `CHANGELOG.md`.
 
 Direction (set 2026-09-28): SocketMap provides data-driven insights into a page load,
-using visualizations and recorded evidence to inform decisions (first target: M365 SharePoint and Office web apps). The
+using visualizations and recorded evidence to inform decisions (audience: enterprise IT staff diagnosing slow page loads). The
 capture is `chrome://net-export` or `edge://net-export`. Reports are self-contained
 HTML anyone can open. Redaction strips secrets (passwords, auth headers, cookies,
 tokens) and keeps everything else, including IPs. Real captures never enter the repo.
@@ -21,9 +21,6 @@ Actively being built.
 
 - Try SocketMap on Windows and with colleagues; collect what confuses people.
 - Two-capture comparison (shipped in 0.7.0): validate with real user workflows.
-- Phase 2: Microsoft 365 detectors (TLS inspection via certificate issuer, proxy and PAC
-  cost, QUIC fallback, localhost calls, sign-in redirect chains, embedded Microsoft 365
-  endpoint list). Needs a real SharePoint capture from work.
 
 ## Next (2 to 4 weeks)
 Queued, priority-ordered.
@@ -31,8 +28,6 @@ Queued, priority-ordered.
 - Merge the viewer's toolbar into the report header
 - From the design mockup: timeline slider with problem markers; export the sequence as an image
 - Bring the HAR diagram up to the "only real values" rule, or route HAR files into the report
-- SharePoint's own timing headers: confirm names and meaning in a real SharePoint capture,
-  then interpret them (until then they appear raw under "Other timing headers")
 
 ## Later (this quarter)
 Planned but not scheduled.
@@ -62,7 +57,6 @@ Ideas, deferred features, nice-to-haves. No commitment.
 - Lighthouse JSON import: scored audit summary by script, render blockers, main-thread work
 - `chrome://webrtc-internals` JSON dump import for Teams call quality (loss, jitter, round
   trip, TURN relay); only if Teams quality comes into scope
-- Microsoft 365 connectivity test results import; check the export format first
 - Guided paste for pages that only copy or screenshot: `chrome://gpu` (hardware
   acceleration on VDI and older machines) and `chrome://extensions` (installed extensions)
 - Windows `netsh trace` and `curl` timing output, probably through the capture helper
