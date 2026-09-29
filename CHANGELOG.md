@@ -3,6 +3,17 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-09-29
+### Added
+- **Optional Performance profile.** Record a DevTools Performance profile while reloading the page, alongside the NetLog, and add it in the viewer (drop it with the NetLog, or **Add a profile** once the report opens) or with `--profile` on the command line. `.json` and `.json.gz` both work. The report shows what the page's code and rendering were doing, which a NetLog cannot.
+- **What the page's code was doing:** an Overview panel with how busy the main thread was until load, the long tasks (over 50 ms) and time beyond that threshold, first and largest contentful paint, DOMContentLoaded, load and layout shift, where main-thread time went (scripting, layout, paint, parsing), scripts ranked by main-thread time (nested calls counted once), and the longest tasks with the scripts inside them and how many requests were in flight.
+- **Waterfall:** a "Main thread (profile)" band shows how busy the page was across the timeline, with long tasks outlined, plus dashed lines for first and largest contentful paint, DOMContentLoaded and load.
+- A finding, **The page's own code kept the main thread busy**, when long tasks add up to 200 ms or more beyond the 50 ms threshold. It is worded as consistent with the delay being work on the computer, not proof of which script is at fault.
+- Coverage: "JavaScript execution and long tasks" is measured, "Rendering" and "Machine" become partial (paint, LCP and layout shift, and core count and memory; INP and machine load stay unrecorded), and the profile's request initiator stacks feed "Which script started a request". The AI summary gains a labeled section.
+- The profile is read as a stream, keeping only the page's main thread. Screenshots, source text, command lines and DOM node names are never kept, and URLs are redacted. A 60 MB profile with 175,000 events reduces to about 63 KB in under half a second.
+- A profile's clock is not the NetLog's, so the two are aligned from the requests both recorded. If no request appears in both files, the profile is still shown but is not placed on the timeline, and the report says so.
+- Validated against two genuinely recorded Chrome traces (a Wikipedia article and CNN): the reader reproduces DevTools' own largest contentful paint exactly (485 ms and 267 ms), and the busy-until-load figure was recomputed independently from the raw events. Alignment with a real NetLog has so far been tested on synthetic pairs only.
+
 ## [0.10.0] - 2026-09-29
 ### Added
 - **Optional HAR alongside the NetLog.** Record a HAR at the same time (DevTools, Network tab, Export HAR sanitized) and add it in the viewer (drop it with the NetLog, or use **Add a HAR** once the report opens) or on the command line with `--har`. Requests match by method and URL, pairing repeated URLs by the nearest start time on the shared wall clock. On a real pair, 29 of 30 entries matched and starts agreed to a median of 1 ms.

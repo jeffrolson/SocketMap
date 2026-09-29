@@ -32,6 +32,9 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/diagnostic-insights.mjs` | Evidence-based next checks and bounded diagnostic AI handoff | Node.js or browser |
 | `src/server-insights.mjs` | Reads Server-Timing, CDN and cache headers, timing-like headers and request IDs from recorded response headers; rolls them up per page | Node.js or browser |
 | `src/renderer/server-insights.mjs` | Overview panel, per-request block and waterfall marker for server-reported evidence (HTML and CSS only) | Node.js or browser |
+| `src/parsers/trace-stream.mjs` | Streaming Chrome trace reader: main thread only, long tasks, script time by union of nested events, paint and layout-shift markers, page requests; drops screenshots, source text, command lines and node names | Node.js or browser |
+| `src/profile.mjs` | Aligns a profile to the NetLog from shared requests (median start difference) and places long tasks, activity bins and milestones on the NetLog timeline | Node.js or browser |
+| `src/renderer/profile.mjs` | Profile Overview panel, waterfall main-thread band and per-request block | Node.js or browser |
 | `src/parsers/har-stream.mjs` | Streaming HAR tokenizer and per-entry summary: whitelists fields, drops bodies, headers, cookies and titles, redacts URLs | Node.js or browser |
 | `src/enrichment.mjs` | Joins a summarized HAR to the capture model: nearest-start pairing, alignment quality, resource types, requesters, cache answers, load milestones | Node.js or browser |
 | `src/renderer/enrichment.mjs` | HAR Overview panel, per-request block, waterfall type chips and milestone lines | Node.js or browser |
@@ -116,6 +119,8 @@ HAR or generic JSON, end to end:
 - All SVG filters and markers are encapsulated inside `<defs>` with unique IDs. Text elements use `paint-order: stroke` to create an outline buffer, ensuring arrow labels remain legible when crossing lifelines and grid dots.
 
 - The HAR is an optional enrichment, never a second source of truth. `attachHar` sets `model.enrichment`; every view reads it from there, and absent data stays absent. Requests join on method plus redacted URL, pairing repeated URLs by nearest start on the wall clock (NetLog `captureStartedAt` plus request start against the HAR `startedDateTime`); a HAR entry with no partner stays unmatched and is explained (redirect step, cache, service worker). URLs are kept whole for matching because login URLs are long.
+
+- A Performance profile is aligned by requests, not by an assumed clock. Chrome traces use the browser's monotonic clock (`clock-domain` in the metadata), which is not the NetLog's wall-clock base, so `joinProfile` pairs requests both files recorded (method plus redacted URL, in time order) and uses the median difference in start time as the offset. The trace's `ResourceSendRequest` precedes the network stack's start by a small, consistent amount, which the offset absorbs. Only events that name the page's own frame count for milestones (frameless and other-frame events are not the page). Busy time counts top-level `RunTask` durations on the page's main thread; script time is the union of `EvaluateScript`, `FunctionCall` and `v8.compile` intervals so nesting is not double counted.
 
 ## Key decisions
 

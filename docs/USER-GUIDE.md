@@ -34,6 +34,14 @@ SocketMap reads a **NetLog**: Chrome's and Edge's own detailed record of network
 
 Drop it with the NetLog, or click **Add a HAR** once the report opens. From the command line, add `--har network.har`. SocketMap reads the HAR as a stream and never reads response bodies, headers or cookies. It is never uploaded.
 
+**Optional: record a Performance profile at the same time.** A profile adds what neither a NetLog nor a HAR can show: what the page's own code and rendering were doing, so a slow load can be split into waiting on the network and working on the computer.
+
+1. Before you load the page, open DevTools (F12) and choose the **Performance** tab.
+2. With the NetLog logging, click **Record and reload** and wait for the recording to stop.
+3. Choose **Save profile** (the download arrow). It saves a `.json` file, or `.json.gz` if compressed.
+
+Drop it with the NetLog, or click **Add a profile** once the report opens. From the command line, add `--profile trace.json.gz`. Record it during the same page load as the NetLog: SocketMap lines the two up from the requests both recorded, so at least one request must appear in both. SocketMap keeps only the page's main thread and never keeps screenshots or source text. It is never uploaded.
+
 **Capture twice when you can.** Repeat the same page or action from two places (office and home, VPN on and off, your machine and a colleague's). The comparison shows what changed; a controlled follow-up test helps establish the cause.
 
 ## 2. Open the report
@@ -90,6 +98,14 @@ The report is one HTML file with six tabs down the left side (across the top on 
 | Server response (median wait) | Under 200 ms | 200 to 500 ms | 500 ms to 1 s | Over 1 s |
 
 "Not recorded" means the capture did not contain that value, for example certificate details for a connection that was already open before the capture started. SocketMap never guesses.
+
+### What the page's code was doing (with a profile)
+
+Only shown when you add a Performance profile. It reports how busy the page's main thread was until load, the long tasks (over 50 ms) and the time beyond that threshold, first and largest contentful paint, DOMContentLoaded, load and layout shift, where main-thread time went (scripting, layout and style, paint, parsing), scripts ranked by main-thread time (nested calls are counted once), and the longest tasks with the scripts inside them and how many requests were in flight.
+
+On the waterfall, the **Main thread (profile)** row shows how busy the page was across the timeline, with long tasks outlined, and dashed lines mark first and largest contentful paint, DOMContentLoaded and load. This is what turns an unexplained quiet stretch in the waterfall into "the page was working": if the network is idle while the main thread is busy, the wait is on the computer.
+
+Read it as evidence, not proof: a script started by another script can be attributed to the wrong file, and responsiveness (INP) needs a real interaction and is not in a load profile. The finding **The page's own code kept the main thread busy** is worded as consistent with, not a diagnosis. If no request appears in both files the profile is shown but not placed on the timeline, and the panel says so.
 
 ### What the page is made of (with a HAR)
 

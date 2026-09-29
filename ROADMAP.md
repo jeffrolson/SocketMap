@@ -42,9 +42,9 @@ Planned but not scheduled.
   policy `error` and `warning` fields and Edge's metadata keys are unconfirmed); grow the
   catalog only from vendor pages, keep the review date current, run `npm run
   check:policy-links` before each release (added 2026-09-29)
-- Optional Performance profile from DevTools: main-thread busy bands on the waterfall,
-  slowest scripts, paint and layout timings, and request initiators. Streams the trace and
-  keeps only bounded aggregates; screenshots dropped, URLs redacted (added 2026-09-28)
+- Performance profile follow-ups: validate alignment on a real NetLog and profile pair
+  recorded together (so far tested on synthetic pairs and on two real traces by themselves);
+  CPU profile (`.cpuprofile`) and Lighthouse JSON as further optional files (added 2026-09-29)
 - Phase 4: capture helper script (Windows PowerShell and macOS shell) that records
   machine name, public IP and a TCP traceroute to the slowest hosts, plus adapter, DNS,
   proxy and PAC facts, saved as a small file the report can load. Fills the "Network path"
@@ -70,6 +70,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-29: Optional Performance profile: what the page's code was doing (long tasks, scripts by main-thread time, paint milestones, waterfall main-thread band), aligned to the NetLog by shared requests (0.11.0)
 - 2026-09-29: Optional HAR alongside the NetLog: initiators, resource types, cache and service worker answers, load milestones; redaction by parameter name pattern (0.10.0)
 - 2026-09-29: Policy tab: optional chrome://policy or edge://policy export checked against a dated, vendor-linked catalog (0.9.0)
 - 2026-09-29: "What the servers said": Server-Timing, CDN and cache headers, timing-like headers and request IDs from response headers already in the capture (0.8.0)
