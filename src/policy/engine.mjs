@@ -37,7 +37,9 @@ export function createPolicyEngine(sanitize) {
   }
 
   function normalize(input) {
-    const fail = { ok: false, reason: "This does not look like a browser policy export. In the browser, open chrome://policy or edge://policy and choose Export to JSON." };
+    const base = "This does not look like a browser policy export. In the browser, open chrome://policy or edge://policy and choose Export to JSON.";
+    const keys = input && typeof input === "object" && !Array.isArray(input) ? Object.keys(input).slice(0, 8).map(k => k.replace(/[^\w .-]/g, "").slice(0, 40)).filter(Boolean) : [];
+    const fail = { ok: false, reason: keys.length ? `${base} The file's top-level sections are: ${keys.join(", ")}.` : base };
     if (!input || typeof input !== "object" || Array.isArray(input)) return fail;
     const source = input.chromeMetadata || input.edgeMetadata || input.metadata || {};
     const application = String(source.application || "");
@@ -53,7 +55,8 @@ export function createPolicyEngine(sanitize) {
       }
     }
     let recognized = false;
-    const values = input.policyValues;
+    // Newer Chrome writes policyValues; Chrome 134 and earlier wrote the same structure as policyGroups.
+    const values = input.policyValues || input.policyGroups;
     if (values && typeof values === "object" && !Array.isArray(values)) {
       recognized = true;
       for (const key of Object.keys(values)) {

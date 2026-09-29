@@ -52,6 +52,37 @@ describe("policy export reader", () => {
   });
 });
 
+describe("older Chrome exports", () => {
+  // Chrome 134 (real export, shape only) wrote the policy list as policyGroups, not policyValues.
+  const older = () => {
+    const input = chromeExport({
+      AuthServerAllowlist: entry("*.test.example.com", { source: "platform" }),
+      AutoLaunchProtocolsFromOrigins: entry([{ allowed_origins: ["https://sp.example.com"], protocol: "zsa" }]),
+      CloudManagementEnrollmentToken: entry("00000000-0000-0000-0000-000000000000"),
+      CloudProfileReportingEnabled: entry(true, { source: "cloud", error: "Ignored because the policy can only be set as a cloud user policy." })
+    });
+    input.chromeMetadata.version = "134.0.6998.35 (Official Build) (arm64)";
+    input.policyGroups = input.policyValues;
+    delete input.policyValues;
+    return input;
+  };
+  it("reads policyGroups the same as policyValues", () => {
+    const norm = engine.normalize(older());
+    assert.equal(norm.ok, true);
+    assert.equal(norm.meta.browser, "chrome");
+    assert.match(norm.meta.version, /^134\./);
+    assert.ok(norm.policies.some(p => p.name === "AuthServerAllowlist"));
+    assert.equal(norm.policies.find(p => p.name === "CloudManagementEnrollmentToken").value, "[REDACTED]", "enrollment tokens are secrets");
+    assert.ok(engine.evaluate(norm, {}, POLICY_CATALOG, CATALOG_REVIEWED).notes.some(n => /cloud user policy/.test(n.text)));
+  });
+  it("names the file's sections when it is not recognized, and never its values", () => {
+    const result = engine.normalize({ somethingElse: { secret: "hunter2" }, another: 1 });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /somethingElse, another/);
+    assert.ok(!result.reason.includes("hunter2"));
+  });
+});
+
 describe("policy evaluation", () => {
   it("flags a deprecated policy with its replacement and the vendor page", () => {
     const result = evaluate({ ProxyMode: entry("pac_script") });
