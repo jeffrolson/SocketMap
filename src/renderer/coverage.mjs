@@ -91,7 +91,7 @@ function comparisonSection(coverage) {
   const { tools, groups, about, symptoms } = coverage.comparison;
   const nameOf = (id) => id === "repeat" ? "Repeat capture (Compare two captures)" : (tools.find(tool => tool.id === id) || { name: id }).name;
   const head = tools.map((tool, index) => index === 0
-    ? `<th scope="col" class="cmp-this"><strong>This capture</strong><small>${esc(coverage.comparison.loaded && coverage.comparison.loaded.includes("har") ? "NetLog + HAR" : tool.name)}: ${esc(tool.how)}</small></th>`
+    ? `<th scope="col" class="cmp-this"><strong>This capture</strong><small>${esc(((loaded) => loaded.length > 1 ? loaded.map(id => ({ netlog: "NetLog", har: "HAR", profile: "profile" })[id]).join(" + ") : tool.name)(coverage.comparison.loaded || []))}: ${esc(tool.how)}</small></th>`
     : `<th scope="col"><strong>${toolName(tool)}</strong><small>${esc(tool.how)}</small></th>`).join("");
   const body = groups.map(group => {
     const gaps = group.rows.some(row => row.live.status !== "recorded");
@@ -99,7 +99,7 @@ function comparisonSection(coverage) {
   }).join("");
   const aboutRows = about.map((entry, index) => `<tr class="cmp-about${index === 0 ? " cmp-about-first" : ""}"><th scope="row">${esc(entry.label)}</th>${entry.values.map(value => `<td>${esc(value)}</td>`).join("")}</tr>`).join("");
   const legend = [2, 1, 0].map(level => `<li class="lv-${level}"><span class="cmp-mark" aria-hidden="true">${LEVELS[level][0]}</span>${esc(LEVELS[level][1])}</li>`).join("");
-  return `<section class="cov-cmp" id="cov-compare"><h3>Which tool sees what</h3><p>Every way to look at a page load, side by side. The first column is your capture, measured. The other columns describe what each tool can show in general. SocketMap reads a NetLog and, optionally, a HAR; it does not read the others yet.</p>
+  return `<section class="cov-cmp" id="cov-compare"><h3>Which tool sees what</h3><p>Every way to look at a page load, side by side. The first column is your capture, measured. The other columns describe what each tool can show in general. SocketMap reads a NetLog and, optionally, a HAR and a Performance profile; it does not read the others yet.</p>
 <div class="cmp-bar"><input type="checkbox" id="cov-gaps" class="cmp-toggle"><label for="cov-gaps">Show only what this capture is missing</label><ul class="cmp-key" aria-label="Key">${legend}</ul></div>
 <div class="cov-tablewrap"><table class="cov-compare"><colgroup><col class="c-q"><col class="c-live"></colgroup><thead><tr><th scope="col">Question</th>${head}</tr></thead><tbody>${body}${aboutRows}</tbody></table></div>
 <h4>If you see this, add that</h4><table class="cov-symptoms"><thead><tr><th>If you see this</th><th>Add</th><th>Why</th></tr></thead><tbody>${symptoms.map(entry => `<tr><td>${esc(entry.see)}</td><td>${entry.add.map(id => `<span class="cmp-chip">${esc(nameOf(id))}</span>`).join("")}</td><td>${esc(entry.why)}</td></tr>`).join("")}</tbody></table></section>`;
@@ -118,5 +118,5 @@ export function renderCoverage(coverage) {
   }).join("")}</ol><p class="cov-counts">${esc(counts)}</p>${legend()}</div>
 ${coverage.comparison ? comparisonSection(coverage) : ""}
 ${coverage.stages.map(stage => `<section class="cov-stage" id="cov-${esc(stage.id)}"><h3>${esc(stage.title)}</h3><p>${esc(stage.blurb)}</p>${stage.items.map(itemRow).join("")}</section>`).join("")}
-<section class="cov-stage"><h3>Worth capturing next</h3><p>Collect these to fill the gaps above. SocketMap reads a HAR as an optional second file; use the others alongside this report.</p><div class="cov-next">${coverage.next.map(entry => step(coverage, entry)).join("")}</div></section></section>`;
+<section class="cov-stage"><h3>Worth capturing next</h3><p>Collect these to fill the gaps above. SocketMap reads a HAR and a Performance profile as optional extra files; use the others alongside this report.</p><div class="cov-next">${coverage.next.map(entry => step(coverage, entry)).join("")}</div></section></section>`;
 }

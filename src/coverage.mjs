@@ -34,6 +34,14 @@ function tri(known, total) {
   return known >= total ? "recorded" : "partial";
 }
 
+function javascriptItem(profile) {
+  if (!profile) return never("javascript", "JavaScript execution and long tasks", "A NetLog records network events, not what the page's code was doing while it waited or ran.");
+  const t = profile.mainThread;
+  return item("javascript", "JavaScript execution and long tasks", t.taskCount ? "recorded" : "missing",
+    t.taskCount ? `From the profile: every task on the page's main thread (${t.taskCount}), ${t.longTaskCount} long task${t.longTaskCount === 1 ? "" : "s"} over 50 ms, and main-thread time by script.` : "The profile recorded no main-thread tasks for this page.",
+    { short: t.taskCount ? `${t.longTaskCount} long tasks` : null });
+}
+
 function some(known, of, noun) {
   return of ? `${known} of ${of} ${noun}` : null;
 }
@@ -69,9 +77,11 @@ export function buildCoverage(model) {
 
   const ended = count(requests, r => r.endRecorded === true);
   const enrichment = model?.enrichment || null;
+  const profile = model?.profile || null;
+  const profileRows = profile ? profile.perRequest : null;
   const harRows = enrichment ? enrichment.perRequest : null;
   const cacheKnown = count(requests, r => typeof r.fromCache === "boolean" || (harRows ? harRows.has(r.id) : false));
-  const initiatorKnown = harRows ? count(requests, r => Boolean(harRows.get(r.id)?.initiator)) : 0;
+  const initiatorKnown = (harRows || profileRows) ? count(requests, r => Boolean(harRows?.get(r.id)?.initiator || profileRows?.get(r.id)?.stack)) : 0;
   const typeKnown = harRows ? count(requests, r => Boolean(harRows.get(r.id)?.resourceType)) : 0;
   const harCache = enrichment ? enrichment.cacheAnswers.memory + enrichment.cacheAnswers.disk + enrichment.cacheAnswers.serviceWorker : 0;
   const protocolKnown = count(requests, r => r.protocol != null);
@@ -99,13 +109,15 @@ export function buildCoverage(model) {
       title: "Page code",
       blurb: "What the page's own scripts and rendering were doing.",
       items: [
-        never("javascript", "JavaScript execution and long tasks", "A NetLog records network events, not what the page's code was doing while it waited or ran."),
-        enrichment
-          ? item("script-initiator", "Which script started a request", tri(initiatorKnown, total), total ? `From the HAR: ${share(initiatorKnown, total, "requests")} name the script or HTML parser that asked for them. A NetLog records only the origin.` : "No requests to check.", { short: some(initiatorKnown, total, "have one") })
+        javascriptItem(profile),
+        enrichment || profile
+          ? item("script-initiator", "Which script started a request", tri(initiatorKnown, total), total ? `From the ${[enrichment && "HAR", profile && "profile"].filter(Boolean).join(" and ")}: ${share(initiatorKnown, total, "requests")} name the script or HTML parser that asked for them. A NetLog records only the origin.` : "No requests to check.", { short: some(initiatorKnown, total, "have one") })
           : never("script-initiator", "Which script started a request", "A request records the origin that started it, not the script or line."),
-        enrichment && enrichment.milestones.length
-          ? item("rendering", "Rendering and page-experience timings", "partial", "From the HAR: DOMContentLoaded and load times only. Paint, LCP, layout shift and INP are still not recorded.")
-          : never("rendering", "Rendering and page-experience timings", "Layout, paint, and measures like LCP, CLS, and INP are outside the network stack.")
+        profile && (profile.metrics.fcpMs != null || profile.metrics.lcpMs != null)
+          ? item("rendering", "Rendering and page-experience timings", "partial", "From the profile: first paint, first and largest contentful paint, DOMContentLoaded, load and layout shift. Responsiveness (INP) needs interaction and is not in a load profile.")
+          : enrichment && enrichment.milestones.length
+            ? item("rendering", "Rendering and page-experience timings", "partial", "From the HAR: DOMContentLoaded and load times only. Paint, LCP, layout shift and INP are still not recorded.")
+            : never("rendering", "Rendering and page-experience timings", "Layout, paint, and measures like LCP, CLS, and INP are outside the network stack.")
       ]
     },
     {
@@ -124,7 +136,9 @@ export function buildCoverage(model) {
         item("payloads", "Bytes transferred on sockets (payloads)", rawBytes === true ? "recorded" : "missing",
           rawBytes === true ? `Capture mode ${mode} includes bytes on the wire. SocketMap does not display them.` : mode ? `Capture mode ${mode} records metadata about requests only. Payloads are rarely needed for speed problems and can hold secrets.` : "The capture mode was not recorded."),
         never("extensions", "Browser extension logic", "An extension's own requests appear, but what its code does or blocks does not."),
-        never("machine", "Machine load and other apps' traffic", "CPU, memory, disk, power, and other programs' network use are not part of one browser's log.")
+        profile && (profile.environment.cores != null || profile.environment.memoryGb != null)
+          ? item("machine", "Machine load and other apps' traffic", "partial", `From the profile: ${profile.environment.cores ?? "unknown"} cores${profile.environment.memoryGb != null ? ` and ${profile.environment.memoryGb} GB of memory` : ""}. How busy the computer was, and other programs' network use, are still not recorded.`)
+          : never("machine", "Machine load and other apps' traffic", "CPU, memory, disk, power, and other programs' network use are not part of one browser's log.")
       ]
     },
     {
@@ -186,8 +200,8 @@ export function buildCoverage(model) {
     if (shorts[entry.id]) entry.short = shorts[entry.id];
   }
   const comparison = buildComparison(stages);
-  comparison.loaded = enrichment ? ["netlog", "har"] : ["netlog"];
-  return { stages, summary, next: nextSteps(stages), comparison, har: enrichment ? { entries: enrichment.source.entryCount, matched: enrichment.alignment.matched, method: enrichment.alignment.method } : null };
+  comparison.loaded = ["netlog", ...(enrichment ? ["har"] : []), ...(profile ? ["profile"] : [])];
+  return { stages, summary, next: nextSteps(stages), comparison, har: enrichment ? { entries: enrichment.source.entryCount, matched: enrichment.alignment.matched, method: enrichment.alignment.method } : null, profile: profile ? { longTasks: profile.mainThread.longTaskCount, aligned: profile.alignment.aligned } : null };
 }
 
 
@@ -207,7 +221,7 @@ const TOOLS = [
 const N = [0, ""];
 const ROWS = {
   page: [
-    ["javascript", "JavaScript running time and long tasks", [0, "Network events only"], N, [2, "Every task, by script"], [1, "Summary by script (lab run)"], N, N, N],
+    ["javascript", "JavaScript execution and long tasks", [0, "Network events only"], N, [2, "Every task, by script"], [1, "Summary by script (lab run)"], N, N, N],
     ["script-initiator", "Which script started a request", [0, "Origin only"], [2, "Script and line"], [1, "Call stacks on some events"], [1, "Critical request chains only"], N, N, N],
     ["rendering", "Paint, LCP and layout shift", N, [1, "DOMContentLoaded and load only"], [2, "Paint and layout events"], [2, "FCP, LCP, CLS, TBT (lab run)"], N, N, N]
   ],
@@ -241,7 +255,7 @@ const ABOUT = [
   ["best", "Best when", ["The problem may be DNS, proxy, TLS, connection setup or the path", "You need to know which script asked for what, or what came from cache", "The network looks fine but the page still feels slow", "You want a quick scored review of page weight, scripts and render blockers", "You suspect loss, resets, or something on the wire changing traffic", "You need to know where along the path delay starts", "Waiting time on the server looks long"]],
   ["setup", "Setup", ["Built into Chrome and Edge", "Built into DevTools", "Built into DevTools", "Built into DevTools; also a web tool", "Install a program; usually needs admin rights", "tracert and pathping ship with Windows; mtr is an install", "Needs the server team"]],
   ["secrets", "Sensitive content", ["Default strips cookies; SocketMap also removes secrets and keeps IPs and URLs", "Choose Export HAR (sanitized); other options include cookies and page content", "Script URLs and timings; leave Screenshots off", "Page URL and script names", "Raw traffic; capture only with permission and treat as sensitive", "Hop IP addresses only", "Their own logs; share a request ID rather than logs"]],
-  ["reads", "SocketMap reads it", ["Yes: this report", "Yes, as an optional second file", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside"]]
+  ["reads", "SocketMap reads it", ["Yes: this report", "Yes, as an optional second file", "Yes, as an optional extra file", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside"]]
 ];
 
 const SYMPTOMS = [
@@ -271,7 +285,7 @@ function buildComparison(stages) {
 }
 
 const STEPS = [
-  { id: "performance-trace", title: "Record a Chrome Performance profile while reloading the page", covers: ["javascript", "rendering", "machine"], why: "Shows what the page's code, layout, and paint were doing, so a slow load can be split into waiting on the network and working on the computer.", link: LINKS.performance },
+  { id: "performance-trace", title: "Add a Chrome Performance profile recorded while reloading the page", covers: ["javascript", "rendering", "machine"], why: "Shows what the page's code, layout, and paint were doing, so a slow load can be split into waiting on the network and working on the computer. SocketMap reads a profile as an optional extra file next to the NetLog.", link: LINKS.performance, readBySocketMap: true },
   { id: "request-ids", title: "Give the server team a request ID from a slow response", covers: ["server-ids", "server-work"], why: "The server team can find that exact request in its own logs and tell you where the time went.", link: null },
   { id: "har-initiator", title: "Add a HAR exported from Chrome DevTools (Network tab, Export HAR sanitized)", covers: ["script-initiator", "resource-type", "cache"], why: "DevTools records the script or HTML parser that asked for each request, each request's type, and which answers came from a cache or service worker. SocketMap reads a HAR as an optional second file next to the NetLog.", link: LINKS.network, readBySocketMap: true },
   { id: "lighthouse", title: "Run Lighthouse for the same page", covers: ["javascript", "rendering"], why: "Lists scripts by time spent running, which points at heavy code without a full profile.", link: LINKS.lighthouse },

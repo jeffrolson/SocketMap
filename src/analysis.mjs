@@ -13,6 +13,7 @@ import { buildDiagnosticEvidenceText } from "./diagnostic-insights.mjs";
 import { buildCoverage, coverageText } from "./coverage.mjs";
 import { buildServerInsights, inspectResponse, serverInsightsText } from "./server-insights.mjs";
 import { harEvidenceText } from "./enrichment.mjs";
+import { profileEvidenceText } from "./profile.mjs";
 
 const RANK = { best: 0, better: 1, good: 2, poor: 3 };
 const TIMING_KEYS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
@@ -176,7 +177,7 @@ function rateHost(host, requests, connections, dnsLookups) {
   };
 }
 
-function buildFindings(pageRequests, hosts, connections, dnsLookups) {
+function buildFindings(pageRequests, hosts, connections, dnsLookups, profile = null) {
   const findings = [];
   const add = (f) => { if (f.evidence.length) findings.push(f); };
   const pageHosts = new Set(pageRequests.map(r => r.host));
@@ -309,6 +310,19 @@ function buildFindings(pageRequests, hosts, connections, dnsLookups) {
     team: "Network (proxy) or application owner"
   });
 
+  const thread = profile?.mainThread;
+  if (thread && thread.blockingMs >= 200) {
+    const file = (url) => (String(url || "").split("?")[0].split("/").filter(Boolean).slice(-1)[0]) || url || "inline script";
+    add({
+      id: "main-thread-busy",
+      severity: thread.blockingMs >= 500 ? "high" : "medium",
+      title: "The page's own code kept the main thread busy",
+      detail: `The Performance profile shows ${thread.longTaskCount} long task${thread.longTaskCount === 1 ? "" : "s"} (over 50 ms) on the page's main thread, ${formatDuration(thread.blockingMs)} beyond that threshold in total. While the main thread is busy the page cannot respond or paint. This is consistent with the delay being work on the computer rather than the network; it does not prove which script is at fault, because scripts started by other scripts can be attributed to the wrong file.`,
+      evidence: (thread.longTasks || []).slice(0, 8).map(task => `+${formatDuration(task.startMs)}: ${formatDuration(task.durMs)}${task.top.length ? ` (${task.top.map(s => `${file(s.url)} ${formatDuration(s.ms)}`).join(", ")})` : ""}`),
+      team: "Application owner or front-end developers"
+    });
+  }
+
   return findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
 
@@ -364,7 +378,7 @@ export function analyzeCapture(model, { site } = {}) {
     pageRequests,
     hosts,
     breakdown,
-    findings: buildFindings(pageRequests, hosts, connections, model.dnsLookups),
+    findings: buildFindings(pageRequests, hosts, connections, model.dnsLookups, model.profile || null),
     slowest: [...pageRequests].sort((a, b) => b.durationMs - a.durationMs).slice(0, 10),
     background: model.pages.filter(p => p.site !== pageSite)
   };
@@ -491,6 +505,10 @@ export function buildAiSummary(model, analysis, { source } = {}) {
   lines.push("");
   if (model.enrichment) {
     lines.push(harEvidenceText(model.enrichment));
+    lines.push("");
+  }
+  if (model.profile) {
+    lines.push(profileEvidenceText(model.profile));
     lines.push("");
   }
   lines.push(coverageText(buildCoverage(model)));

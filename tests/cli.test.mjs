@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 import { buildSampleHar } from "../src/demo/sample-har.mjs";
+import { buildSampleTrace } from "../src/demo/sample-trace.mjs";
+import { gzipSync } from "node:zlib";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -17,12 +19,14 @@ const testOutSample = resolve(__dirname, "temp-sample.html");
 const testOutNetLog = resolve(__dirname, "temp-netlog.html");
 const testOutHar = resolve(__dirname, "temp-har.html");
 const tempHar = resolve(__dirname, "temp-enrich.har");
+const tempTrace = resolve(__dirname, "temp-trace.json");
+const tempTraceGz = resolve(__dirname, "temp-trace.json.gz");
 const testOutEnriched = resolve(__dirname, "temp-enriched.html");
 
 describe("CLI Integration Tests", () => {
   after(() => {
     // Clean up temporary test files
-    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog, tempHar, testOutEnriched]) {
+    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog, tempHar, testOutEnriched, tempTrace, tempTraceGz]) {
       if (existsSync(f)) {
         try { unlinkSync(f); } catch {}
       }
@@ -37,7 +41,7 @@ describe("CLI Integration Tests", () => {
 
   it("should display version with --version", () => {
     const out = execFileSync(process.execPath, [cliPath, "--version"], { encoding: "utf8" });
-    assert.ok(out.includes("SocketMap v0.10.0"));
+    assert.ok(out.includes("SocketMap v0.11.0"));
   });
 
   it("should generate sample diagram via --sample -o", () => {
@@ -69,6 +73,41 @@ describe("CLI Integration Tests", () => {
     const content = readFileSync(testOutEnriched, "utf8");
     assert.ok(content.includes('id="enrichment"') && content.includes("What the page is made of"));
     assert.ok(content.includes("HAR ENRICHMENT"));
+  });
+
+  it("adds a Performance profile with --profile, plain or gzipped", async () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    const trace = JSON.stringify(buildSampleTrace(await parseNetLog(fixtureNetLog)));
+    writeFileSync(tempTrace, trace);
+    writeFileSync(tempTraceGz, gzipSync(trace));
+    const outputs = [];
+    for (const file of [tempTrace, tempTraceGz]) {
+      const out = execFileSync(process.execPath, [cliPath, fixtureNetLog, "--profile", file, "-o", testOutEnriched], { encoding: "utf8" });
+      assert.match(out, /Placed on the network timeline using \d+ shared requests/);
+      const content = readFileSync(testOutEnriched, "utf8");
+      assert.ok(content.includes('id="profile"') && content.includes("What the page's code was doing"));
+      assert.ok(content.includes("PERFORMANCE PROFILE") && content.includes("Main thread (profile)"));
+      outputs.push(content);
+    }
+    assert.equal(outputs[0], outputs[1], "a gzipped profile gives the same report");
+  });
+
+  it("combines a HAR and a profile", async () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    const model = await parseNetLog(fixtureNetLog);
+    writeFileSync(tempHar, JSON.stringify(buildSampleHar(model)));
+    writeFileSync(tempTrace, JSON.stringify(buildSampleTrace(model)));
+    execFileSync(process.execPath, [cliPath, fixtureNetLog, "--har", tempHar, "--profile", tempTrace, "-o", testOutEnriched], { encoding: "utf8" });
+    const content = readFileSync(testOutEnriched, "utf8");
+    assert.ok(content.includes('id="enrichment"') && content.includes('id="profile"'));
+  });
+
+  it("explains --profile problems instead of failing quietly", () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--profile", "/no/such/trace.json", "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /Profile file not found/);
+    writeFileSync(tempTrace, '{"events":[]}');
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--profile", tempTrace, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like a DevTools Performance profile/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--profile", tempTrace, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
   });
 
   it("explains --har problems instead of failing quietly", () => {

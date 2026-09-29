@@ -15,6 +15,9 @@ import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mj
 import { buildSampleHar } from "../src/demo/sample-har.mjs";
 import { createHarReader } from "../src/parsers/har-stream.mjs";
 import { attachHar } from "../src/enrichment.mjs";
+import { buildSampleTrace } from "../src/demo/sample-trace.mjs";
+import { createTraceReader } from "../src/parsers/trace-stream.mjs";
+import { attachProfile } from "../src/profile.mjs";
 
 let dir;
 let html;
@@ -138,5 +141,38 @@ describe("Viewer: optional HAR", () => {
     const inNode = build({ createCaptureReader: viewerApiNode.createCaptureReader, createHarReader, attachHar, buildReport: viewerApiNode.buildReport });
     assert.equal(inBundle, inNode);
     assert.ok(inBundle.includes('id="enrichment"'));
+  });
+});
+
+describe("Viewer: optional Performance profile", () => {
+  it("offers Add a profile and says what it is and that it is never uploaded", () => {
+    assert.ok(html.includes('id="add-profile"') && html.includes('id="profile-input"'));
+    assert.match(html, /Performance profile \(DevTools, Performance tab/);
+    assert.match(html, /never uploaded/);
+    assert.ok(html.includes("application/gzip"), "a gzipped profile can be chosen");
+  });
+
+  it("recognizes a Chrome trace by its first bytes, in both shapes, and not a HAR or NetLog", () => {
+    assert.equal(viewerApi.looksLikeTrace('{"traceEvents":[{"args":{},"cat":"x","name":"RunTask","ph":"X","ts":1}'), true);
+    assert.equal(viewerApi.looksLikeTrace('[{"args":{},"cat":"x","dur":3,"name":"RunTask","ph":"X","ts":1}]'), true);
+    assert.equal(viewerApi.looksLikeTrace('{"log":{"entries":[]}}'), false);
+    assert.equal(viewerApi.looksLikeTrace('{"constants":{},"events":[]}'), false);
+    assert.equal(viewerApi.looksLikeTrace("hello"), false);
+  });
+
+  it("builds the same profile report in the browser bundle as in Node", () => {
+    const build = (api) => {
+      const reader = api.createCaptureReader();
+      reader.write(text);
+      const model = reader.finish();
+      const traceReader = api.createTraceReader();
+      traceReader.write(JSON.stringify(buildSampleTrace(model)));
+      api.attachProfile(model, traceReader.finish());
+      return api.buildReport(model).html;
+    };
+    const inBundle = build(viewerApi);
+    const inNode = build({ createCaptureReader: viewerApiNode.createCaptureReader, createTraceReader, attachProfile, buildReport: viewerApiNode.buildReport });
+    assert.equal(inBundle, inNode);
+    assert.ok(inBundle.includes('id="profile"'));
   });
 });

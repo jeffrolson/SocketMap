@@ -4,8 +4,10 @@
  * or raw JSON intermediate representations.
  */
 
-import { readFileSync, createReadStream } from "node:fs";
+import { readFileSync, createReadStream, openSync, readSync, closeSync } from "node:fs";
+import { createGunzip } from "node:zlib";
 import { createHarReader } from "./har-stream.mjs";
+import { createTraceReader } from "./trace-stream.mjs";
 import { normalizeTrace, redactSensitiveData, formatBytes, formatDuration } from "../normalizer.mjs";
 
 /**
@@ -331,6 +333,39 @@ export async function readHarEnrichment(filePath, options = {}) {
   const reader = createHarReader(options);
   await new Promise((resolve, reject) => {
     const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 1024 * 1024 });
+    stream.on("data", chunk => reader.write(chunk));
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+  return reader.finish();
+}
+
+function isGzip(filePath) {
+  const fd = openSync(filePath, "r");
+  try {
+    const bytes = Buffer.alloc(2);
+    readSync(fd, bytes, 0, 2, 0);
+    return bytes[0] === 0x1f && bytes[1] === 0x8b;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Streams a DevTools Performance profile (.json or .json.gz) from disk and returns the bounded
+ * summary used to enrich a NetLog report. Never held in memory, so a large profile costs little.
+ */
+export async function readTraceProfile(filePath) {
+  const reader = createTraceReader();
+  await new Promise((resolve, reject) => {
+    let stream = createReadStream(filePath, { highWaterMark: 1024 * 1024 });
+    stream.on("error", reject);
+    if (isGzip(filePath)) {
+      const gunzip = createGunzip();
+      gunzip.on("error", reject);
+      stream = stream.pipe(gunzip);
+    }
+    stream.setEncoding("utf8");
     stream.on("data", chunk => reader.write(chunk));
     stream.on("end", resolve);
     stream.on("error", reject);

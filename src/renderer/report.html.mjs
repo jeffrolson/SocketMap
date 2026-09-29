@@ -19,12 +19,13 @@ import { buildCoverage } from "../coverage.mjs";
 import { renderCoverage, coverageCss } from "./coverage.mjs";
 import { buildServerInsights } from "../server-insights.mjs";
 import { renderEnrichmentPanel, renderRequestSource, renderMilestones, enrichmentCss, typeClass } from "./enrichment.mjs";
+import { renderProfilePanel, renderMainThreadBand, renderProfileSource, profileCss } from "./profile.mjs";
 import { renderPolicyView, policyScript, policyCss } from "./policy.mjs";
 import { buildPolicyEvidence } from "../policy/engine.mjs";
 import { renderServerInsights, renderServerDetail, renderServerMark, serverInsightsCss } from "./server-insights.mjs";
 import { eventReplayMarkup, eventReplayScript } from "../viewer/event-replay.mjs";
 
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const MAX_SEQUENCE_HOSTS = 8;
 const MAX_SEQUENCE_REQUESTS = 1000; // display limit for the sequence view only; the waterfall shows every request
@@ -187,7 +188,7 @@ function renderHosts(hosts) {
     </section>`;
 }
 
-function renderRequestDetail(r, conn, serverInfo = null, harEntry = null) {
+function renderRequestDetail(r, conn, serverInfo = null, harEntry = null, profileEntry = null) {
   const timing = SEGMENTS.map(k => `<tr><th>${esc(TIMING_LABELS[k])}</th><td>${esc(ms(r.timing[k]))}</td></tr>`).join("");
   const connRows = conn ? [
     ["Connection", `${conn.kind.toUpperCase()} ${r.reusedConnection ? "(reused)" : r.reusedConnection === false ? "(new)" : ""}`],
@@ -213,17 +214,19 @@ function renderRequestDetail(r, conn, serverInfo = null, harEntry = null) {
         <table class="mini"><tbody><tr><th>Total</th><td><strong>${esc(ms(r.durationMs))}</strong></td></tr>${timing}</tbody></table>
       </div>
       ${renderRequestSource(harEntry)}
+      ${renderProfileSource(profileEntry)}
       ${renderServerDetail(serverInfo, r.timing.wait ?? null)}
       ${r.requestHeaders.length ? `<details class="more"><summary>Request headers</summary><pre>${esc(r.requestHeaders.join("\n"))}</pre></details>` : ""}
       ${r.responseHeaders.length ? `<details class="more"><summary>Response headers</summary><pre>${esc(r.responseHeaders.join("\n"))}</pre></details>` : ""}
     </div>`;
 }
 
-function renderWaterfall(analysis, connections, serverInsights, enrichment = null) {
+function renderWaterfall(analysis, connections, serverInsights, enrichment = null, profile = null) {
   const { page, pageRequests } = analysis;
   const span = Math.max(1, page.observedSpanMs ?? page.loadMs ?? 1);
   const pct = (v) => `${Math.max(0, v / span * 100).toFixed(3)}%`;
-  const milestones = renderMilestones(enrichment, page, span);
+  const milestones = renderMilestones(enrichment, page, span, profile);
+  const mainBand = renderMainThreadBand(profile, page, span);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => `<span style="left:${f * 100}%">${esc(formatDuration(f * span))}</span>`).join("");
   const rows = pageRequests.map(r => {
     const status = r.netError || r.status || (r.fromCache ? "cache" : "");
@@ -239,7 +242,7 @@ function renderWaterfall(analysis, connections, serverInsights, enrichment = nul
           <span class="wf-track" title="${r.endRecorded === false ? "End not recorded. Bar extends only to the last observed capture event." : "Recorded request duration"}"><span class="wf-bar" style="left:${pct(r.start - page.startMs)};width:${pct(Math.max(r.observedDurationMs ?? r.durationMs ?? 0, span / 400))}">${segs}${renderServerMark(serverInsights.perRequest.get(r.id), r, SEGMENTS)}</span>${milestones.marks}</span>
           <span class="wf-time">${r.endRecorded === false ? "Unfinished" : esc(ms(r.durationMs))}</span>
         </summary>
-        ${renderRequestDetail(r, connections.get(r.connectionId), serverInsights.perRequest.get(r.id), enrichment?.perRequest.get(r.id) ?? null)}
+        ${renderRequestDetail(r, connections.get(r.connectionId), serverInsights.perRequest.get(r.id), enrichment?.perRequest.get(r.id) ?? null, profile?.perRequest.get(r.id) ?? null)}
       </details>`;
   }).join("");
   return `
@@ -248,12 +251,12 @@ function renderWaterfall(analysis, connections, serverInsights, enrichment = nul
       <p class="note">Every request for this page, in start order. Click a row for its timing, connection, certificate, and headers.</p>
       <div class="wf-key" aria-label="Timing color key">
         <span class="key-heading">Timing color key <span class="muted">· Hover or focus a phase to learn more</span></span>
-        <ul class="legend">${SEGMENTS.map(k => `<li tabindex="0" data-tip="${esc(TIMING_MEANINGS[k])}"><span class="swatch seg-${k}" aria-hidden="true"></span>${esc(TIMING_LABELS[k])}</li>`).join("")}${milestones.drawn ? `<li tabindex="0" data-tip="Dashed vertical lines mark when the page fired DOMContentLoaded and load, as recorded in the HAR. They are the page's own events, not network events."><span class="swatch ms-swatch" aria-hidden="true"></span>Load milestones (HAR)</li>` : ""}${serverInsights.hasAnything ? `<li tabindex="0" data-tip="A thin line under the wait bar, as wide as the largest phase the server reported for itself (Server-Timing). It is the server's own figure and may overlap other phases."><span class="swatch srv-swatch" aria-hidden="true"></span>Server-reported time</li>` : ""}</ul>
+        <ul class="legend">${SEGMENTS.map(k => `<li tabindex="0" data-tip="${esc(TIMING_MEANINGS[k])}"><span class="swatch seg-${k}" aria-hidden="true"></span>${esc(TIMING_LABELS[k])}</li>`).join("")}${milestones.drawn ? `<li tabindex="0" data-tip="Dashed vertical lines mark page milestones (${milestones.source === "profile" ? "first and largest contentful paint, DOMContentLoaded and load, from the Performance profile" : "DOMContentLoaded and load, from the HAR"}). They are the page's own events, not network events."><span class="swatch ms-swatch" aria-hidden="true"></span>Page milestones (${milestones.source === "profile" ? "profile" : "HAR"})</li>` : ""}${serverInsights.hasAnything ? `<li tabindex="0" data-tip="A thin line under the wait bar, as wide as the largest phase the server reported for itself (Server-Timing). It is the server's own figure and may overlap other phases."><span class="swatch srv-swatch" aria-hidden="true"></span>Server-reported time</li>` : ""}</ul>
       </div>
       ${renderProtocolGuide(pageRequests)}
       <div class="wf">
         <div class="wf-axis"><span class="wf-label"></span><span class="wf-status"></span><span class="wf-proto"></span><span class="wf-track ticks">${ticks}${milestones.labels}</span><span class="wf-time"></span></div>
-        ${rows}
+        ${mainBand}${rows}
       </div>
     </section>`;
 }
@@ -512,6 +515,7 @@ const NAV = [
 export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, source = null } = {}) {
   const serverInsights = buildServerInsights(analysis.pageRequests);
   const enrichment = model.enrichment || null;
+  const profile = model.profile || null;
   const connections = new Map(model.connections.map(c => [c.id, c]));
   const { page } = analysis;
   const high = analysis.findings.filter(f => f.severity === "high").length;
@@ -541,6 +545,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   ${serverInsightsCss()}
   ${policyCss()}
   ${enrichmentCss()}
+  ${profileCss()}
   .ms-swatch { background: transparent; border-left: 1px dashed var(--secondary); height: 12px; width: 0; }
   .srv-swatch { background: var(--text); height: 3px; align-self: center; }
   .event-replay { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -831,10 +836,11 @@ ${themePreferenceScript()}
       ${renderBreakdown(analysis.breakdown)}
       ${renderServerInsights(serverInsights)}
       ${renderEnrichmentPanel(enrichment, analysis.pageRequests)}
+      ${renderProfilePanel(profile, analysis.pageRequests)}
       ${renderHosts(analysis.hosts)}
     </div>
     <div class="view" id="view-waterfall" data-view="waterfall">
-      ${renderWaterfall(analysis, connections, serverInsights, enrichment)}
+      ${renderWaterfall(analysis, connections, serverInsights, enrichment, profile)}
     </div>
     <div class="view" id="view-sequence" data-view="sequence">
       ${renderSequence(view, page, analysis)}

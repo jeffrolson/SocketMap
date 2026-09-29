@@ -62,15 +62,29 @@ ${asked ? `<p><b>Requested by</b> ${esc(asked)}.</p>` : `<p class="enr-line">Req
 ${answer ? `<p><b>Answered from</b> ${esc(answer)}${entry.cache ? ", so it never reached the network log" : ""}.</p>` : ""}</div>`;
 }
 
-/** Dashed lines for DOMContentLoaded and load, only inside the timeline. */
-export function renderMilestones(enrichment, page, span) {
-  const empty = { marks: "", labels: "", drawn: 0 };
+const SHORT = { "DOMContentLoaded": "DCL", "First contentful paint": "FCP", "Largest contentful paint": "LCP", Load: "Load" };
+
+/** Dashed lines for page milestones, only inside the timeline. A profile, when placed, supplies paint too. */
+export function renderMilestones(enrichment, page, span, profile = null) {
+  const empty = { marks: "", labels: "", drawn: 0, source: null };
+  if (profile?.alignment?.aligned && profile.milestones?.length && page && page.startMs != null && span > 0) {
+    const items = profile.milestones.map(m => ({ label: m.label, rel: m.atMs - page.startMs })).filter(item => item.rel >= 0 && item.rel <= span);
+    const pct = (rel) => Math.min(100, rel / span * 100).toFixed(2);
+    const paint = (label) => /paint/i.test(label) ? " wf-ms-paint" : "";
+    return {
+      source: "profile",
+      drawn: items.length,
+      marks: items.map(item => `<i class="wf-ms${paint(item.label)}" style="left:${pct(item.rel)}%" title="${esc(item.label)} ${esc(secs(item.rel))} into this page (from the profile)"></i>`).join(""),
+      labels: items.map(item => `<i class="wf-ms-label${paint(item.label)}" style="left:${pct(item.rel)}%">${esc(SHORT[item.label] || item.label)}</i>`).join("")
+    };
+  }
   if (!enrichment?.milestones?.length || !page || page.startMs == null || !(span > 0)) return empty;
   const nearest = enrichment.milestones.reduce((best, m) => (best == null || Math.abs(m.startedAt - page.startMs) < Math.abs(best.startedAt - page.startMs) ? m : best), null);
   const items = [["DOMContentLoaded", nearest.domContentLoadedAt], ["Load", nearest.loadAt]].filter(([, at]) => at != null)
     .map(([label, at]) => ({ label, rel: at - page.startMs })).filter(item => item.rel >= 0 && item.rel <= span);
   const pct = (rel) => Math.min(100, rel / span * 100).toFixed(2);
   return {
+    source: "har",
     drawn: items.length,
     marks: items.map(item => `<i class="wf-ms" style="left:${pct(item.rel)}%" title="${esc(item.label)} ${esc(secs(item.rel))} into this page (from the HAR)"></i>`).join(""),
     labels: items.map(item => `<i class="wf-ms-label" style="left:${pct(item.rel)}%">${esc(item.label === "DOMContentLoaded" ? "DCL" : item.label)}</i>`).join("")

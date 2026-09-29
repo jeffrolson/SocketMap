@@ -4,7 +4,10 @@
  * the file is read locally and never sent anywhere.
  */
 
-import { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar } from "./viewer-core.mjs";
+import { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, looksLikeTrace } from "./viewer-core.mjs";
+import { createTraceReader } from "../parsers/trace-stream.mjs";
+import { attachProfile } from "../profile.mjs";
+import { buildSampleTrace } from "../demo/sample-trace.mjs";
 import { createHarReader } from "../parsers/har-stream.mjs";
 import { attachHar } from "../enrichment.mjs";
 import { buildSampleHar } from "../demo/sample-har.mjs";
@@ -14,6 +17,7 @@ import { redactCapturedText } from "../redact.mjs";
 
 const SAMPLE_NAME = "sample-capture.json (synthetic example)";
 const SAMPLE_HAR_NAME = "sample-network.har (synthetic example)";
+const SAMPLE_PROFILE_NAME = "sample-profile.json (synthetic example)";
 
 const YIELD_EVERY_BYTES = 8 * 1024 * 1024;
 
@@ -83,6 +87,47 @@ async function readHar(file, onProgress) {
   return reader.finish();
 }
 
+async function isGzip(file) {
+  const bytes = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+  return bytes[0] === 0x1f && bytes[1] === 0x8b;
+}
+
+// What a dropped file is, from its first bytes. A gzip file is a DevTools profile saved compressed.
+async function kindOf(file) {
+  if (await isGzip(file)) return "trace";
+  const head = await file.slice(0, 4096).text();
+  return looksLikeHar(head) ? "har" : looksLikeTrace(head) ? "trace" : "netlog";
+}
+
+async function readTrace(file, onProgress) {
+  const reader = createTraceReader();
+  const decoder = new TextDecoder();
+  let source = file.stream();
+  if (await isGzip(file)) source = source.pipeThrough(new DecompressionStream("gzip"));
+  const stream = source.getReader();
+  let read = 0;
+  let sinceYield = 0;
+  try {
+    for (;;) {
+      const { done, value } = await stream.read();
+      if (done) break;
+      read += value.byteLength;
+      sinceYield += value.byteLength;
+      reader.write(decoder.decode(value, { stream: true }));
+      onProgress(read);
+      if (sinceYield >= YIELD_EVERY_BYTES) {
+        sinceYield = 0;
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+  } finally {
+    await stream.cancel();
+    stream.releaseLock();
+  }
+  reader.write(decoder.decode());
+  return reader.finish();
+}
+
 function init() {
   const $ = (id) => document.getElementById(id);
   const start = $("start");
@@ -91,6 +136,7 @@ function init() {
   const compareInput = $("compare-input");
   const secondInput = $("second-input");
   const harInput = $("har-input");
+  const profileInput = $("profile-input");
   const progress = $("progress");
   const bar = $("progress-bar");
   const progressText = $("progress-text");
@@ -163,9 +209,11 @@ function init() {
     $("add-comparison").textContent = b ? "Replace B capture" : "Compare with another capture";
     $("save-report").textContent = nextView === "comparison" ? "Save comparison" : "Save report";
     for (const name of ["comparison", "a", "b"]) $("view-" + name).setAttribute("aria-pressed", String(view === name));
-    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}`;
+    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}${a.profile ? ` + profile ${a.profile.name}` : ""}`;
     $("add-har").hidden = nextView === "comparison" || nextView === "b";
     $("add-har").textContent = a.har ? "Replace HAR" : "Add a HAR";
+    $("add-profile").hidden = $("add-har").hidden;
+    $("add-profile").textContent = a.profile ? "Replace profile" : "Add a profile";
     fileName.title = fileName.textContent;
     const pages = report.comparison ? [report.comparison.a.page, report.comparison.b.page] : [report.analysis.page];
     pageContext.textContent = pages.map((page, i) => `${pages.length > 1 ? (i ? "B" : "A") : "Selected"}: ${page.url}`).join(" · ");
@@ -179,10 +227,10 @@ function init() {
   function setLoading(value) {
     loading = value;
     document.body.setAttribute("aria-busy", String(value));
-    for (const element of [input, compareInput, secondInput, harInput]) element.disabled = value;
+    for (const element of [input, compareInput, secondInput, harInput, profileInput]) element.disabled = value;
     drop.setAttribute("aria-disabled", String(value));
     drop.classList.remove("is-over");
-    for (const id of ["compare-files", "add-comparison", "add-har", "open-another", "save-report", "swap-captures", "page-select", "page-select-b", "view-comparison", "view-a", "view-b"]) $(id).disabled = value;
+    for (const id of ["compare-files", "add-comparison", "add-har", "add-profile", "open-another", "save-report", "swap-captures", "page-select", "page-select-b", "view-comparison", "view-a", "view-b"]) $(id).disabled = value;
     pageSelect.disabled = value || !captures[0]?.model.pages.length;
     pageSelectB.disabled = value || !captures[1]?.model.pages.length;
     document.querySelectorAll("[data-open-sample]").forEach(button => { button.disabled = value; });
@@ -205,16 +253,34 @@ function init() {
     show(next, view === "comparison" ? "a" : view);
   }
 
+  // A profile adds page-code detail to the first capture. Read here, placed by shared requests, never uploaded.
+  async function addProfile(file) {
+    if (!captures.length) throw new Error("A profile adds detail to a NetLog. Open the NetLog first, then add the profile.");
+    const name = redactCapturedText(file.name);
+    bar.style.width = "0%";
+    progressText.textContent = `Reading profile: ${name}...`;
+    const summary = await readTrace(file, (read) => {
+      bar.style.width = `${Math.min(100, (read / Math.max(1, file.size * 6)) * 100).toFixed(1)}%`;
+      progressText.textContent = `Reading profile: ${name}, ${formatMb(read)} read`;
+    });
+    const model = captures[0].model;
+    delete model.profile;
+    if (!attachProfile(model, summary)) throw new Error("That file does not look like a DevTools Performance profile for a page load. In DevTools, open the Performance tab, record while reloading the page, then choose Save profile.");
+    const next = captures.map((capture, i) => i === 0 ? { ...capture, profile: { name, bytes: file.size } } : capture);
+    show(next, view === "comparison" ? "a" : view);
+  }
+
   async function loadFiles(files, { append = false, requireTwo = false } = {}) {
     if (loading || !files.length) return;
-    const kinds = await Promise.all(files.map(async file => looksLikeHar(await file.slice(0, 4096).text())));
-    const hars = files.filter((_, i) => kinds[i]);
-    if (hars.length) {
-      if (hars.length > 1) { showError("Add one HAR at a time. Choose the HAR that was recorded with this NetLog."); return; }
-      const logs = files.filter((_, i) => !kinds[i]);
+    const kinds = await Promise.all(files.map(kindOf));
+    const hars = files.filter((_, i) => kinds[i] === "har");
+    const traces = files.filter((_, i) => kinds[i] === "trace");
+    if (hars.length || traces.length) {
+      if (hars.length > 1 || traces.length > 1) { showError("Add one HAR and one profile at a time. Choose the files that were recorded with this NetLog."); return; }
+      const logs = files.filter((_, i) => kinds[i] === "netlog");
       if (logs.length) await loadFiles(logs, { append: false, requireTwo });
       if (!captures.length) {
-        if (!logs.length) showError("A HAR adds detail to a NetLog. Open the NetLog first (or drop both files together), then add the HAR.");
+        if (!logs.length) showError("A HAR or a profile adds detail to a NetLog. Open the NetLog first (or drop the files together), then add them.");
         return;
       }
       if (error.hidden === false) return;
@@ -223,7 +289,8 @@ function init() {
       $("load-feedback").hidden = false;
       progress.hidden = false;
       try {
-        await addHar(hars[0]);
+        if (hars.length) await addHar(hars[0]);
+        if (traces.length) await addProfile(traces[0]);
         $("load-feedback").hidden = true;
       } catch (err) {
         showError(err.message || String(err));
@@ -276,7 +343,11 @@ function init() {
     const model = captures[0].model;
     const reader = createHarReader();
     reader.write(JSON.stringify(buildSampleHar(model)));
-    if (attachHar(model, reader.finish())) show(captures.map((capture, i) => i === 0 ? { ...capture, har: { name: SAMPLE_HAR_NAME, bytes: 0 }, site: selectPageSite(model) } : capture));
+    const harAttached = attachHar(model, reader.finish());
+    const traceReader = createTraceReader();
+    traceReader.write(JSON.stringify(buildSampleTrace(model)));
+    const profileAttached = attachProfile(model, traceReader.finish());
+    if (harAttached || profileAttached) show(captures.map((capture, i) => i === 0 ? { ...capture, ...(harAttached ? { har: { name: SAMPLE_HAR_NAME, bytes: 0 } } : {}), ...(profileAttached ? { profile: { name: SAMPLE_PROFILE_NAME, bytes: 0 } } : {}), site: selectPageSite(model) } : capture));
   }
 
   function selectedFiles(element, options) {
@@ -287,6 +358,16 @@ function init() {
   input.addEventListener("change", () => selectedFiles(input));
   compareInput.addEventListener("change", () => selectedFiles(compareInput, { requireTwo: true }));
   secondInput.addEventListener("change", () => selectedFiles(secondInput, { append: true }));
+  profileInput.addEventListener("change", async () => {
+    const files = Array.from(profileInput.files).slice(0, 1);
+    profileInput.value = "";
+    if (!files.length) return;
+    if ((await kindOf(files[0])) !== "trace") {
+      showError("That file does not look like a DevTools Performance profile. In DevTools, open the Performance tab, record while reloading the page, then choose Save profile.");
+      return;
+    }
+    loadFiles(files);
+  });
   harInput.addEventListener("change", async () => {
     const files = Array.from(harInput.files).slice(0, 1);
     harInput.value = "";
@@ -298,6 +379,7 @@ function init() {
     loadFiles(files);
   });
   $("add-har").addEventListener("click", () => harInput.click());
+  $("add-profile").addEventListener("click", () => profileInput.click());
   $("compare-files").addEventListener("click", () => compareInput.click());
   $("add-comparison").addEventListener("click", () => secondInput.click());
   $("dismiss-error").addEventListener("click", () => { $("load-feedback").hidden = true; });
@@ -391,5 +473,5 @@ function init() {
   });
 }
 
-globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar };
+globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar, looksLikeTrace, createTraceReader, attachProfile };
 if (typeof document !== "undefined") init();

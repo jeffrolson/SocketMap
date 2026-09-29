@@ -345,7 +345,7 @@ ${themePreferenceScript()}
         <li><strong>2. Load the page</strong><br>Use another tab while logging.</li>
         <li><strong>3. Stop Logging</strong><br>Drop the saved file below.</li>
       </ol>
-      <p class="optional-har">Optional: record a HAR at the same time (DevTools, Network tab, Export HAR sanitized). Drop it with the NetLog, or use Add a HAR once the report opens, to see which script asked for each request, each request's type, and what came from cache. It is read here and never uploaded.</p>
+      <p class="optional-har">Optional: record a HAR (DevTools, Network tab, Export HAR sanitized) and a Performance profile (DevTools, Performance tab, record while reloading, Save profile) at the same time. Drop them with the NetLog, or use Add a HAR and Add a profile once the report opens, to see which script asked for each request, what came from cache, and what the page's code was doing. They are read here and never uploaded.</p>
       <div id="drop" class="drop" role="button" tabindex="0" aria-label="Choose a NetLog capture file">
         ${shellIcon("upload", 28)}
         <strong>Drop a NetLog capture here</strong>
@@ -477,6 +477,7 @@ ${themePreferenceScript()}
 <input type="file" id="compare-input" accept=".json,application/json" multiple hidden>
 <input type="file" id="second-input" accept=".json,application/json" hidden>
 <input type="file" id="har-input" accept=".har,.json,application/json" hidden>
+<input type="file" id="profile-input" accept=".json,.gz,application/json,application/gzip" hidden>
 <div id="load-feedback" class="load-feedback" hidden>
   <div id="progress" class="progress" hidden>
     <div class="progress-track"><div id="progress-bar"></div></div>
@@ -491,6 +492,7 @@ ${themePreferenceScript()}
     <span class="file" id="file-name"></span>
     <span class="spacer"></span>
     <button type="button" id="add-har" hidden>Add a HAR</button>
+    <button type="button" id="add-profile" hidden>Add a profile</button>
     <button type="button" id="add-comparison">Compare with another capture</button>
     <button type="button" data-theme-toggle>Theme</button>
     <button type="button" id="open-another">Open another capture</button>

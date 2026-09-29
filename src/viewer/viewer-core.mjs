@@ -50,6 +50,14 @@ export function looksLikeHar(head) {
   return text.includes('"log"') && (text.includes('"entries"') || text.includes('"creator"') || text.includes('"pages"'));
 }
 
+/** True when the first bytes look like a Chrome trace (a DevTools Performance profile). */
+export function looksLikeTrace(head) {
+  const text = String(head || "");
+  if (text.includes('"constants"') && text.includes('"events"')) return false;
+  if (text.includes('"log"') && text.includes('"entries"')) return false;
+  return text.includes('"traceEvents"') || (text.trimStart().startsWith("[") && /"ph"\s*:/.test(text) && /"ts"\s*:/.test(text));
+}
+
 /** Checks the first few KB of a file before reading all of it. */
 export function checkCaptureStart(head) {
   const text = String(head || "");

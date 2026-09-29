@@ -13,8 +13,9 @@ import { fileURLToPath } from "node:url";
 
 import { SAMPLE_TRACE } from "../src/sample-data.mjs";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
-import { readHarEnrichment } from "../src/parsers/generic-parser.mjs";
+import { readHarEnrichment, readTraceProfile } from "../src/parsers/generic-parser.mjs";
 import { attachHar } from "../src/enrichment.mjs";
+import { attachProfile } from "../src/profile.mjs";
 import { parseGenericTrace } from "../src/parsers/generic-parser.mjs";
 import { normalizeTrace } from "../src/normalizer.mjs";
 import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
@@ -22,7 +23,7 @@ import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
 import { parseDesignTokens } from "../src/theme.mjs";
 
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 
 function printHelp() {
   console.log(`
@@ -39,6 +40,7 @@ Transform network traces into interactive, self-contained sequence diagrams.
   --page <site>          NetLog only: analyze this site (e.g. https://contoso.sharepoint.com)
   --theme <DESIGN.md>    NetLog only: style the report with another design.md theme
   --har <file>           NetLog only: also read a HAR exported from DevTools (script, type and cache detail)
+  --profile <file>       NetLog only: also read a DevTools Performance profile, .json or .json.gz (page code and paint)
   --sample               Generate an interactive demo diagram using rich synthetic data
   --open                 Automatically open the generated visual in your default browser
   -h, --help             Show this help message and exit
@@ -49,6 +51,7 @@ Transform network traces into interactive, self-contained sequence diagrams.
   node bin/traceviz.mjs chrome-net-export-log.json -o report.html --open
   node bin/traceviz.mjs netlog.json --page https://contoso.sharepoint.com
   node bin/traceviz.mjs netlog.json --har network.har -o report.html
+  node bin/traceviz.mjs netlog.json --har network.har --profile trace.json.gz -o report.html
   node bin/traceviz.mjs network.har --open
 `);
 }
@@ -110,6 +113,7 @@ async function main() {
   let page = null;
   let themePath = null;
   let harPath = null;
+  let profilePath = null;
   let openAfter = false;
   let useSample = false;
 
@@ -129,6 +133,8 @@ async function main() {
       themePath = args[++i];
     } else if (arg === "--har") {
       harPath = args[++i];
+    } else if (arg === "--profile") {
+      profilePath = args[++i];
     } else if (!arg.startsWith("-")) {
       inputFile = arg;
     }
@@ -172,6 +178,20 @@ async function main() {
         }
         console.log(`\x1b[32m● [HAR]\x1b[0m Matched ${enrichment.alignment.matched} of ${enrichment.source.entryCount} HAR entries to NetLog requests${enrichment.alignment.method === "clock" ? "" : " (by order: the capture recorded no wall clock)"}.`);
       }
+      if (profilePath) {
+        const resolvedProfile = resolve(profilePath);
+        if (!existsSync(resolvedProfile)) {
+          console.error(`\x1b[31m[Error]\x1b[0m Profile file not found: ${resolvedProfile}`);
+          process.exit(1);
+        }
+        console.log("\x1b[35m● [Parser]\x1b[0m Streaming the Performance profile (screenshots, source text and command lines are never kept)...");
+        const profile = attachProfile(model, await readTraceProfile(resolvedProfile));
+        if (!profile) {
+          console.error("\x1b[31m[Error]\x1b[0m That file does not look like a DevTools Performance profile for a page load. In DevTools, open the Performance tab, record while reloading the page, then choose Save profile.");
+          process.exit(1);
+        }
+        console.log(`\x1b[32m● [Profile]\x1b[0m ${profile.alignment.aligned ? `Placed on the network timeline using ${profile.alignment.matched} shared requests.` : "No request appears in both files, so the profile is shown but not placed on the timeline."}`);
+      }
       const analysis = analyzeCapture(model, { site: page });
       const p = analysis.page;
       console.log(`\x1b[32m● [Analysis]\x1b[0m Page ${p.site}: ${p.requestCount} requests, ${p.hostCount} hosts, ${analysis.findings.length} findings (${model.requests.length} requests in capture).`);
@@ -180,8 +200,8 @@ async function main() {
       const source = { name: basename(resolvedInput), bytes: statSync(resolvedInput).size };
       htmlOutput = renderReportHtml(model, analysis, theme ? { theme, source } : { source });
     } else {
-      if (harPath) {
-        console.error("\x1b[31m[Error]\x1b[0m --har needs a Chromium NetLog as the main input. A HAR on its own opens as a diagram without it.");
+      if (harPath || profilePath) {
+        console.error(`\x1b[31m[Error]\x1b[0m ${harPath ? "--har" : "--profile"} needs a Chromium NetLog as the main input. A HAR on its own opens as a diagram without it.`);
         process.exit(1);
       }
       console.log("\x1b[35m● [Parser]\x1b[0m Ingesting generic/HAR/trace JSON...");

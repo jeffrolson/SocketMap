@@ -72,8 +72,9 @@ describe("coverage model", () => {
     assert.ok(perf && perf.covers.includes("javascript"));
     for (const step of coverage.next) {
       const claims = /SocketMap (imports|reads) /i.test(JSON.stringify(step));
-      assert.equal(claims, step.id === "har-initiator", `${step.id}: only the HAR step may say SocketMap reads it`);
-      assert.equal(Boolean(step.readBySocketMap), step.id === "har-initiator", step.id);
+      const reads = ["har-initiator", "performance-trace"].includes(step.id);
+      assert.equal(claims, reads, `${step.id}: only the HAR and profile steps may say SocketMap reads them`);
+      assert.equal(Boolean(step.readBySocketMap), reads, step.id);
     }
   });
 
@@ -125,7 +126,8 @@ describe("tool comparison", () => {
     const reads = about.find(entry => entry.key === "reads").values;
     assert.match(reads[0], /^Yes/);
     assert.match(reads[1], /^Yes, as an optional second file/, "a HAR is read now");
-    for (const value of reads.slice(2)) assert.doesNotMatch(value, /^Yes/, value);
+    assert.match(reads[2], /^Yes, as an optional extra file/, "a profile is read now");
+    for (const value of reads.slice(3)) assert.doesNotMatch(value, /^Yes/, value);
     for (const tool of tools) if (tool.link) assert.match(tool.link, /^https:\/\//);
   });
 
