@@ -18,6 +18,8 @@ import { renderDiagnostics, diagnosticsCss, diagnosticsScript } from "./diagnost
 import { buildCoverage } from "../coverage.mjs";
 import { renderCoverage, coverageCss } from "./coverage.mjs";
 import { buildServerInsights } from "../server-insights.mjs";
+import { renderPolicyView, policyScript, policyCss } from "./policy.mjs";
+import { buildPolicyEvidence } from "../policy/engine.mjs";
 import { renderServerInsights, renderServerDetail, renderServerMark, serverInsightsCss } from "./server-insights.mjs";
 import { eventReplayMarkup, eventReplayScript } from "../viewer/event-replay.mjs";
 
@@ -258,6 +260,7 @@ const ICONS = {
   overview: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   waterfall: '<path d="M4 6h8M7 11h9M10 16h10"/>',
   sequence: '<path d="M5 4v16M19 4v16M5 8h12M13 5l3 3-3 3M19 15H7M10 12l-3 3 3 3"/>',
+  policy: '<path d="M12 3l8 3v6c0 4.5-3.2 7.7-8 9-4.8-1.3-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
   coverage: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   environment: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   ai: '<path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>',
@@ -489,6 +492,7 @@ const NAV = [
   ["waterfall", "waterfall", "Waterfall"],
   ["sequence", "sequence", "Sequence"],
   ["environment", "environment", "Environment"],
+  ["policy", "policy", "Policy"],
   ["coverage", "coverage", "Coverage"],
   ["diagnostics", "overview", "Diagnostics"],
   ["event-replay", "search", "Events"],
@@ -531,6 +535,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   ${diagnosticsCss()}
   ${coverageCss()}
   ${serverInsightsCss()}
+  ${policyCss()}
   .srv-swatch { background: var(--text); height: 3px; align-self: center; }
   .event-replay { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
   .event-replay-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
@@ -837,6 +842,7 @@ ${themePreferenceScript()}
         </tbody></table>` : "<p>None.</p>"}
       </section>
     </div>
+    <div class="view" id="view-policy" data-view="policy">${renderPolicyView()}</div>
     <div class="view" id="view-coverage" data-view="coverage">${renderCoverage(buildCoverage(model))}</div>
     <div class="view" id="view-diagnostics" data-view="diagnostics">${renderDiagnostics(model)}</div>
     <div class="view" id="view-events" data-view="event-replay">${eventReplayMarkup()}</div>
@@ -883,7 +889,7 @@ ${themePreferenceScript()}
     document.querySelectorAll("[data-nav]").forEach(function (a) { a.classList.toggle("is-active", a.getAttribute("data-nav") === name); });
     filterbar.classList.toggle("is-shown", name === "waterfall" || name === "sequence");
     setTopbarHeight();
-    if (target && target !== view && !/^(waterfall|sequence|ai-summary|learn|environment|coverage)$/.test(hash)) {
+    if (target && target !== view && !/^(waterfall|sequence|ai-summary|learn|environment|coverage|policy)$/.test(hash)) {
       if (target.tagName === "DETAILS") target.open = true;
       target.scrollIntoView({ block: "center" });
     } else {
@@ -1125,6 +1131,7 @@ ${themePreferenceScript()}
 })();
 </script>
 ${diagnosticsScript()}
+${policyScript(buildPolicyEvidence(model, analysis))}
 ${eventReplayScript()}
 </body>
 </html>
