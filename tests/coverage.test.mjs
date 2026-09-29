@@ -70,7 +70,11 @@ describe("coverage model", () => {
     }
     const perf = coverage.next.find(step => step.id === "performance-trace");
     assert.ok(perf && perf.covers.includes("javascript"));
-    assert.ok(!/SocketMap (imports|reads) /i.test(JSON.stringify(coverage.next)), "no claimed import support");
+    for (const step of coverage.next) {
+      const claims = /SocketMap (imports|reads) /i.test(JSON.stringify(step));
+      assert.equal(claims, step.id === "har-initiator", `${step.id}: only the HAR step may say SocketMap reads it`);
+      assert.equal(Boolean(step.readBySocketMap), step.id === "har-initiator", step.id);
+    }
   });
 
   it("produces bounded plain text for the AI handoff", async () => {
@@ -120,7 +124,8 @@ describe("tool comparison", () => {
     const { tools, about } = (await build()).comparison;
     const reads = about.find(entry => entry.key === "reads").values;
     assert.match(reads[0], /^Yes/);
-    for (const value of reads.slice(1)) assert.doesNotMatch(value, /^Yes/, value);
+    assert.match(reads[1], /^Yes, as an optional second file/, "a HAR is read now");
+    for (const value of reads.slice(2)) assert.doesNotMatch(value, /^Yes/, value);
     for (const tool of tools) if (tool.link) assert.match(tool.link, /^https:\/\//);
   });
 

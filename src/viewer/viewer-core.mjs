@@ -43,6 +43,13 @@ export function buildComparison(modelA, modelB, options = {}) {
   return { comparison, html: renderComparisonHtml(comparison, options.theme ? { theme: options.theme } : {}) };
 }
 
+/** True when the first bytes look like a HAR (HTTP Archive) rather than a NetLog. */
+export function looksLikeHar(head) {
+  const text = String(head || "");
+  if (text.includes('"constants"') || text.includes('"events"')) return false;
+  return text.includes('"log"') && (text.includes('"entries"') || text.includes('"creator"') || text.includes('"pages"'));
+}
+
 /** Checks the first few KB of a file before reading all of it. */
 export function checkCaptureStart(head) {
   const text = String(head || "");

@@ -34,6 +34,10 @@ function tri(known, total) {
   return known >= total ? "recorded" : "partial";
 }
 
+function some(known, of, noun) {
+  return of ? `${known} of ${of} ${noun}` : null;
+}
+
 function share(known, total, noun) {
   return `${known} of ${total} ${noun}`;
 }
@@ -64,7 +68,12 @@ export function buildCoverage(model) {
   const total = requests.length;
 
   const ended = count(requests, r => r.endRecorded === true);
-  const cacheKnown = count(requests, r => typeof r.fromCache === "boolean");
+  const enrichment = model?.enrichment || null;
+  const harRows = enrichment ? enrichment.perRequest : null;
+  const cacheKnown = count(requests, r => typeof r.fromCache === "boolean" || (harRows ? harRows.has(r.id) : false));
+  const initiatorKnown = harRows ? count(requests, r => Boolean(harRows.get(r.id)?.initiator)) : 0;
+  const typeKnown = harRows ? count(requests, r => Boolean(harRows.get(r.id)?.resourceType)) : 0;
+  const harCache = enrichment ? enrichment.cacheAnswers.memory + enrichment.cacheAnswers.disk + enrichment.cacheAnswers.serviceWorker : 0;
   const protocolKnown = count(requests, r => r.protocol != null);
   const timed = count(requests, r => r.timing && r.timing.wait != null);
   const proxied = count(requests, r => r.proxy != null);
@@ -91,8 +100,12 @@ export function buildCoverage(model) {
       blurb: "What the page's own scripts and rendering were doing.",
       items: [
         never("javascript", "JavaScript execution and long tasks", "A NetLog records network events, not what the page's code was doing while it waited or ran."),
-        never("script-initiator", "Which script started a request", "A request records the origin that started it, not the script or line."),
-        never("rendering", "Rendering and page-experience timings", "Layout, paint, and measures like LCP, CLS, and INP are outside the network stack.")
+        enrichment
+          ? item("script-initiator", "Which script started a request", tri(initiatorKnown, total), total ? `From the HAR: ${share(initiatorKnown, total, "requests")} name the script or HTML parser that asked for them. A NetLog records only the origin.` : "No requests to check.", { short: some(initiatorKnown, total, "have one") })
+          : never("script-initiator", "Which script started a request", "A request records the origin that started it, not the script or line."),
+        enrichment && enrichment.milestones.length
+          ? item("rendering", "Rendering and page-experience timings", "partial", "From the HAR: DOMContentLoaded and load times only. Paint, LCP, layout shift and INP are still not recorded.")
+          : never("rendering", "Rendering and page-experience timings", "Layout, paint, and measures like LCP, CLS, and INP are outside the network stack.")
       ]
     },
     {
@@ -102,7 +115,9 @@ export function buildCoverage(model) {
       items: [
         item("requests", "Page requests", total ? (ended === total ? "recorded" : "partial") : "missing",
           total ? `Requests are recorded. ${ended === total ? `All ${total} have a recorded end.` : `Only ${share(ended, total, "requests")} have a recorded end; the rest are shown as unfinished.`}` : "No page requests are in this file."),
-        item("cache", "Cache result", tri(cacheKnown, total), total ? `Whether the cache answered is known for ${share(cacheKnown, total, "requests")}. Unknown is never shown as a miss.` : "No requests to check."),
+        item("cache", "Cache result", tri(cacheKnown, total), total ? `Whether the cache answered is known for ${share(cacheKnown, total, "requests")}. Unknown is never shown as a miss.${harCache ? ` The HAR adds ${harCache} more responses that came from the memory cache, disk cache or a service worker and never reached the network log.` : ""}` : "No requests to check."),
+        item("resource-type", "Type of each request (script, image, font, and so on)", enrichment ? tri(typeKnown, total) : "missing",
+          enrichment ? (total ? `From the HAR: the type is known for ${share(typeKnown, total, "requests")}.` : "No requests to check.") : "A NetLog does little more than tell a main-frame request from the rest. Add a HAR for script, stylesheet, image, font and XHR types."),
         item("snapshot", "Browser settings snapshot (DNS, proxy, socket pools)", environment.polledDataPresent ? "recorded" : "missing",
           environment.polledDataPresent ? "Chrome's end-of-capture snapshot is present." : "The end-of-capture snapshot (polledData) is absent, so browser DNS and proxy configuration was not recorded. Stop logging cleanly to include it."),
         integrityItem,
@@ -151,10 +166,10 @@ export function buildCoverage(model) {
     }
   ];
 
-  const some = (known, of, noun) => of ? `${known} of ${of} ${noun}` : null;
   const shorts = {
     requests: some(ended, total, "ended"),
     cache: some(cacheKnown, total, "known"),
+    "resource-type": enrichment ? some(typeKnown, total, "known") : null,
     dns: dnsLookups.length ? `${dnsLookups.length} lookups` : null,
     proxy: some(proxied, total, "known"),
     connections: some(linked, total, "linked"),
@@ -170,7 +185,9 @@ export function buildCoverage(model) {
     summary[entry.status]++;
     if (shorts[entry.id]) entry.short = shorts[entry.id];
   }
-  return { stages, summary, next: nextSteps(stages), comparison: buildComparison(stages) };
+  const comparison = buildComparison(stages);
+  comparison.loaded = enrichment ? ["netlog", "har"] : ["netlog"];
+  return { stages, summary, next: nextSteps(stages), comparison, har: enrichment ? { entries: enrichment.source.entryCount, matched: enrichment.alignment.matched, method: enrichment.alignment.method } : null };
 }
 
 
@@ -196,6 +213,7 @@ const ROWS = {
   ],
   browser: [
     ["requests", "List of requests (URL, status, size)", [2, "Everything the network stack did"], [2, "Everything the page asked for"], [1, "Some network events"], [2, "Network requests audit"], [1, "URLs only when unencrypted"], N, [1, "Only requests that reached it"]],
+    ["resource-type", "Type of each request (script, image, font)", [1, "Main frame or not, little more"], [2, "Script, style, image, font, XHR"], [1, "Some network events"], [2, "Resource summary by type"], N, N, N],
     ["cache", "Answered from cache or a service worker", [1, "Only what reached the network stack"], [2, "Memory, disk and service worker flags"], [1, "Flags on some responses"], [1, "Cache lifetime advice only"], N, N, N],
     ["machine", "Computer load (CPU, memory, other apps)", N, N, [1, "The browser's own CPU only"], N, N, N, N]
   ],
@@ -223,7 +241,7 @@ const ABOUT = [
   ["best", "Best when", ["The problem may be DNS, proxy, TLS, connection setup or the path", "You need to know which script asked for what, or what came from cache", "The network looks fine but the page still feels slow", "You want a quick scored review of page weight, scripts and render blockers", "You suspect loss, resets, or something on the wire changing traffic", "You need to know where along the path delay starts", "Waiting time on the server looks long"]],
   ["setup", "Setup", ["Built into Chrome and Edge", "Built into DevTools", "Built into DevTools", "Built into DevTools; also a web tool", "Install a program; usually needs admin rights", "tracert and pathping ship with Windows; mtr is an install", "Needs the server team"]],
   ["secrets", "Sensitive content", ["Default strips cookies; SocketMap also removes secrets and keeps IPs and URLs", "Choose Export HAR (sanitized); other options include cookies and page content", "Script URLs and timings; leave Screenshots off", "Page URL and script names", "Raw traffic; capture only with permission and treat as sensitive", "Hop IP addresses only", "Their own logs; share a request ID rather than logs"]],
-  ["reads", "SocketMap reads it", ["Yes: this report", "Not combined with a NetLog", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside"]]
+  ["reads", "SocketMap reads it", ["Yes: this report", "Yes, as an optional second file", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside"]]
 ];
 
 const SYMPTOMS = [
@@ -255,7 +273,7 @@ function buildComparison(stages) {
 const STEPS = [
   { id: "performance-trace", title: "Record a Chrome Performance profile while reloading the page", covers: ["javascript", "rendering", "machine"], why: "Shows what the page's code, layout, and paint were doing, so a slow load can be split into waiting on the network and working on the computer.", link: LINKS.performance },
   { id: "request-ids", title: "Give the server team a request ID from a slow response", covers: ["server-ids", "server-work"], why: "The server team can find that exact request in its own logs and tell you where the time went.", link: null },
-  { id: "har-initiator", title: "Export a HAR from Chrome DevTools to see which script started each request", covers: ["script-initiator"], why: "DevTools can record the script that asked for each request, which a NetLog does not.", link: LINKS.network },
+  { id: "har-initiator", title: "Add a HAR exported from Chrome DevTools (Network tab, Export HAR sanitized)", covers: ["script-initiator", "resource-type", "cache"], why: "DevTools records the script or HTML parser that asked for each request, each request's type, and which answers came from a cache or service worker. SocketMap reads a HAR as an optional second file next to the NetLog.", link: LINKS.network, readBySocketMap: true },
   { id: "lighthouse", title: "Run Lighthouse for the same page", covers: ["javascript", "rendering"], why: "Lists scripts by time spent running, which points at heavy code without a full profile.", link: LINKS.lighthouse },
   { id: "packet-capture", title: "Capture packets for the same time window", covers: ["packets", "local-link"], why: "A packet capture (or transport telemetry) shows retransmissions and resets on the wire, which the browser log does not.", link: LINKS.wireshark },
   { id: "route-check", title: "Trace the route to the slowest host", covers: ["hops"], why: "Shows where along the path delay begins, which the browser cannot see.", link: LINKS.mtr },

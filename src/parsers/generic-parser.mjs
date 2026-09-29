@@ -4,7 +4,8 @@
  * or raw JSON intermediate representations.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, createReadStream } from "node:fs";
+import { createHarReader } from "./har-stream.mjs";
 import { normalizeTrace, redactSensitiveData, formatBytes, formatDuration } from "../normalizer.mjs";
 
 /**
@@ -320,4 +321,19 @@ export function parseGenericTrace(input, options = {}) {
   }
 
   throw new Error("Unrecognized trace format: expected HAR, OpenTelemetry spans, or SocketMap IR JSON.");
+}
+
+/**
+ * Streams a HAR file from disk and returns the bounded summary used to enrich a NetLog
+ * report. The file is never held in memory, so response bodies cost nothing.
+ */
+export async function readHarEnrichment(filePath, options = {}) {
+  const reader = createHarReader(options);
+  await new Promise((resolve, reject) => {
+    const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 1024 * 1024 });
+    stream.on("data", chunk => reader.write(chunk));
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+  return reader.finish();
 }

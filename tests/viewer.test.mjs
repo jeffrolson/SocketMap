@@ -9,8 +9,12 @@ import { buildViewerHtml } from "../scripts/build-viewer.mjs";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
-import { buildComparison } from "../src/viewer/viewer-core.mjs";
+import { buildComparison, createCaptureReader as nodeCreateReader, buildReport as nodeBuildReport } from "../src/viewer/viewer-core.mjs";
+const viewerApiNode = { createCaptureReader: nodeCreateReader, buildReport: nodeBuildReport };
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
+import { buildSampleHar } from "../src/demo/sample-har.mjs";
+import { createHarReader } from "../src/parsers/har-stream.mjs";
+import { attachHar } from "../src/enrichment.mjs";
 
 let dir;
 let html;
@@ -104,5 +108,35 @@ describe("Drag-and-drop viewer", () => {
     assert.equal(har.ok, false);
     assert.ok(har.reason.includes("HAR"));
     assert.equal(viewerApi.checkCaptureStart("hello").ok, false);
+  });
+});
+
+describe("Viewer: optional HAR", () => {
+  it("offers Add a HAR, says it is optional and never uploaded", () => {
+    assert.ok(html.includes('id="add-har"') && html.includes('id="har-input"'));
+    assert.match(html, /Optional: record a HAR/);
+    assert.match(html, /never uploaded/);
+  });
+
+  it("recognizes a HAR by its first bytes and does not confuse it with a NetLog", () => {
+    assert.equal(viewerApi.looksLikeHar('{"log":{"version":"1.2","creator":{"name":"WebInspector"},"pages":[]'), true);
+    assert.equal(viewerApi.looksLikeHar('{"constants":{"logEventTypes":{}},"events":['), false);
+    assert.equal(viewerApi.looksLikeHar("hello"), false);
+  });
+
+  it("builds the same enriched report in the browser bundle as in Node", () => {
+    const build = (api) => {
+      const reader = api.createCaptureReader();
+      reader.write(text);
+      const model = reader.finish();
+      const harReader = api.createHarReader();
+      harReader.write(JSON.stringify(buildSampleHar(model)));
+      api.attachHar(model, harReader.finish());
+      return api.buildReport(model).html;
+    };
+    const inBundle = build(viewerApi);
+    const inNode = build({ createCaptureReader: viewerApiNode.createCaptureReader, createHarReader, attachHar, buildReport: viewerApiNode.buildReport });
+    assert.equal(inBundle, inNode);
+    assert.ok(inBundle.includes('id="enrichment"'));
   });
 });

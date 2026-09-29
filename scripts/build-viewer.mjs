@@ -284,6 +284,7 @@ export function buildViewerHtml({ theme } = {}) {
   .comparison-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .comparison-controls[hidden], .page-picker[hidden] { display: none; }
   .comparison-controls button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .optional-har { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-muted); max-width: 70ch; }
   .comparison-hint { margin: 0; padding: 6px 16px; font-size: 12px; color: var(--text-muted); background: var(--surface); border-bottom: 1px solid var(--border); }
   .comparison-entry { margin: 12px auto 0; max-width: 720px; color: var(--text-muted); font-size: 13px; }
   .comparison-entry button { margin-right: 8px; }
@@ -344,6 +345,7 @@ ${themePreferenceScript()}
         <li><strong>2. Load the page</strong><br>Use another tab while logging.</li>
         <li><strong>3. Stop Logging</strong><br>Drop the saved file below.</li>
       </ol>
+      <p class="optional-har">Optional: record a HAR at the same time (DevTools, Network tab, Export HAR sanitized). Drop it with the NetLog, or use Add a HAR once the report opens, to see which script asked for each request, each request's type, and what came from cache. It is read here and never uploaded.</p>
       <div id="drop" class="drop" role="button" tabindex="0" aria-label="Choose a NetLog capture file">
         ${shellIcon("upload", 28)}
         <strong>Drop a NetLog capture here</strong>
@@ -474,6 +476,7 @@ ${themePreferenceScript()}
 </div>
 <input type="file" id="compare-input" accept=".json,application/json" multiple hidden>
 <input type="file" id="second-input" accept=".json,application/json" hidden>
+<input type="file" id="har-input" accept=".har,.json,application/json" hidden>
 <div id="load-feedback" class="load-feedback" hidden>
   <div id="progress" class="progress" hidden>
     <div class="progress-track"><div id="progress-bar"></div></div>
@@ -487,6 +490,7 @@ ${themePreferenceScript()}
     <span class="brand">SocketMap</span>
     <span class="file" id="file-name"></span>
     <span class="spacer"></span>
+    <button type="button" id="add-har" hidden>Add a HAR</button>
     <button type="button" id="add-comparison">Compare with another capture</button>
     <button type="button" data-theme-toggle>Theme</button>
     <button type="button" id="open-another">Open another capture</button>

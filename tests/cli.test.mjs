@@ -6,6 +6,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
+import { buildSampleHar } from "../src/demo/sample-har.mjs";
+import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cliPath = resolve(__dirname, "../bin/traceviz.mjs");
@@ -14,11 +16,13 @@ const fixtureHar = resolve(__dirname, "fixtures/sample-har.json");
 const testOutSample = resolve(__dirname, "temp-sample.html");
 const testOutNetLog = resolve(__dirname, "temp-netlog.html");
 const testOutHar = resolve(__dirname, "temp-har.html");
+const tempHar = resolve(__dirname, "temp-enrich.har");
+const testOutEnriched = resolve(__dirname, "temp-enriched.html");
 
 describe("CLI Integration Tests", () => {
   after(() => {
     // Clean up temporary test files
-    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog]) {
+    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog, tempHar, testOutEnriched]) {
       if (existsSync(f)) {
         try { unlinkSync(f); } catch {}
       }
@@ -33,7 +37,7 @@ describe("CLI Integration Tests", () => {
 
   it("should display version with --version", () => {
     const out = execFileSync(process.execPath, [cliPath, "--version"], { encoding: "utf8" });
-    assert.ok(out.includes("SocketMap v0.9.0"));
+    assert.ok(out.includes("SocketMap v0.10.0"));
   });
 
   it("should generate sample diagram via --sample -o", () => {
@@ -55,6 +59,24 @@ describe("CLI Integration Tests", () => {
     const content = readFileSync(testOutNetLog, "utf8");
     assert.ok(content.includes("SocketMap Report"));
     assert.ok(content.includes("198.51.100.20"));
+  });
+
+  it("adds a HAR to a NetLog report with --har", async () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    writeFileSync(tempHar, JSON.stringify(buildSampleHar(await parseNetLog(fixtureNetLog))));
+    const out = execFileSync(process.execPath, [cliPath, fixtureNetLog, "--har", tempHar, "-o", testOutEnriched], { encoding: "utf8" });
+    assert.match(out, /Matched \d+ of \d+ HAR entries/);
+    const content = readFileSync(testOutEnriched, "utf8");
+    assert.ok(content.includes('id="enrichment"') && content.includes("What the page is made of"));
+    assert.ok(content.includes("HAR ENRICHMENT"));
+  });
+
+  it("explains --har problems instead of failing quietly", () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--har", "/no/such/file.har", "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /HAR file not found/);
+    writeFileSync(tempHar, '{"events":[]}');
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--har", tempHar, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like a HAR/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--har", tempHar, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
   });
 
   it("should report on a chosen page with --page", () => {

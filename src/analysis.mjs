@@ -12,6 +12,7 @@ import { redactCapturedText } from "./redact.mjs";
 import { buildDiagnosticEvidenceText } from "./diagnostic-insights.mjs";
 import { buildCoverage, coverageText } from "./coverage.mjs";
 import { buildServerInsights, inspectResponse, serverInsightsText } from "./server-insights.mjs";
+import { harEvidenceText } from "./enrichment.mjs";
 
 const RANK = { best: 0, better: 1, good: 2, poor: 3 };
 const TIMING_KEYS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
@@ -68,6 +69,13 @@ function shortUrl(url, max = 120) {
 /** Picks the page the user most likely loaded: a real site with a main-frame load and the most requests. */
 export function selectPageSite(model) {
   const sites = model.pages.filter(p => !p.isBackground);
+  // With a HAR loaded, the page it describes is the page the person cares about.
+  if (model.enrichment?.perRequest?.size) {
+    const matched = new Map();
+    for (const request of model.requests || []) if (model.enrichment.perRequest.has(request.id)) matched.set(request.site, (matched.get(request.site) || 0) + 1);
+    const best = sites.filter(p => matched.get(p.site)).sort((a, b) => matched.get(b.site) - matched.get(a.site) || b.requestCount - a.requestCount)[0];
+    if (best) return best.site;
+  }
   const loaded = sites.filter(p => p.url);
   return (loaded[0] || sites[0] || model.pages[0])?.site ?? null;
 }
@@ -481,6 +489,10 @@ export function buildAiSummary(model, analysis, { source } = {}) {
   lines.push("");
   lines.push(serverInsightsText(buildServerInsights(analysis.pageRequests)));
   lines.push("");
+  if (model.enrichment) {
+    lines.push(harEvidenceText(model.enrichment));
+    lines.push("");
+  }
   lines.push(coverageText(buildCoverage(model)));
   lines.push("");
   lines.push(`MISSING OR LIMITED DATA: ${missing.length ? missing.join("; ") : "No additional capture-model gaps identified by SocketMap"}. NetLog shows network activity only, not page JavaScript/CPU time, packet retransmissions, server internals, or security software acting inside the browser.`);

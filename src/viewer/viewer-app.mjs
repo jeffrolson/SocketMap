@@ -4,12 +4,16 @@
  * the file is read locally and never sent anywhere.
  */
 
-import { createCaptureReader, buildReport, buildComparison, checkCaptureStart } from "./viewer-core.mjs";
+import { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar } from "./viewer-core.mjs";
+import { createHarReader } from "../parsers/har-stream.mjs";
+import { attachHar } from "../enrichment.mjs";
+import { buildSampleHar } from "../demo/sample-har.mjs";
 import { buildPageLoadNetLog, toNetLogText } from "../demo/sample-capture.mjs";
 import { selectPageSite } from "../analysis.mjs";
 import { redactCapturedText } from "../redact.mjs";
 
 const SAMPLE_NAME = "sample-capture.json (synthetic example)";
+const SAMPLE_HAR_NAME = "sample-network.har (synthetic example)";
 
 const YIELD_EVERY_BYTES = 8 * 1024 * 1024;
 
@@ -52,6 +56,33 @@ async function readCapture(file, onProgress, constants = null) {
     ? readCapture(file, onProgress, model.diagnostics.constants) : model;
 }
 
+async function readHar(file, onProgress) {
+  const reader = createHarReader();
+  const decoder = new TextDecoder();
+  const stream = file.stream().getReader();
+  let read = 0;
+  let sinceYield = 0;
+  try {
+    for (;;) {
+      const { done, value } = await stream.read();
+      if (done) break;
+      read += value.byteLength;
+      sinceYield += value.byteLength;
+      reader.write(decoder.decode(value, { stream: true }));
+      onProgress(read, file.size);
+      if (sinceYield >= YIELD_EVERY_BYTES) {
+        sinceYield = 0;
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+  } finally {
+    await stream.cancel();
+    stream.releaseLock();
+  }
+  reader.write(decoder.decode());
+  return reader.finish();
+}
+
 function init() {
   const $ = (id) => document.getElementById(id);
   const start = $("start");
@@ -59,6 +90,7 @@ function init() {
   const input = $("file-input");
   const compareInput = $("compare-input");
   const secondInput = $("second-input");
+  const harInput = $("har-input");
   const progress = $("progress");
   const bar = $("progress-bar");
   const progressText = $("progress-text");
@@ -131,7 +163,9 @@ function init() {
     $("add-comparison").textContent = b ? "Replace B capture" : "Compare with another capture";
     $("save-report").textContent = nextView === "comparison" ? "Save comparison" : "Save report";
     for (const name of ["comparison", "a", "b"]) $("view-" + name).setAttribute("aria-pressed", String(view === name));
-    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : a.source.name;
+    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}`;
+    $("add-har").hidden = nextView === "comparison" || nextView === "b";
+    $("add-har").textContent = a.har ? "Replace HAR" : "Add a HAR";
     fileName.title = fileName.textContent;
     const pages = report.comparison ? [report.comparison.a.page, report.comparison.b.page] : [report.analysis.page];
     pageContext.textContent = pages.map((page, i) => `${pages.length > 1 ? (i ? "B" : "A") : "Selected"}: ${page.url}`).join(" · ");
@@ -145,17 +179,59 @@ function init() {
   function setLoading(value) {
     loading = value;
     document.body.setAttribute("aria-busy", String(value));
-    for (const element of [input, compareInput, secondInput]) element.disabled = value;
+    for (const element of [input, compareInput, secondInput, harInput]) element.disabled = value;
     drop.setAttribute("aria-disabled", String(value));
     drop.classList.remove("is-over");
-    for (const id of ["compare-files", "add-comparison", "open-another", "save-report", "swap-captures", "page-select", "page-select-b", "view-comparison", "view-a", "view-b"]) $(id).disabled = value;
+    for (const id of ["compare-files", "add-comparison", "add-har", "open-another", "save-report", "swap-captures", "page-select", "page-select-b", "view-comparison", "view-a", "view-b"]) $(id).disabled = value;
     pageSelect.disabled = value || !captures[0]?.model.pages.length;
     pageSelectB.disabled = value || !captures[1]?.model.pages.length;
     document.querySelectorAll("[data-open-sample]").forEach(button => { button.disabled = value; });
   }
 
+  // A HAR adds detail to the first capture. It is read here, matched, and never uploaded.
+  async function addHar(file) {
+    if (!captures.length) throw new Error("A HAR adds detail to a NetLog. Open the NetLog first, then add the HAR.");
+    const name = redactCapturedText(file.name);
+    bar.style.width = "0%";
+    progressText.textContent = `Reading HAR: ${name}...`;
+    const har = await readHar(file, (read, total) => {
+      bar.style.width = `${Math.min(100, (read / Math.max(1, total)) * 100).toFixed(1)}%`;
+      progressText.textContent = `Reading HAR: ${name}, ${formatMb(read)} of ${formatMb(total)}`;
+    });
+    const model = captures[0].model;
+    delete model.enrichment;
+    if (!attachHar(model, har)) throw new Error("That file does not look like a HAR. In DevTools, open the Network tab and choose Export HAR (sanitized).");
+    const next = captures.map((capture, i) => i === 0 ? { ...capture, har: { name, bytes: file.size }, site: selectPageSite(model) } : capture);
+    show(next, view === "comparison" ? "a" : view);
+  }
+
   async function loadFiles(files, { append = false, requireTwo = false } = {}) {
     if (loading || !files.length) return;
+    const kinds = await Promise.all(files.map(async file => looksLikeHar(await file.slice(0, 4096).text())));
+    const hars = files.filter((_, i) => kinds[i]);
+    if (hars.length) {
+      if (hars.length > 1) { showError("Add one HAR at a time. Choose the HAR that was recorded with this NetLog."); return; }
+      const logs = files.filter((_, i) => !kinds[i]);
+      if (logs.length) await loadFiles(logs, { append: false, requireTwo });
+      if (!captures.length) {
+        if (!logs.length) showError("A HAR adds detail to a NetLog. Open the NetLog first (or drop both files together), then add the HAR.");
+        return;
+      }
+      if (error.hidden === false) return;
+      setLoading(true);
+      error.hidden = true;
+      $("load-feedback").hidden = false;
+      progress.hidden = false;
+      try {
+        await addHar(hars[0]);
+        $("load-feedback").hidden = true;
+      } catch (err) {
+        showError(err.message || String(err));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     if (files.length > 2 || (requireTwo && files.length !== 2)) {
       showError("Choose exactly two NetLog captures to compare. The first is A (baseline); the second is B (comparison).");
       return;
@@ -195,6 +271,12 @@ function init() {
   async function openSample() {
     const text = toNetLogText(buildPageLoadNetLog());
     await loadFiles([new File([text], SAMPLE_NAME, { type: "application/json" })]);
+    if (!captures.length) return;
+    // The sample shows the HAR view too, built from the same made-up requests.
+    const model = captures[0].model;
+    const reader = createHarReader();
+    reader.write(JSON.stringify(buildSampleHar(model)));
+    if (attachHar(model, reader.finish())) show(captures.map((capture, i) => i === 0 ? { ...capture, har: { name: SAMPLE_HAR_NAME, bytes: 0 }, site: selectPageSite(model) } : capture));
   }
 
   function selectedFiles(element, options) {
@@ -205,6 +287,17 @@ function init() {
   input.addEventListener("change", () => selectedFiles(input));
   compareInput.addEventListener("change", () => selectedFiles(compareInput, { requireTwo: true }));
   secondInput.addEventListener("change", () => selectedFiles(secondInput, { append: true }));
+  harInput.addEventListener("change", async () => {
+    const files = Array.from(harInput.files).slice(0, 1);
+    harInput.value = "";
+    if (!files.length) return;
+    if (!looksLikeHar(await files[0].slice(0, 4096).text())) {
+      showError("That file does not look like a HAR. In DevTools, open the Network tab and choose Export HAR (sanitized).");
+      return;
+    }
+    loadFiles(files);
+  });
+  $("add-har").addEventListener("click", () => harInput.click());
   $("compare-files").addEventListener("click", () => compareInput.click());
   $("add-comparison").addEventListener("click", () => secondInput.click());
   $("dismiss-error").addEventListener("click", () => { $("load-feedback").hidden = true; });
@@ -298,5 +391,5 @@ function init() {
   });
 }
 
-globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart };
+globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar };
 if (typeof document !== "undefined") init();
