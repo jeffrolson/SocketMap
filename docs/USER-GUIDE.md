@@ -156,6 +156,19 @@ A map of the request path (page code, browser, network stack, network path, serv
 
 The counts come from your capture; the "never" rows are facts about the NetLog format. Not recorded does not mean it was fine. **Worth capturing next** lists other data to collect separately (a Chrome Performance profile, a request ID for the server team, a HAR, Lighthouse, a packet capture, a route trace, or a second capture to compare). SocketMap does not read those yet. The same summary is included in the AI summary.
 
+### Policy
+
+An optional tab for the browser's enterprise policies. In Chrome open `chrome://policy` (Edge: `edge://policy`), choose **Export to JSON**, and drop the file on the Policy tab. It is read in that page only: nothing is uploaded, and the file is not saved into the report. **Try a sample export** shows the result with made-up data.
+
+You get:
+
+- **What is set:** the policies that shape the network path (proxy and PAC, QUIC, DNS, prediction, certificate revocation, connection limits, caching, background running), each value in plain words, and where it comes from.
+- **Deprecated in use:** policies the vendor has retired, with the replacement.
+- **Cross-checks:** where a policy and this capture disagree, for example QUIC blocked by policy while the capture used HTTP/3. The export may be from another machine or time.
+- **Worth considering:** suggestions that appear only when this capture gives evidence, such as a slow proxy lookup. They are things to test, not instructions.
+
+Every entry links to that policy's page in the Chrome Enterprise policy list or the Microsoft Edge documentation. **Documented** means paraphrased from the vendor's page; **SocketMap guidance** is our judgment, with the reason. Where the paraphrase came from the other browser's page, the tab says so. Policies outside the catalog are counted but not assessed, and the tab shows the date the catalog was last reviewed. Guidance covers network and page-load behavior only, not security hardening. An unmanaged browser exports zero policies, and the tab says so.
+
 ### Diagnostics and Events
 
 **Diagnostics** includes browser-wide activity beyond the selected page. Start with **What to investigate next**: each observation has a next check and, where available, an **Inspect source** button. These are investigation leads, not proven causes.
