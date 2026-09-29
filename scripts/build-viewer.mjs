@@ -121,7 +121,7 @@ const STEPS = [
 
 const SPECS = [
   ["Reads", "Chrome and Edge network logs (net-export). HAR files work with the command-line tool, which draws a diagram view."],
-  ["Shows", "Findings, host ratings (Best / Better / Good / Poor), request waterfall, sequence view, environment (local IP, DNS servers, proxy setup), AI summary."],
+  ["Shows", "Findings, host ratings (Best / Better / Good / Poor), request waterfall, sequence view, environment (local IP, DNS servers, proxy setup), what servers reported about themselves when they send it (Server-Timing, CDN and cache headers), a Coverage map of what the capture did and did not record, AI summary."],
   ["Speed", "5 MB capture: about 0.1 s. 300 MB capture: about 2 s. Measured on a laptop."],
   ["Runs in", "Current Chrome or Edge. The command line needs Node.js 18 or later."],
   ["Network access", "None. This page and every report load nothing from the internet."],

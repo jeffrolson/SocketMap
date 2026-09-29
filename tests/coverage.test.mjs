@@ -18,14 +18,14 @@ describe("coverage model", () => {
     assert.deepEqual(coverage.stages.map(stage => stage.id), ["page", "browser", "network", "path", "server"]);
     for (const id of ["requests", "dns", "snapshot", "integrity"]) assert.equal(item(coverage, id).status, "recorded", id);
     for (const id of ["connections", "tls", "protocol", "timing"]) assert.notEqual(item(coverage, id).status, "never", id);
-    for (const id of ["javascript", "script-initiator", "rendering", "packets", "hops", "server-work", "extensions", "machine"]) assert.equal(item(coverage, id).status, "never", id);
+    for (const id of ["javascript", "script-initiator", "rendering", "packets", "hops", "extensions", "machine"]) assert.equal(item(coverage, id).status, "never", id);
     assert.equal(item(coverage, "payloads").status, "missing", "Default capture mode records metadata only");
     assert.match(item(coverage, "payloads").detail, /Default/);
   });
 
   it("never reports Recorded without evidence in the capture", () => {
     const coverage = buildCoverage({ environment: { polledDataPresent: false, captureMode: null }, requests: [], connections: [], dnsLookups: [], diagnostics: {} });
-    for (const id of ["requests", "cache", "dns", "connections", "tls", "protocol", "timing", "snapshot", "server-ids", "integrity", "payloads"]) {
+    for (const id of ["requests", "cache", "dns", "connections", "tls", "protocol", "timing", "snapshot", "server-ids", "server-work", "cdn-cache", "integrity", "payloads"]) {
       assert.notEqual(item(coverage, id).status, "recorded", id);
     }
     assert.doesNotThrow(() => buildCoverage(null));
@@ -131,5 +131,21 @@ describe("tool comparison", () => {
       assert.ok(symptom.see && symptom.why && symptom.add.length, symptom.see);
       for (const id of symptom.add) assert.ok(ids.has(id), `${symptom.see} -> ${id}`);
     }
+  });
+});
+
+describe("server-reported evidence in coverage", () => {
+  it("counts server timing and CDN headers from the sample capture", async () => {
+    const coverage = buildCoverage(await modelFor(toNetLogText(buildPageLoadNetLog())));
+    assert.equal(item(coverage, "server-work").status, "partial");
+    assert.match(item(coverage, "server-work").detail, /server-reported/);
+    assert.equal(item(coverage, "cdn-cache").status, "partial");
+    assert.equal(item(coverage, "server-ids").status, "partial");
+  });
+  it("says what to do when the servers report nothing", () => {
+    const coverage = buildCoverage({ requests: [{ endRecorded: true, responseHeaders: ["content-type: text/html"] }], connections: [], dnsLookups: [], environment: {}, diagnostics: {} });
+    assert.equal(item(coverage, "server-work").status, "missing");
+    assert.match(item(coverage, "server-work").detail, /Ask the platform team/);
+    assert.equal(item(coverage, "cdn-cache").status, "missing");
   });
 });

@@ -9,6 +9,8 @@
  * No Node APIs: runs in the browser viewer as well.
  */
 
+import { buildServerInsights } from "./server-insights.mjs";
+
 export const STATUS_LABELS = {
   recorded: "Recorded",
   partial: "Partial",
@@ -16,7 +18,6 @@ export const STATUS_LABELS = {
   never: "Never in a NetLog"
 };
 
-const ID_HEADERS = /^(?:request-id|client-request-id|x-request-id|x-correlation-?id|sprequestguid|x-ms-request-id):/i;
 
 // Each link already appears, verified, in the Learn tab.
 const LINKS = {
@@ -68,7 +69,10 @@ export function buildCoverage(model) {
   const timed = count(requests, r => r.timing && r.timing.wait != null);
   const proxied = count(requests, r => r.proxy != null);
   const linked = count(requests, r => r.connectionId != null);
-  const withId = count(requests, r => Array.isArray(r.responseHeaders) && r.responseHeaders.some(line => ID_HEADERS.test(line)));
+  const server = buildServerInsights(requests);
+  const infos = [...server.perRequest.values()];
+  const withId = infos.filter(info => info.ids.length).length;
+  const reported = infos.filter(info => info.metrics.length || info.timingHeaders.length).length;
   const tlsCandidates = connections.filter(c => c.tlsMs != null || c.tlsVersion != null || c.cert != null);
   const tlsKnown = count(tlsCandidates, c => c.tlsVersion != null && c.cert != null);
   const withCert = count(connections, c => c.cert != null);
@@ -138,8 +142,11 @@ export function buildCoverage(model) {
       title: "Server",
       blurb: "What happened after the request arrived.",
       items: [
+        item("cdn-cache", "CDN and cache answers (from response headers)", tri(server.cache.withHeaders, server.answered),
+          server.cache.withHeaders ? `${share(server.cache.withHeaders, server.answered, "responses")} carry cache or CDN headers (${server.cache.hit} report a hit, ${server.cache.miss} a miss). These are the CDN's own claims.` : "No response carries cache or CDN headers, so where each answer came from is not recorded."),
         item("server-ids", "Request or correlation IDs in responses", tri(withId, total), total ? `${share(withId, total, "responses")} carry a request or correlation ID. A server team can look one up in its logs.` : "No responses to check."),
-        never("server-work", "Server processing and backend time", "Waiting time is what the browser saw. It does not split server work from network delay.")
+        item("server-work", "Server processing time (as the server reports it)", tri(reported, server.answered),
+          reported ? `${share(reported, server.answered, "responses")} carry server-reported timing (Server-Timing or a similar header). It is the server's own figure, and phases can overlap.` : "No response carries Server-Timing or a similar header, so waiting time cannot be split into server work and network delay. Ask the platform team to send Server-Timing for a follow-up capture.")
       ]
     }
   ];
@@ -154,7 +161,9 @@ export function buildCoverage(model) {
     tls: some(tlsKnown, tlsCandidates.length, "complete"),
     protocol: some(protocolKnown, total, "known"),
     timing: some(timed, total, "timed"),
-    "server-ids": some(withId, total, "have one")
+    "server-ids": some(withId, total, "have one"),
+    "server-work": some(reported, server.answered, "report it"),
+    "cdn-cache": some(server.cache.withHeaders, server.answered, "have headers")
   };
   const summary = { recorded: 0, partial: 0, missing: 0, never: 0 };
   for (const entry of stages.flatMap(stage => stage.items)) {
@@ -204,7 +213,8 @@ const ROWS = {
     ["local-link", "Wi-Fi, network card and OS quality", N, N, N, N, [1, "Retransmits hint at it"], N, N]
   ],
   server: [
-    ["server-work", "Server processing time, apart from network delay", [0, "Total wait only"], [0, "Total wait only"], [0, "Total wait only"], [0, "Main page response time only"], [1, "Gap minus round trip estimates it"], N, [2, "The real answer"]],
+    ["cdn-cache", "CDN and cache answers", [1, "Headers, if the server sends them"], [1, "Headers, if the server sends them"], N, [1, "Cache lifetime advice only"], [1, "Only when unencrypted"], N, [2, "Their own cache logs"]],
+    ["server-work", "Server processing time, apart from network delay", [1, "Only if the server reports it"], [1, "Only if the server reports it"], [0, "Total wait only"], [0, "Main page response time only"], [1, "Gap minus round trip estimates it"], N, [2, "The real answer"]],
     ["server-ids", "Request or correlation ID", [2, "Response headers, if sent"], [2, "Headers, if sent"], N, N, [1, "Only when unencrypted"], N, [2, "What you search by"]]
   ]
 };

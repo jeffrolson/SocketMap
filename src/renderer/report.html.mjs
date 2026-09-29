@@ -17,9 +17,11 @@ import { DEFAULT_THEME } from "./theme.generated.mjs";
 import { renderDiagnostics, diagnosticsCss, diagnosticsScript } from "./diagnostics.mjs";
 import { buildCoverage } from "../coverage.mjs";
 import { renderCoverage, coverageCss } from "./coverage.mjs";
+import { buildServerInsights } from "../server-insights.mjs";
+import { renderServerInsights, renderServerDetail, renderServerMark, serverInsightsCss } from "./server-insights.mjs";
 import { eventReplayMarkup, eventReplayScript } from "../viewer/event-replay.mjs";
 
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const MAX_SEQUENCE_HOSTS = 8;
 const MAX_SEQUENCE_REQUESTS = 1000; // display limit for the sequence view only; the waterfall shows every request
@@ -182,7 +184,7 @@ function renderHosts(hosts) {
     </section>`;
 }
 
-function renderRequestDetail(r, conn) {
+function renderRequestDetail(r, conn, serverInfo = null) {
   const timing = SEGMENTS.map(k => `<tr><th>${esc(TIMING_LABELS[k])}</th><td>${esc(ms(r.timing[k]))}</td></tr>`).join("");
   const connRows = conn ? [
     ["Connection", `${conn.kind.toUpperCase()} ${r.reusedConnection ? "(reused)" : r.reusedConnection === false ? "(new)" : ""}`],
@@ -207,12 +209,13 @@ function renderRequestDetail(r, conn) {
         </tbody></table>
         <table class="mini"><tbody><tr><th>Total</th><td><strong>${esc(ms(r.durationMs))}</strong></td></tr>${timing}</tbody></table>
       </div>
+      ${renderServerDetail(serverInfo, r.timing.wait ?? null)}
       ${r.requestHeaders.length ? `<details class="more"><summary>Request headers</summary><pre>${esc(r.requestHeaders.join("\n"))}</pre></details>` : ""}
       ${r.responseHeaders.length ? `<details class="more"><summary>Response headers</summary><pre>${esc(r.responseHeaders.join("\n"))}</pre></details>` : ""}
     </div>`;
 }
 
-function renderWaterfall(analysis, connections) {
+function renderWaterfall(analysis, connections, serverInsights) {
   const { page, pageRequests } = analysis;
   const span = Math.max(1, page.observedSpanMs ?? page.loadMs ?? 1);
   const pct = (v) => `${Math.max(0, v / span * 100).toFixed(3)}%`;
@@ -228,10 +231,10 @@ function renderWaterfall(analysis, connections) {
           <span class="wf-label"><span class="method" tabindex="0" data-tip="${esc(methodTip(r.method))}">${esc(r.method || "Not recorded")}</span> <span class="wf-host" title="${esc(r.url)}">${esc(r.host)}</span><span class="wf-path" title="${esc(r.url)}">${esc(pathOf(r.url))}</span></span>
           <span class="wf-status" data-tip="${esc(resultTip(r))}">${esc(status)}</span>
           <span class="wf-proto"${r.protocol ? ` data-tip="${esc(protocolTip(r.protocol))}"` : ""}>${esc(r.protocol || "")}</span>
-          <span class="wf-track" title="${r.endRecorded === false ? "End not recorded. Bar extends only to the last observed capture event." : "Recorded request duration"}"><span class="wf-bar" style="left:${pct(r.start - page.startMs)};width:${pct(Math.max(r.observedDurationMs ?? r.durationMs ?? 0, span / 400))}">${segs}</span></span>
+          <span class="wf-track" title="${r.endRecorded === false ? "End not recorded. Bar extends only to the last observed capture event." : "Recorded request duration"}"><span class="wf-bar" style="left:${pct(r.start - page.startMs)};width:${pct(Math.max(r.observedDurationMs ?? r.durationMs ?? 0, span / 400))}">${segs}${renderServerMark(serverInsights.perRequest.get(r.id), r, SEGMENTS)}</span></span>
           <span class="wf-time">${r.endRecorded === false ? "Unfinished" : esc(ms(r.durationMs))}</span>
         </summary>
-        ${renderRequestDetail(r, connections.get(r.connectionId))}
+        ${renderRequestDetail(r, connections.get(r.connectionId), serverInsights.perRequest.get(r.id))}
       </details>`;
   }).join("");
   return `
@@ -240,7 +243,7 @@ function renderWaterfall(analysis, connections) {
       <p class="note">Every request for this page, in start order. Click a row for its timing, connection, certificate, and headers.</p>
       <div class="wf-key" aria-label="Timing color key">
         <span class="key-heading">Timing color key <span class="muted">· Hover or focus a phase to learn more</span></span>
-        <ul class="legend">${SEGMENTS.map(k => `<li tabindex="0" data-tip="${esc(TIMING_MEANINGS[k])}"><span class="swatch seg-${k}" aria-hidden="true"></span>${esc(TIMING_LABELS[k])}</li>`).join("")}</ul>
+        <ul class="legend">${SEGMENTS.map(k => `<li tabindex="0" data-tip="${esc(TIMING_MEANINGS[k])}"><span class="swatch seg-${k}" aria-hidden="true"></span>${esc(TIMING_LABELS[k])}</li>`).join("")}${serverInsights.hasAnything ? `<li tabindex="0" data-tip="A thin line under the wait bar, as wide as the largest phase the server reported for itself (Server-Timing). It is the server's own figure and may overlap other phases."><span class="swatch srv-swatch" aria-hidden="true"></span>Server-reported time</li>` : ""}</ul>
       </div>
       ${renderProtocolGuide(pageRequests)}
       <div class="wf">
@@ -500,6 +503,7 @@ const NAV = [
  *   theme: design tokens (defaults to DESIGN.md); source: the capture file, for the header
  */
 export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, source = null } = {}) {
+  const serverInsights = buildServerInsights(analysis.pageRequests);
   const connections = new Map(model.connections.map(c => [c.id, c]));
   const { page } = analysis;
   const high = analysis.findings.filter(f => f.severity === "high").length;
@@ -526,6 +530,8 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   ${themeModeCss(theme, DEFAULT_THEME)}
   ${diagnosticsCss()}
   ${coverageCss()}
+  ${serverInsightsCss()}
+  .srv-swatch { background: var(--text); height: 3px; align-self: center; }
   .event-replay { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
   .event-replay-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
   .event-replay-tools label { display: grid; gap: 4px; font-size: 12px; }
@@ -812,10 +818,11 @@ ${themePreferenceScript()}
       </div>
       ${renderFindings(analysis.findings)}
       ${renderBreakdown(analysis.breakdown)}
+      ${renderServerInsights(serverInsights)}
       ${renderHosts(analysis.hosts)}
     </div>
     <div class="view" id="view-waterfall" data-view="waterfall">
-      ${renderWaterfall(analysis, connections)}
+      ${renderWaterfall(analysis, connections, serverInsights)}
     </div>
     <div class="view" id="view-sequence" data-view="sequence">
       ${renderSequence(view, page, analysis)}
@@ -1062,6 +1069,21 @@ ${themePreferenceScript()}
   }
   toggle.addEventListener("click", function () { setDetailsHidden(!layout.classList.contains("details-hidden")); });
   try { if (localStorage.getItem("socketmap-details-hidden") === "1") setDetailsHidden(true); } catch (e) { /* storage may be blocked */ }
+
+  // Copy buttons for request IDs. Falls back to selecting the ID when the clipboard is blocked.
+  document.addEventListener("click", function (ev) {
+    var button = ev.target.closest && ev.target.closest("[data-copy]");
+    if (!button) return;
+    var label = button.textContent;
+    function done(text) { button.textContent = text; setTimeout(function () { button.textContent = label; }, 1800); }
+    function select() {
+      var code = button.previousElementSibling;
+      if (code && window.getSelection) { var range = document.createRange(); range.selectNodeContents(code); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
+      done("Press Ctrl+C");
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(button.getAttribute("data-copy")).then(function () { done("Copied"); }, select);
+    else select();
+  });
 
   document.getElementById("copy-summary").addEventListener("click", function () {
     var text = document.getElementById("summary-text");

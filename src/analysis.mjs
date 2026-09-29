@@ -11,6 +11,7 @@ import { formatDuration, formatBytes } from "./normalizer.mjs";
 import { redactCapturedText } from "./redact.mjs";
 import { buildDiagnosticEvidenceText } from "./diagnostic-insights.mjs";
 import { buildCoverage, coverageText } from "./coverage.mjs";
+import { buildServerInsights, inspectResponse, serverInsightsText } from "./server-insights.mjs";
 
 const RANK = { best: 0, better: 1, good: 2, poor: 3 };
 const TIMING_KEYS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
@@ -244,8 +245,10 @@ function buildFindings(pageRequests, hosts, connections, dnsLookups) {
     severity: "medium",
     title: "Servers that were slow to respond",
     detail: `These requests waited over ${formatDuration(THRESHOLDS.server.good)} between sending the request and the first byte of the response. That time is spent at the server or anything in front of it.`,
-    evidence: pageRequests.filter(r => (r.timing.wait || 0) > THRESHOLDS.server.good).sort((a, b) => b.timing.wait - a.timing.wait).map(r =>
-      `${shortUrl(r.url)}: ${ms(r.timing.wait)} server wait`),
+    evidence: pageRequests.filter(r => (r.timing.wait || 0) > THRESHOLDS.server.good).sort((a, b) => b.timing.wait - a.timing.wait).map(r => {
+      const reported = inspectResponse(r)?.largest;
+      return `${shortUrl(r.url)}: ${ms(r.timing.wait)} server wait${reported ? `; the server reported ${reported.name} at ${ms(reported.dur)} of it` : ""}`;
+    }),
     team: "Application owner or service vendor"
   });
 
@@ -475,6 +478,8 @@ export function buildAiSummary(model, analysis, { source } = {}) {
   }
   const missing = missingCaptureData(model, analysis);
   lines.push(buildDiagnosticEvidenceText(model));
+  lines.push("");
+  lines.push(serverInsightsText(buildServerInsights(analysis.pageRequests)));
   lines.push("");
   lines.push(coverageText(buildCoverage(model)));
   lines.push("");

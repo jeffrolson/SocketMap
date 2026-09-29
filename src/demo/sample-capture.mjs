@@ -216,7 +216,7 @@ export function buildPageLoadNetLog() {
     requestType: "main frame", start: 1000, streamStart: 1005, streamEnd: 1290,
     controller: 2, job: 3, protocol: "h2", sendStart: 1290, sendEnd: 1291, headersAt: 1791, end: 1850,
     requestHeaders: [":method: GET", ":path: /sites/team/home.aspx?tempauth=SECRET123&view=1", "cookie: session=SUPERSECRET", "authorization: Bearer abc.def.ghi"],
-    responseHeaders: ["HTTP/1.1 200", "content-type: text/html", "set-cookie: FedAuth=SECRETCOOKIE", "server: Microsoft-IIS/10.0"],
+    responseHeaders: ["HTTP/1.1 200", "content-type: text/html", "set-cookie: FedAuth=SECRETCOOKIE", "server: Microsoft-IIS/10.0", "server-timing: db;dur=180;desc=\"SQL query\", auth;dur=40, render;dur=120", "x-response-time: 231ms", "request-id: 0f3c9a12-example-0001"],
     bytes: 40000
   });
 
@@ -230,7 +230,7 @@ export function buildPageLoadNetLog() {
     initiator: "https://portal.example.com", start: 1860, streamStart: 1861, streamEnd: 1863,
     controller: 12, job: 13, protocol: "h2", sendStart: 1863, sendEnd: 1864, headersAt: 3064, end: 3100,
     requestHeaders: [":method: GET", ":path: /_layouts/15/app.js", "x-requestdigest: DIGESTSECRET"],
-    responseHeaders: ["HTTP/1.1 200", "content-type: application/javascript"],
+    responseHeaders: ["HTTP/1.1 200", "content-type: application/javascript", "server-timing: render;dur=1050;desc=\"bundle build\", cache;desc=MISS", "request-id: 0f3c9a12-example-0002"],
     bytes: 250000
   });
 
@@ -256,7 +256,7 @@ export function buildPageLoadNetLog() {
     id: 20, url: "https://cdn.example.net/assets/site.css",
     initiator: "https://portal.example.com", start: 1860, streamStart: 1861, streamEnd: 1901,
     controller: 22, job: 23, protocol: "h3", sendStart: 1901, sendEnd: 1902, headersAt: 1950, end: 1960,
-    responseHeaders: ["HTTP/1.1 200", "content-type: text/css"], bytes: 12000
+    responseHeaders: ["HTTP/1.1 200", "content-type: text/css", "cf-cache-status: HIT", "cf-ray: 8a1b2c3d4e5f6071-SEA", "age: 3120"], bytes: 12000
   });
 
   // 4. Localhost probe, refused (sign-in agent loopback check)
@@ -293,7 +293,7 @@ export function buildPageLoadNetLog() {
     initiator: "https://portal.example.com", start: 1904, streamStart: 1905, streamEnd: 2405,
     controller: 42, job: 43, protocol: "http/1.1", method: "POST", sendStart: 2405, sendEnd: 2406, headersAt: 2606, end: 2620,
     requestHeaders: ["Host: api.example.org", "Proxy-Authorization: Negotiate PROXYSECRET", "X-Api-Key: APIKEYSECRET"],
-    responseHeaders: ["HTTP/1.1 200 OK", "content-type: application/json", "via: 1.1 proxy.corp.example.com"], bytes: 900
+    responseHeaders: ["HTTP/1.1 200 OK", "content-type: application/json", "via: 1.1 proxy.corp.example.com", "server-timing: upstream;dur=150", "x-request-id: 7d2e4a-example-0003"], bytes: 900
   });
 
   // 6. Extension background request served from cache
