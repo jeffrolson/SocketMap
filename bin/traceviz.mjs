@@ -23,7 +23,7 @@ import { analyzeCapture } from "../src/analysis.mjs";
 import { renderReportHtml } from "../src/renderer/report.html.mjs";
 import { parseDesignTokens } from "../src/theme.mjs";
 
-const VERSION = "0.11.0";
+const VERSION = "0.11.1";
 
 function printHelp() {
   console.log(`

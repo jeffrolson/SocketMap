@@ -3,6 +3,14 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-09-29
+### Fixed
+- **A Performance profile now finds the page when other tabs navigate after it.** A profile recorded from a session that later touched blank tabs, `chrome://` pages or extension pages picked one of those as "the page", so the profile showed nothing and was not placed on the timeline. The page is now the last navigation to a web (`http` or `https`) document.
+
+### Validated
+- **Profile alignment on a genuine pair.** A NetLog and a Performance trace recorded together from one Chrome session (a Wikipedia article): 34 of 37 trace requests matched NetLog requests, 33 of them within 50 ms of the median offset, and the offset was found to within a few milliseconds. The offset from requests also agrees with the shared browser clock (trace time minus the NetLog's first tick) to within 5 ms, which confirms both files use Chrome's monotonic clock when recorded in the same session. The pair loads in the viewer (with the trace gzipped), the main-thread band and the milestone lines land where the profile says.
+- **Policy tab with a real Chrome export** (unmanaged, no policies set) through the in-page uploader: version and operating system read, "no policies set" explained, evidence-backed suggestion shown. A managed Chrome export and an Edge export are still unconfirmed.
+
 ## [0.11.0] - 2026-09-29
 ### Added
 - **Optional Performance profile.** Record a DevTools Performance profile while reloading the page, alongside the NetLog, and add it in the viewer (drop it with the NetLog, or **Add a profile** once the report opens) or with `--profile` on the command line. `.json` and `.json.gz` both work. The report shows what the page's code and rendering were doing, which a NetLog cannot.
@@ -12,7 +20,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Coverage: "JavaScript execution and long tasks" is measured, "Rendering" and "Machine" become partial (paint, LCP and layout shift, and core count and memory; INP and machine load stay unrecorded), and the profile's request initiator stacks feed "Which script started a request". The AI summary gains a labeled section.
 - The profile is read as a stream, keeping only the page's main thread. Screenshots, source text, command lines and DOM node names are never kept, and URLs are redacted. A 60 MB profile with 175,000 events reduces to about 63 KB in under half a second.
 - A profile's clock is not the NetLog's, so the two are aligned from the requests both recorded. If no request appears in both files, the profile is still shown but is not placed on the timeline, and the report says so.
-- Validated against two genuinely recorded Chrome traces (a Wikipedia article and CNN): the reader reproduces DevTools' own largest contentful paint exactly (485 ms and 267 ms), and the busy-until-load figure was recomputed independently from the raw events. Alignment with a real NetLog has so far been tested on synthetic pairs only.
+- Validated against two genuinely recorded Chrome traces (a Wikipedia article and CNN): the reader reproduces DevTools' own largest contentful paint exactly (485 ms and 267 ms), and the busy-until-load figure was recomputed independently from the raw events. Alignment with a real NetLog was tested on synthetic pairs at this point; see 0.11.1.
 
 ## [0.10.0] - 2026-09-29
 ### Added
