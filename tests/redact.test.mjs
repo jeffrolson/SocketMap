@@ -114,3 +114,24 @@ it("preserves protocol session snapshots and enum IDs while removing numeric cre
   assert.equal(result.certPathBuilderDigestPolicy.WEAK_ALLOW_SHA1, 2);
   assert.equal(result.has_token, true);
 });
+
+describe("secret parameter names, by pattern", () => {
+  const secrets = ["session_id", "session-id", "sessionToken", "SessionKey", "csrf_token", "xsrf_token", "auth_token", "authToken", "refreshToken", "accessToken", "api-key", "apiKey", "client_secret", "passwd", "userPassword", "x-amz-credential", "Signature", "assertion", "tempauth", "code", "sig", "key", "auth"];
+  const benign = ["page", "customer", "CustomerId", "ctx", "author", "wl", "id", "v", "locale", "returnUrl"];
+  it("masks the value of any parameter whose name says it is a secret", () => {
+    for (const name of secrets) {
+      const out = redactUrl(`https://a.example.com/x?${name}=VALUE123&page=2`);
+      assert.ok(!out.includes("VALUE123"), `${name} should be masked`);
+      assert.ok(out.includes("page=2"));
+    }
+  });
+  it("leaves ordinary parameters alone", () => {
+    for (const name of benign) assert.ok(redactUrl(`https://a.example.com/x?${name}=keepme`).includes(`${name}=keepme`), name);
+  });
+  it("applies the same rule inside diagnostic parameters", () => {
+    const sanitize = createEvidenceSanitizer();
+    const out = JSON.stringify(sanitize({ url: "https://fpt.example.com/?session_id=SECRETSESSION&CustomerId=42&csrf_token=CSRFVAL" }));
+    assert.ok(!out.includes("SECRETSESSION") && !out.includes("CSRFVAL"));
+    assert.ok(out.includes("CustomerId=42"));
+  });
+});

@@ -8,15 +8,10 @@
 
 const MASK = "[REDACTED]";
 
-// Query and fragment parameters whose values are credentials.
-const SECRET_PARAMS = [
-  "tempauth", "access_token", "id_token", "refresh_token", "token", "code", "client_secret",
-  "samlrequest", "samlresponse", "sig", "signature", "x-amz-signature", "x-amz-credential",
-  "x-amz-security-token", "password", "pwd", "passwd", "api_key", "apikey", "key", "secret",
-  "session", "sessionid", "auth", "assertion"
-];
-
-const PARAM_RE = new RegExp(`([?&#;](?:${SECRET_PARAMS.map(p => p.replace(/[-]/g, "\\-")).join("|")})=)[^&#\\s"']*`, "gi");
+// Query and fragment parameters whose values are credentials. Matched by name pattern, not an
+// exact list, so variants such as session_id, sessionToken or csrf_token are covered too.
+const SECRET_PARAM_NAME = /token|secret|passw(?:or)?d|pwd|session|csrf|xsrf|signature|assertion|credential|api[-_]?key|^(?:tempauth|code|sig|key|auth|samlrequest|samlresponse)$|(?:^|[_-])auth(?:$|[_-])/i;
+const PARAM_RE = /([?&#;])([^=&#;\s"']+)=([^&#\s"']*)/g;
 const USERINFO_RE = /(\/\/[^/:@\s]+:)[^@/\s]+@/g;
 
 // Header names whose values are credentials.
@@ -30,7 +25,7 @@ const COMMAND_SECRET_RE = /((?:--?)(?:access[-_]?token|auth[-_]?token|refresh[-_
 /** Masks secret parameter values and embedded passwords in a URL or path. */
 export function redactUrl(url) {
   if (typeof url !== "string") return url;
-  return url.replace(USERINFO_RE, `$1${MASK}@`).replace(PARAM_RE, `$1${MASK}`);
+  return url.replace(USERINFO_RE, `$1${MASK}@`).replace(PARAM_RE, (all, sep, name) => SECRET_PARAM_NAME.test(name) ? `${sep}${name}=${MASK}` : all);
 }
 
 /** Redacts URLs and credential-like command-line switches in captured metadata. */
@@ -61,11 +56,11 @@ export function redactHeaderLines(lines) {
 export function createEvidenceSanitizer() {
   const mask = "[REDACTED]";
   const secretName = /authorization|cookie|password|passwd|(?:^|[_-])pwd(?:$|[_-])|token|secret|credentials?|private[_-]?key|(?:^session$|session[_-]?(?:id|ticket)$)|api[_-]?key|digest|signature|saml|assertion|(?:^|[_-])auth(?:$|[_-]|entication)|auth[_-]?(?:data|value|challenge|response)|^challenge$/i;
-  const secretParam = /([?&#;](?:tempauth|access_token|id_token|refresh_token|token|code|client_secret|samlrequest|samlresponse|sig|signature|x-amz-signature|x-amz-credential|x-amz-security-token|password|pwd|passwd|api_key|apikey|key|secret|session|sessionid|auth|assertion)=)[^&#\s"']*/gi;
+  const secretParamName = /token|secret|passw(?:or)?d|pwd|session|csrf|xsrf|signature|assertion|credential|api[-_]?key|^(?:tempauth|code|sig|key|auth|samlrequest|samlresponse)$|(?:^|[_-])auth(?:$|[_-])/i;
   function text(value) {
     return value
       .replace(/(\/\/[^/:@\s]+:)[^@/\s]+@/g, "$1" + mask + "@")
-      .replace(secretParam, "$1" + mask)
+      .replace(/([?&#;])([^=&#;\s"']+)=([^&#\s"']*)/g, (all, sep, name) => secretParamName.test(name) ? sep + name + "=" + mask : all)
       .replace(/((?:--?)(?:access[-_]?token|auth[-_]?token|refresh[-_]?token|id[-_]?token|token|auth(?:orization)?|password|passwd|pwd|secret|api[-_]?key|cookie|session|credential)(?:=|\s+))(?:(?:"[^"]*")|(?:'[^']*')|\S+)/gi, "$1" + mask)
       .replace(/\b(Bearer|Basic|Negotiate|NTLM)\s+[A-Za-z0-9+/_=.-]+/gi, "$1 " + mask)
       .replace(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g, mask)
