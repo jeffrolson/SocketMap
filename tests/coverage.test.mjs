@@ -81,3 +81,55 @@ describe("coverage model", () => {
     assert.ok(!/[—]|--/.test(text));
   });
 });
+
+describe("tool comparison", () => {
+  const build = async () => buildCoverage(await modelFor(toNetLogText(buildPageLoadNetLog())));
+
+  it("compares every tool on every row, and each row maps to a live coverage item", async () => {
+    const coverage = await build();
+    const { tools, groups, about, symptoms } = coverage.comparison;
+    assert.deepEqual(tools.map(tool => tool.id), ["netlog", "har", "profile", "lighthouse", "packets", "route", "server"]);
+    assert.equal(new Set(tools.map(tool => tool.id)).size, tools.length);
+    const rows = groups.flatMap(group => group.rows);
+    assert.ok(rows.length >= 15);
+    for (const row of rows) {
+      assert.equal(row.cells.length, tools.length, row.id);
+      const live = item(coverage, row.id);
+      assert.ok(live, `${row.id} has no coverage item`);
+      assert.equal(row.live.status, live.status, row.id);
+      for (const cell of row.cells) {
+        assert.ok([0, 1, 2].includes(cell.level), row.id);
+        if (cell.level > 0) assert.ok(cell.note && cell.note.length < 60, `${row.id}: a cell that sees something says what`);
+      }
+    }
+    assert.deepEqual(groups.map(group => group.id), coverage.stages.map(stage => stage.id));
+    for (const entry of about) assert.equal(entry.values.length, tools.length, entry.key);
+    assert.ok(symptoms.length >= 4);
+  });
+
+  it("keeps the NetLog column consistent with what the capture actually shows", async () => {
+    const coverage = await build();
+    for (const row of coverage.comparison.groups.flatMap(group => group.rows)) {
+      const netlog = row.cells[0].level;
+      if (row.live.status === "never") assert.equal(netlog, 0, `${row.id}: a NetLog can never show this`);
+      if (row.live.status === "recorded") assert.ok(netlog >= 1, `${row.id}`);
+    }
+  });
+
+  it("does not claim SocketMap reads tools it does not read", async () => {
+    const { tools, about } = (await build()).comparison;
+    const reads = about.find(entry => entry.key === "reads").values;
+    assert.match(reads[0], /^Yes/);
+    for (const value of reads.slice(1)) assert.doesNotMatch(value, /^Yes/, value);
+    for (const tool of tools) if (tool.link) assert.match(tool.link, /^https:\/\//);
+  });
+
+  it("points each symptom at real tools", async () => {
+    const { tools, symptoms } = (await build()).comparison;
+    const ids = new Set(tools.map(tool => tool.id).concat(["repeat"]));
+    for (const symptom of symptoms) {
+      assert.ok(symptom.see && symptom.why && symptom.add.length, symptom.see);
+      for (const id of symptom.add) assert.ok(ids.has(id), `${symptom.see} -> ${id}`);
+    }
+  });
+});

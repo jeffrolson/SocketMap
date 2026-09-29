@@ -20,6 +20,7 @@ const ID_HEADERS = /^(?:request-id|client-request-id|x-request-id|x-correlation-
 
 // Each link already appears, verified, in the Learn tab.
 const LINKS = {
+  netlog: "https://www.chromium.org/for-testers/providing-network-details/",
   performance: "https://developer.chrome.com/docs/devtools/performance",
   lighthouse: "https://developer.chrome.com/docs/lighthouse/overview",
   network: "https://developer.chrome.com/docs/devtools/network/reference",
@@ -143,9 +144,102 @@ export function buildCoverage(model) {
     }
   ];
 
+  const some = (known, of, noun) => of ? `${known} of ${of} ${noun}` : null;
+  const shorts = {
+    requests: some(ended, total, "ended"),
+    cache: some(cacheKnown, total, "known"),
+    dns: dnsLookups.length ? `${dnsLookups.length} lookups` : null,
+    proxy: some(proxied, total, "known"),
+    connections: some(linked, total, "linked"),
+    tls: some(tlsKnown, tlsCandidates.length, "complete"),
+    protocol: some(protocolKnown, total, "known"),
+    timing: some(timed, total, "timed"),
+    "server-ids": some(withId, total, "have one")
+  };
   const summary = { recorded: 0, partial: 0, missing: 0, never: 0 };
-  for (const entry of stages.flatMap(stage => stage.items)) summary[entry.status]++;
-  return { stages, summary, next: nextSteps(stages) };
+  for (const entry of stages.flatMap(stage => stage.items)) {
+    summary[entry.status]++;
+    if (shorts[entry.id]) entry.short = shorts[entry.id];
+  }
+  return { stages, summary, next: nextSteps(stages), comparison: buildComparison(stages) };
+}
+
+
+// Tool comparison. Level: 2 sees it well, 1 sees part of it, 0 does not show it.
+// Cells are hedged to what each tool's documentation supports. Order matches TOOLS.
+const TOOLS = [
+  { id: "netlog", name: "NetLog", how: "chrome://net-export or edge://net-export", link: LINKS.netlog },
+  { id: "har", name: "HAR export", how: "DevTools, Network tab, Export HAR (sanitized)", link: LINKS.network },
+  { id: "profile", name: "Performance profile", how: "DevTools, Performance tab, Record and reload, Save profile", link: LINKS.performance },
+  { id: "lighthouse", name: "Lighthouse", how: "DevTools Lighthouse panel, PageSpeed Insights, or command line", link: LINKS.lighthouse },
+  { id: "packets", name: "Packet capture", how: "Wireshark on the computer or a network tap", link: LINKS.wireshark },
+  { id: "route", name: "Route trace", how: "tracert, pathping, traceroute, or mtr", link: LINKS.mtr },
+  { id: "server", name: "Server logs", how: "Web or application logs, searched by request ID", link: null }
+];
+
+// [item id, plain-words question, then one [level, note] per tool in TOOLS order]
+const N = [0, ""];
+const ROWS = {
+  page: [
+    ["javascript", "JavaScript running time and long tasks", [0, "Network events only"], N, [2, "Every task, by script"], [1, "Summary by script (lab run)"], N, N, N],
+    ["script-initiator", "Which script started a request", [0, "Origin only"], [2, "Script and line"], [1, "Call stacks on some events"], [1, "Critical request chains only"], N, N, N],
+    ["rendering", "Paint, LCP and layout shift", N, [1, "DOMContentLoaded and load only"], [2, "Paint and layout events"], [2, "FCP, LCP, CLS, TBT (lab run)"], N, N, N]
+  ],
+  browser: [
+    ["requests", "List of requests (URL, status, size)", [2, "Everything the network stack did"], [2, "Everything the page asked for"], [1, "Some network events"], [2, "Network requests audit"], [1, "URLs only when unencrypted"], N, [1, "Only requests that reached it"]],
+    ["cache", "Answered from cache or a service worker", [1, "Only what reached the network stack"], [2, "Memory, disk and service worker flags"], [1, "Flags on some responses"], [1, "Cache lifetime advice only"], N, N, N],
+    ["machine", "Computer load (CPU, memory, other apps)", N, N, [1, "The browser's own CPU only"], N, N, N, N]
+  ],
+  network: [
+    ["dns", "DNS lookups and resolver settings", [2, "Lookups, answers, resolver config"], [1, "DNS time and server IP"], [1, "Limited"], N, [2, "Every query, unless encrypted DNS"], N, N],
+    ["proxy", "Proxy and PAC decisions", [2, "Decision per request"], N, N, N, [1, "Connection to the proxy address"], N, N],
+    ["connections", "Connection reuse and socket errors", [2, "Pools, sockets, errors"], [1, "Connection ID only"], N, N, [2, "TCP-level view"], N, N],
+    ["tls", "TLS version and certificate", [2, "Version, chain, known-root check"], [1, "Handshake time"], N, [1, "Uses HTTPS check only"], [1, "Certificate visible in TLS 1.2 only"], N, N],
+    ["protocol", "HTTP/1.1, HTTP/2 or HTTP/3", [2, "Per request, plus fallback"], [2, "Per request"], [1, "Limited"], [1, "Per request, HTTP/2 audit"], [1, "Negotiation visible; QUIC encrypted"], N, [1, "What the server accepted"]],
+    ["timing", "Timing per step (DNS, connect, TLS, wait)", [2, "Every phase per request"], [2, "Standard timing phases"], [1, "Some per-request timing"], [1, "Start and end per request"], [1, "Handshakes and gaps, not per URL"], N, [1, "Server-side time only"]]
+  ],
+  path: [
+    ["packets", "Packet loss and retransmissions", N, N, N, N, [2, "Every packet"], [1, "Probe loss per hop, not your traffic"], N],
+    ["hops", "Route and delay per hop", N, N, N, N, [1, "Delay to the far end only"], [2, "Each hop"], N],
+    ["local-link", "Wi-Fi, network card and OS quality", N, N, N, N, [1, "Retransmits hint at it"], N, N]
+  ],
+  server: [
+    ["server-work", "Server processing time, apart from network delay", [0, "Total wait only"], [0, "Total wait only"], [0, "Total wait only"], [0, "Main page response time only"], [1, "Gap minus round trip estimates it"], N, [2, "The real answer"]],
+    ["server-ids", "Request or correlation ID", [2, "Response headers, if sent"], [2, "Headers, if sent"], N, N, [1, "Only when unencrypted"], N, [2, "What you search by"]]
+  ]
+};
+
+const ABOUT = [
+  ["best", "Best when", ["The problem may be DNS, proxy, TLS, connection setup or the path", "You need to know which script asked for what, or what came from cache", "The network looks fine but the page still feels slow", "You want a quick scored review of page weight, scripts and render blockers", "You suspect loss, resets, or something on the wire changing traffic", "You need to know where along the path delay starts", "Waiting time on the server looks long"]],
+  ["setup", "Setup", ["Built into Chrome and Edge", "Built into DevTools", "Built into DevTools", "Built into DevTools; also a web tool", "Install a program; usually needs admin rights", "tracert and pathping ship with Windows; mtr is an install", "Needs the server team"]],
+  ["secrets", "Sensitive content", ["Default strips cookies; SocketMap also removes secrets and keeps IPs and URLs", "Choose Export HAR (sanitized); other options include cookies and page content", "Script URLs and timings; leave Screenshots off", "Page URL and script names", "Raw traffic; capture only with permission and treat as sensitive", "Hop IP addresses only", "Their own logs; share a request ID rather than logs"]],
+  ["reads", "SocketMap reads it", ["Yes: this report", "Not combined with a NetLog", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside", "No, use alongside"]]
+];
+
+const SYMPTOMS = [
+  { see: "Requests are fast but the page still feels slow", add: ["profile", "lighthouse"], why: "The delay is probably the computer working, not the network. A profile shows what the page's code was doing." },
+  { see: "A few requests wait a long time for the server", add: ["server"], why: "Only the server can say where the time went. Take a request ID from the row above and give it to the server team." },
+  { see: "Slow or repeated connection setup, resets, failed connects", add: ["packets", "route"], why: "Packet loss and path delay are invisible to the browser log. A packet capture and a route trace show them." },
+  { see: "Requests in the DevTools list are missing from the NetLog", add: ["har"], why: "Responses served from the memory cache or a service worker never reach the network stack. A HAR flags them." },
+  { see: "Fast at home, slow at the office", add: ["repeat"], why: "One capture is one sample. Capture again in the other place and use Compare two captures in SocketMap." }
+];
+
+function buildComparison(stages) {
+  const byId = new Map(stages.flatMap(stage => stage.items).map(entry => [entry.id, entry]));
+  const groups = stages.map(stage => ({
+    id: stage.id,
+    title: stage.title,
+    rows: (ROWS[stage.id] || []).map(([id, label, ...cells]) => {
+      const live = byId.get(id);
+      return { id, label, live: { status: live.status, detail: live.detail, short: live.short || null }, cells: cells.map(([level, note]) => ({ level, note })) };
+    })
+  }));
+  return {
+    tools: TOOLS.map(tool => ({ ...tool })),
+    groups,
+    about: ABOUT.map(([key, label, values]) => ({ key, label, values })),
+    symptoms: SYMPTOMS.map(entry => ({ ...entry }))
+  };
 }
 
 const STEPS = [

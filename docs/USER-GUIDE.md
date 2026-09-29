@@ -136,6 +136,8 @@ A map of the request path (page code, browser, network stack, network path, serv
 - **Not in this file:** a NetLog can record it, but this file has none. Recapturing may fix it.
 - **Never in a NetLog:** it needs another tool, such as JavaScript time, packet loss, or what the server did.
 
+**Which tool sees what** compares NetLog, HAR export, Performance profile, Lighthouse, packet capture, route trace and server logs across the questions above. The first column is measured from your capture. The other columns describe what each tool can show in general, so you can pick the next tool to collect; SocketMap does not read them yet, and the table says so. Tick **Show only what this capture is missing** to hide the questions your capture already answers. Below the table, **If you see this, add that** maps common symptoms to the tool that answers them.
+
 The counts come from your capture; the "never" rows are facts about the NetLog format. Not recorded does not mean it was fine. **Worth capturing next** lists other data to collect separately (a Chrome Performance profile, a request ID for the server team, a HAR, Lighthouse, a packet capture, a route trace, or a second capture to compare). SocketMap does not read those yet. The same summary is included in the AI summary.
 
 ### Diagnostics and Events

@@ -55,3 +55,35 @@ describe("coverage view", () => {
     assert.ok(report.includes("What this capture could and could not see"));
   });
 });
+
+describe("tool comparison table", () => {
+  const coverage = buildCoverage(sampleModel());
+  const html = renderCoverage(coverage);
+  const esc = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
+  it("shows every tool and every row, with live status for this capture", () => {
+    assert.ok(html.includes("Which tool sees what"));
+    for (const tool of coverage.comparison.tools) assert.ok(html.includes(esc(tool.name)), tool.id);
+    for (const row of coverage.comparison.groups.flatMap(group => group.rows)) assert.ok(html.includes(esc(row.label)), row.id);
+    assert.ok(html.includes("cov-compare"));
+    for (const entry of coverage.comparison.about) assert.ok(html.includes(esc(entry.label)), entry.key);
+  });
+
+  it("does not rely on color: every cell carries a glyph and a text alternative", () => {
+    assert.ok(html.includes("Sees it well") && html.includes("Sees part of it") && html.includes("Does not show this"));
+    assert.ok((html.match(/class="sr"/g) || []).length > 50);
+  });
+
+  it("offers a gaps-only filter that works without script, and a symptom guide", () => {
+    assert.ok(html.includes('id="cov-gaps"') && html.includes('for="cov-gaps"'));
+    assert.ok(coverageCss().includes(".cov-cmp:has(#cov-gaps:checked) tr.is-seen"), "the checkbox lives inside the section, so the filter must select from the section");
+    assert.ok(html.indexOf('id="cov-gaps"') > html.indexOf('class="cov-cmp"'), "the checkbox is inside the section the filter selects from");
+    assert.ok(html.includes("If you see this"));
+    for (const symptom of coverage.comparison.symptoms) assert.ok(html.includes(esc(symptom.see)));
+  });
+
+  it("stays token-only and script-free", () => {
+    assert.doesNotMatch(coverageCss(), /#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+    assert.doesNotMatch(html, /<script|src=|@import/);
+  });
+});

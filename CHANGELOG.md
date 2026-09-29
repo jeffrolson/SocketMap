@@ -3,6 +3,10 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- Coverage tab: **Which tool sees what**, a side-by-side table of NetLog, HAR, Performance profile, Lighthouse, packet capture, route trace and server logs across 17 page-load questions. The first column is measured from your capture; the others describe each tool in general. Includes how to get each tool, when it is best, setup, sensitive content, whether SocketMap reads it, a "show only what this capture is missing" filter, and an "if you see this, add that" guide.
+
 ## [0.7.0] - 2026-09-28
 ### Added
 - Coverage tab: a map of the request path showing what the capture recorded at each stage (Recorded, Partial, Not in this file, Never in a NetLog), what a NetLog cannot see, and other data worth collecting separately. The same summary is in the AI handoff.

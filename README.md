@@ -25,7 +25,7 @@ SocketMap turns a browser network capture from Chrome or Edge (`chrome://net-exp
 - [Command reference](#command-reference)
 - [For developers](#for-developers)
 
-The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain language. **Coverage** shows what the capture recorded and what a NetLog cannot see, with what to collect next. **Diagnostics** adds capture-wide timelines, browser snapshots, sources and next checks. **Events** inspects the original local event stream on demand. The [reference coverage matrix](docs/NETLOG-PARITY.md) documents how this maps to Chromium NetLog Viewer and where the interfaces differ.
+The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain language. **Coverage** shows what the capture recorded and what a NetLog cannot see, compares NetLog, HAR, Performance profile, Lighthouse, packet capture and other tools side by side, and says what to collect next. **Diagnostics** adds capture-wide timelines, browser snapshots, sources and next checks. **Events** inspects the original local event stream on demand. The [reference coverage matrix](docs/NETLOG-PARITY.md) documents how this maps to Chromium NetLog Viewer and where the interfaces differ.
 
 ---
 
