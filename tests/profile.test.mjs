@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, createReadStream } from "node:fs";
 import { joinProfile, profileEvidenceText, attachProfile } from "../src/profile.mjs";
 import { analyzeCapture, buildAiSummary } from "../src/analysis.mjs";
 import { createTraceReader } from "../src/parsers/trace-stream.mjs";
@@ -117,5 +118,25 @@ describe("profile in findings and the AI summary", () => {
     assert.match(text, /PERFORMANCE PROFILE/);
     assert.ok(text.indexOf("PERFORMANCE PROFILE") < text.indexOf("AI ANALYSIS INSTRUCTIONS"));
     assert.ok(!buildAiSummary(sampleModel(), analyzeCapture(sampleModel())).includes("PERFORMANCE PROFILE"));
+  });
+});
+
+// Local validation against a genuine NetLog and Performance trace recorded together (gitignored).
+describe("real NetLog and trace pair (only when recorded locally)", () => {
+  const netlog = "captures/pair-wiki-netlog.json";
+  const tracePath = "captures/pair-wiki-trace.json";
+  it("places the profile from shared requests and agrees with the shared browser clock", { skip: !existsSync(netlog) || !existsSync(tracePath) }, async () => {
+    const feed = (reader, file) => new Promise((resolve, reject) => { const s = createReadStream(file, { encoding: "utf8" }); s.on("data", c => reader.write(c)); s.on("end", resolve); s.on("error", reject); });
+    const capture = createCaptureReader();
+    await feed(capture, netlog);
+    const model = capture.finish();
+    const reader = createTraceReader();
+    await feed(reader, tracePath);
+    const profile = joinProfile(model, reader.finish());
+    assert.equal(profile.alignment.aligned, true);
+    assert.ok(profile.alignment.matched >= 25, `matched ${profile.alignment.matched}`);
+    assert.ok(profile.alignment.within50 >= profile.alignment.matched * 0.8);
+    // Both files use Chrome's monotonic clock: trace milliseconds minus the NetLog's first tick is the placement.
+    assert.ok(Math.abs(profile.alignment.offsetMs + model.diagnostics.firstTime) < 50, "request offset agrees with the clock offset");
   });
 });

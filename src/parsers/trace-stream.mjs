@@ -228,8 +228,9 @@ export function createTraceReader() {
     const integrity = tokenizer.end();
     const base = { recognized: tokenizer.recognized && eventCount > 0, eventCount, integrity, environment: { clockDomain: meta.clockDomain ?? null, cores: meta.cores ?? null, efficientCores: meta.efficientCores ?? null, memoryGb: meta.memoryMb == null ? null : Math.round(meta.memoryMb / 1024 * 10) / 10, capturedAt: meta.capturedAt ?? null, userAgent: meta.userAgent ?? null, inVm: meta.inVm ?? null } };
     if (!base.recognized) return { ...base, page: null };
-    // The page is the outermost main frame's most recent navigation that named a document.
-    const nav = [...navs].reverse().find(n => n.url) || null;
+    // The page is the outermost main frame's most recent navigation to a web document. Blank tabs,
+    // chrome:// pages and extension pages navigate too (often after the page loads) and are not the page.
+    const nav = [...navs].reverse().find(n => n.url && /^https?:/i.test(n.url)) || null;
     if (!nav) return { ...base, page: null };
     const sameThread = (x) => x.pid === nav.pid && x.tid === nav.tid;
     const after = (x) => x.ts >= nav.ts;

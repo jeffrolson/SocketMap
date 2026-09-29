@@ -50,6 +50,18 @@ describe("trace reader: what it finds", () => {
     assert.match(result.page.url, /portal\.example\.com/);
     assert.equal(typeof result.page.navTsMs, "number");
   });
+  it("keeps the web page when blank or browser-internal tabs navigate after it", () => {
+    const nav = trace.traceEvents.find(e => e.name === "navigationStart" && e.args?.data?.documentLoaderURL);
+    const last = Math.max(...trace.traceEvents.map(e => e.ts || 0));
+    const later = ["about:blank", "chrome://newtab/", "chrome-extension://abcdefgh/page.html"].map((url, i) => ({
+      ...nav, ts: last + 1000 * (i + 1), args: { ...nav.args, frame: `OTHER${i}`, data: { ...nav.args.data, documentLoaderURL: url } }
+    }));
+    const withNoise = read(JSON.stringify({ ...trace, traceEvents: [...trace.traceEvents, ...later] }));
+    assert.equal(withNoise.page.url, result.page.url);
+    assert.equal(Math.round(withNoise.metrics.lcpMs), Math.round(result.metrics.lcpMs));
+    const onlyBlank = read(JSON.stringify({ ...trace, traceEvents: [...trace.traceEvents.filter(e => e.name !== "navigationStart"), ...later] }));
+    assert.equal(onlyBlank.page, null, "no web page in the trace, so no page is claimed");
+  });
   it("reads paint, layout shift and load milestones relative to navigation", () => {
     assert.equal(Math.round(result.metrics.fcpMs), 320);
     assert.equal(Math.round(result.metrics.lcpMs), 760);
