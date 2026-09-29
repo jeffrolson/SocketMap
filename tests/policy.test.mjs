@@ -95,6 +95,17 @@ describe("policy evaluation", () => {
   });
 });
 
+describe("errors and warnings the browser reports", () => {
+  it("surfaces them for any policy, escaped, without judging the policy", () => {
+    const result = evaluate({ QuicAllowed: entry(false, { error: "Value must be <b>boolean</b>" }), SomeOtherPolicy: entry(1, { warning: "Ignored on this platform" }) });
+    assert.equal(result.notes.filter(n => n.kind === "reported").length, 2);
+    const html = engine.render(result);
+    assert.ok(html.includes("Browser reported") && html.includes("Ignored on this platform"));
+    assert.ok(!html.includes("<b>boolean"), "escaped");
+    assert.equal(evaluate({ QuicAllowed: entry(false) }).notes.filter(n => n.kind === "reported").length, 0);
+  });
+});
+
 describe("whose documentation a statement comes from", () => {
   it("says so when the paraphrase came from the other browser's page", () => {
     const edgeRows = evaluate({ EnableOnlineRevocationChecks: entry(true) }, {}, "Microsoft Edge").rows;

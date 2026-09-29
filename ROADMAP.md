@@ -75,7 +75,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
-- 2026-09-29: Policy tab: optional chrome://policy or edge://policy export checked against a dated, vendor-linked catalog (unreleased)
+- 2026-09-29: Policy tab: optional chrome://policy or edge://policy export checked against a dated, vendor-linked catalog (0.9.0)
 - 2026-09-29: "What the servers said": Server-Timing, CDN and cache headers, timing-like headers and request IDs from response headers already in the capture (0.8.0)
 - 2026-09-26: Viewer start page explains SocketMap, with a sample capture; README and user guide rewritten; Windows support
 - 2026-09-26: Design system from DESIGN.md, company theming, tabbed report, filters, HTML sequence view with docked inspector

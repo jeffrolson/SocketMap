@@ -107,6 +107,10 @@ export function createPolicyEngine(sanitize) {
         suggestions.push({ name: entry.name, area: entry.area, urls, why: s.why, documented: entry.documented, guidance: s.guidance, set: Boolean(p), docNote: docNote(entry, browser) });
       }
     }
+    for (const p of browserPolicies) {
+      if (p.error) notes.push({ kind: "reported", name: p.name, text: `The browser reports an error: ${show(p.error)}` });
+      if (p.warning) notes.push({ kind: "reported", name: p.name, text: `The browser reports a warning: ${show(p.warning)}` });
+    }
     const other = browserPolicies.filter(p => !known.has(p.name.toLowerCase()));
     return {
       meta: norm.meta, reviewed, browser,
@@ -131,6 +135,7 @@ export function createPolicyEngine(sanitize) {
     if (kind === "documented") return '<span class="pol-tag pol-doc">Documented</span>';
     if (kind === "guidance") return '<span class="pol-tag pol-guide">SocketMap guidance</span>';
     if (kind === "cross-check") return '<span class="pol-tag pol-cross">Cross-check</span>';
+    if (kind === "reported") return '<span class="pol-tag pol-cross">Browser reported</span>';
     return '<span class="pol-tag pol-warn">Deprecated</span>';
   }
 
