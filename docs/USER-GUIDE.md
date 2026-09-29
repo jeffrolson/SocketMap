@@ -83,6 +83,22 @@ The report is one HTML file with six tabs down the left side (across the top on 
 
 "Not recorded" means the capture did not contain that value, for example certificate details for a connection that was already open before the capture started. SocketMap never guesses.
 
+### What the servers said
+
+Some servers describe their own work in response headers. SocketMap reads the ones already in your capture, so there is nothing extra to record. The Overview panel **What the servers said** shows:
+
+- **Reported their own timing:** how many responses carried `Server-Timing`.
+- **Cache answers:** how many cache or CDN headers reported a hit, a miss, or both. This is the CDN's own claim.
+- **Largest reported phase:** the biggest time a server reported for itself, drawn against how long the browser waited.
+- **A ranked list of reported phases:** the solid bar is what the server reported, the faint bar behind it is the browser's wait. Select a row to open that request.
+- **Who is in front of the servers:** a hint from header names such as `cf-ray`, not proof.
+- **Other timing headers:** shown as sent. Their unit and meaning belong to the site, and SocketMap does not interpret them.
+- **IDs to give the server team:** request or correlation IDs with copy buttons, so the server team can search their logs.
+
+Open a request in the waterfall for its own **What the server said** block. A thin line under the wait bar is as wide as the largest reported phase.
+
+Read these as the server's account, not a measurement: phases can overlap (so they are never added together), and a phase longer than the browser's wait is flagged rather than hidden. If no response carries any of this, the panel says so. Ask the platform team to send the `Server-Timing` header and a request ID, capture again, and compare.
+
 ### Waterfall
 
 Every request in the order it started. The colored bar shows where each request's time went:

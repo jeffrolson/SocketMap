@@ -24,6 +24,7 @@ and the code disagree, this file wins and the code gets fixed.
 - Outputs: Standalone HTML report.
 - Business rules:
   - Page selection: the non-background site with a main-frame load and the most requests, unless `--page` names one. Other sites are listed as other activity.
+  - What the servers said: Overview panel and per-request block from response headers already in the NetLog (Server-Timing, CDN and cache headers, other timing-like headers shown raw, request IDs). Labeled as server-reported; phases are never added together; absent headers are "not recorded". Waterfall marker under the wait bar; slow-server finding and AI summary carry the figures.
   - Coverage view: a map of the request path (page code, browser, network stack, network path, server). Each item is Recorded, Partial, Not in this file, or Never in a NetLog; statuses are computed from the capture and shown as text plus an icon. Lists other data worth collecting separately and adds the same summary to the AI handoff.
   - Environment card: browser, OS, capture time and mode, local IP, DNS servers and search domains, secure DNS, proxy setup, bad proxies.
   - Host ratings (Best / Better / Good / Poor; "not recorded" when the capture has no data):

@@ -3,8 +3,12 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2026-09-29
 ### Added
+- **What the servers said:** an Overview panel and a per-request block built from response headers already in the NetLog. It shows how many responses reported their own `Server-Timing`, the largest reported phase against the wait it belongs to, a ranked list of reported phases as nested bars, cache and CDN answers (hit, miss, mixed), the CDN a response looks like it came through (a hint from header names), other timing-like headers shown raw, and request IDs with copy buttons. The waterfall draws a thin line under the wait bar as wide as the largest reported phase. Everything is labeled as reported by the server; phases are never added together; an absent header is "not recorded", never zero. When a server sends nothing, the panel says so and what to ask the platform team.
+- The slow-server finding and the AI summary include the server's own figures, labeled as reported.
+- Coverage: "Server processing time" now reflects what servers report (Recorded, Partial, or Not in this file), and a new "CDN and cache answers" row and comparison-table row.
+- The sample capture carries synthetic Server-Timing, cache and request-ID headers so the sample report demonstrates the panel.
 - Coverage tab: **Which tool sees what**, a side-by-side table of NetLog, HAR, Performance profile, Lighthouse, packet capture, route trace and server logs across 17 page-load questions. The first column is measured from your capture; the others describe each tool in general. Includes how to get each tool, when it is best, setup, sensitive content, whether SocketMap reads it, a "show only what this capture is missing" filter, and an "if you see this, add that" guide.
 
 ## [0.7.0] - 2026-09-28

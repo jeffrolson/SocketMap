@@ -30,6 +30,8 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/parsers/netlog-parser.mjs` | Node entry point: streams the file from disk through tokenizer and analyzer | Node.js |
 | `src/parsers/netlog-evidence.mjs` | Capture-wide source/event aggregates, sanitized snapshots, bounded timeline bins and integrity | Node.js or browser |
 | `src/diagnostic-insights.mjs` | Evidence-based next checks and bounded diagnostic AI handoff | Node.js or browser |
+| `src/server-insights.mjs` | Reads Server-Timing, CDN and cache headers, timing-like headers and request IDs from recorded response headers; rolls them up per page | Node.js or browser |
+| `src/renderer/server-insights.mjs` | Overview panel, per-request block and waterfall marker for server-reported evidence (HTML and CSS only) | Node.js or browser |
 | `src/coverage.mjs` | Coverage model: per-stage Recorded / Partial / Not in this file / Never in a NetLog statuses computed from the capture, next-capture suggestions, AI handoff text | Node.js or browser |
 | `src/renderer/coverage.mjs` | Coverage tab: request-path map, per-stage rows, suggestions (HTML and CSS only, no script) | Node.js or browser |
 | `src/renderer/diagnostics.mjs` | Capture-wide charts, snapshot tables, source search and sorting | Node.js or browser |
