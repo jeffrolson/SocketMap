@@ -30,7 +30,8 @@ jobs:
             "QuicAllowed": false,
             "NetworkPredictionOptions": 2,
             "HomepageLocation": "https://intranet.corp.example.com/",
-            "NotARealPolicy": true
+            "NotARealPolicy": true,
+            "CloudProfileReportingEnabled": true
           }
           JSON
           sudo tee /etc/opt/chrome/policies/recommended/socketmap-test.json > /dev/null <<'JSON'
@@ -38,6 +39,13 @@ jobs:
           JSON
       - name: Export the managed Chrome policy page as JSON
         run: node scripts/record-real-data.mjs policy "$(which google-chrome)" out/linux-chrome-policies.json
+      - name: Network path helper with a proxy environment and a route that answers
+        run: |
+          sudo apt-get install -y traceroute > /dev/null
+          GATEWAY="$(ip route show default | awk 'NR==1{print $3}')"
+          export https_proxy="http://user:secret@proxy.corp.example.com:3128" http_proxy="http://proxy.corp.example.com:3128"
+          ./tools/socketmap-path.sh --no-public-ip --out out/linux-path.json github.com "$GATEWAY"
+          node scripts/check-helper-output.mjs out/linux-path.json --require-probe
       - uses: actions/upload-artifact@v4
         with:
           name: linux-real-data
@@ -66,6 +74,7 @@ jobs:
             Set-ItemProperty -Path $key -Name DnsOverHttpsMode -Value 'automatic' -Type String
             Set-ItemProperty -Path $key -Name QuicAllowed -Value 0 -Type DWord
             Set-ItemProperty -Path $key -Name NetworkPredictionOptions -Value 2 -Type DWord
+            Set-ItemProperty -Path $key -Name CloudProfileReportingEnabled -Value 1 -Type DWord
           }
           # The same policies at user level with different values, so the export carries conflicts and superseded values.
           New-Item -Path 'HKCU:\SOFTWARE\Policies\Google\Chrome' -Force | Out-Null
@@ -76,6 +85,22 @@ jobs:
       - name: Try the Edge policy page (its page has no Copy as JSON button, so this may fail)
         continue-on-error: true
         run: node scripts/record-real-data.mjs policy "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" out/windows-edge-policies.json edge://policy
+      - name: Windows proxy, PAC and auto-detect settings, then the network path helper
+        shell: powershell
+        run: |
+          $ie = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+          Set-ItemProperty -Path $ie -Name ProxyEnable -Value 1 -Type DWord
+          Set-ItemProperty -Path $ie -Name ProxyServer -Value 'http=user:secret@proxy.corp.example.com:3128;https=proxy.corp.example.com:3128' -Type String
+          Set-ItemProperty -Path $ie -Name AutoConfigURL -Value 'http://wpad.corp.example.com/proxy.pac' -Type String
+          Set-ItemProperty -Path $ie -Name ProxyOverride -Value '*.corp.example.com;<local>' -Type String
+          $conn = "$ie\Connections"
+          New-Item -Path $conn -Force | Out-Null
+          [byte[]]$blob = New-Object byte[] 60
+          $blob[0] = 0x46; $blob[4] = 1; $blob[8] = 0x0F   # direct + proxy + PAC + auto-detect
+          Set-ItemProperty -Path $conn -Name DefaultConnectionSettings -Value $blob -Type Binary
+          $gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Sort-Object RouteMetric | Select-Object -First 1).NextHop
+          .\tools\socketmap-path.ps1 -NoPublicIp -Out out\windows-path.json github.com $gateway
+          node scripts/check-helper-output.mjs out/windows-path.json --require-probe
       - uses: actions/upload-artifact@v4
         with:
           name: windows-real-data
