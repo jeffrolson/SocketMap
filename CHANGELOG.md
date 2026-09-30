@@ -3,6 +3,14 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.2] - 2026-09-30
+### Validated
+- **Real Windows and Linux recordings.** A manual workflow (`record-real-data`) records genuine data on disposable GitHub runners, so nothing touches a personal machine: NetLog and Performance trace pairs from real Windows Chrome, Windows Edge and Linux Chrome. Each aligned by shared requests (34 of 37 matched, 32 to 33 within 50 ms) and agrees with the shared browser clock to within 1.2 ms (clock domains `WIN_QPC` and `LINUX_CLOCK_MONOTONIC`), so the shared-clock assumption holds on Windows and Linux, not only on macOS. Profile alignment is now confirmed on macOS Chrome, macOS Edge, Windows Chrome, Windows Edge and Linux Chrome.
+- **Real managed policy exports.** On the same runners, Chrome with genuine managed policies (Linux policy files; Windows registry, including the same policies at user level) was exported through its own "Copy as JSON" button. It confirms the per-policy fields the reader looks for: `error` ("Expected integer value.", "Unknown policy."), `deprecated`, `warning`, `conflicts` (each entry with its level, scope, source and value), `level` recommended or mandatory, `scope`, `source`. Both top-level layouts occur in real exports (`policyValues` in Chrome 153, `policyGroups` in 154 and 134); the reader accepts either. All of it runs through the redaction audit, which found nothing to fix.
+
+### Changed
+- A policy that overrides another source's value now says which one: "overrides a mandatory user-level value from platform (off)", instead of a generic conflict count. The same for superseded values.
+
 ## [0.17.1] - 2026-09-30
 ### Validated
 - **Microsoft Edge, on real recordings.** Edge 154 (run from Microsoft's signed package in a temporary folder, then removed) recorded a NetLog and a Performance trace of one page load: 34 of 37 trace requests matched NetLog requests, 33 within 50 ms, and the request-based offset agrees with the shared browser clock to within 1 ms. The NetLog identifies the browser as "Microsoft Edge 154", so profile alignment now has a real macOS Chrome pair and a real macOS Edge pair. Windows is still only CI-verified.

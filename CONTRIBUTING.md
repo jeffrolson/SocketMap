@@ -37,6 +37,7 @@ One logical change per commit. Do not bundle unrelated edits.
 
 ## Verification and formatting
 - After editing anything in `tools/`, run `npm run generate:tools` (`npm run verify` fails if the embedded copy is stale). CI runs both helper scripts on Windows, macOS and Linux.
+- To validate against genuine data without touching a personal machine, run the manual `record-real-data` workflow (`gh workflow run record-real-data.yml`), then `gh run download <id>`. It records Chrome and Edge NetLog and trace pairs on Windows and Linux runners and real managed `chrome://policy` exports; keep the files in `captures/` (gitignored).
 - Before a release also run `npm run audit:redaction -- <your real captures>` (nothing may leak), `npm run test:browser` (real-browser smoke test) and `npm run check:policy-links`. CI runs verify and the browser test on Windows, macOS and Linux.
 - Run before commit: `npm run verify` (all tests plus the design-token freshness check). It runs the same on Windows, macOS, and Linux.
 
