@@ -19,6 +19,8 @@ import { createTraceReader } from "../src/parsers/trace-stream.mjs";
 import { attachHar } from "../src/enrichment.mjs";
 import { buildCaptureFromHar } from "../src/har-capture.mjs";
 import { attachProfile } from "../src/profile.mjs";
+import { readLighthouse, attachLighthouse } from "../src/lighthouse.mjs";
+import { readCpuProfile, attachCpuProfile } from "../src/cpuprofile.mjs";
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
 const MIN_LENGTH = 8;
@@ -109,9 +111,13 @@ export function auditFile(file) {
   else {
     // A HAR or trace only enriches a NetLog; the built-in sample capture stands in so its output is rendered.
     model = sampleModel();
-    const r = kind === "har" ? createHarReader() : createTraceReader();
-    r.write(raw);
-    (kind === "har" ? attachHar : attachProfile)(model, r.finish());
+    if (kind === "lighthouse") attachLighthouse(model, readLighthouse(JSON.parse(raw)).data);
+    else if (kind === "cpu") attachCpuProfile(model, readCpuProfile(JSON.parse(raw)).data);
+    else {
+      const r = kind === "har" ? createHarReader() : createTraceReader();
+      r.write(raw);
+      (kind === "har" ? attachHar : attachProfile)(model, r.finish());
+    }
   }
   const { html } = buildReport(model, null, null, { name: path.basename(file), bytes: raw.length });
   let leaks = findLeaks(secrets, html);
@@ -126,6 +132,8 @@ export function auditFile(file) {
 }
 
 export function detectKind(head) {
+  if (/"lighthouseVersion"\s*:/.test(head)) return "lighthouse";
+  if (/^\s*\{/.test(head) && head.includes('"callFrame"') && !/"traceEvents"|"constants"/.test(head)) return "cpu";
   if (/"constants"|"events"\s*:\s*\[/.test(head) && !/"traceEvents"/.test(head)) return "netlog";
   if (/"log"\s*:\s*\{/.test(head) && /"(?:version|creator|entries|pages)"/.test(head)) return "har";
   if (/"traceEvents"/.test(head) || /^\s*\[\s*\{[^}]*"ph"/.test(head)) return "trace";
@@ -137,7 +145,7 @@ const countBy = (items) => items.reduce((sum, item) => (sum[item] = (sum[item] |
 function expand(args) {
   const files = [];
   for (const arg of args) {
-    if (fs.statSync(arg).isDirectory()) files.push(...fs.readdirSync(arg).filter(name => /\.(json|har)$/i.test(name)).map(name => path.join(arg, name)));
+    if (fs.statSync(arg).isDirectory()) files.push(...fs.readdirSync(arg).filter(name => /\.(json|har|cpuprofile)$/i.test(name)).map(name => path.join(arg, name)));
     else files.push(arg);
   }
   return files;
