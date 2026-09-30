@@ -69,7 +69,11 @@ async function main() {
   // Wait for the browser to exit so its profile folder can be removed; leaving it would leak tens of MB per run.
   const cleanup = async () => {
     await new Promise(resolve => { child.once("exit", resolve); try { child.kill(); } catch { resolve(); } setTimeout(resolve, 5000); });
-    fs.rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    // Best effort: Chrome's helper processes can still be writing for a moment, and cleanup must never fail the test.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try { fs.rmSync(work, { recursive: true, force: true }); return; } catch { await sleep(500); }
+    }
+    console.log(`note: could not remove ${work}`);
   };
   try {
     let target = null;
