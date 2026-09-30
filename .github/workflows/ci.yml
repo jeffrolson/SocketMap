@@ -25,6 +25,18 @@ jobs:
         run: npm run build:viewer
       - name: Real-browser smoke test
         run: npm run test:browser
+      - name: Network path helper (Mac and Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ./tools/socketmap-path.sh --no-public-ip --out path-ci.json github.com
+          node scripts/check-helper-output.mjs path-ci.json --require-probe
+      - name: Network path helper (Windows PowerShell)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          .\tools\socketmap-path.ps1 -NoPublicIp -Out path-ci.json github.com
+          node scripts/check-helper-output.mjs path-ci.json --require-probe
       - name: The viewer makes no remote requests
         shell: bash
         run: |

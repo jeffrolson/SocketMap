@@ -56,13 +56,16 @@ async function main() {
     netlog: path.join(work, "capture.json"),
     har: path.join(work, "trace.har"),
     profile: path.join(work, "profile.json"),
-    policy: path.join(work, "policies.json")
+    policy: path.join(work, "policies.json"),
+    path: path.join(work, "socketmap-path.json")
   };
   fs.writeFileSync(files.netlog, netlogText);
   fs.writeFileSync(files.har, JSON.stringify(buildSampleHar(model)));
   fs.writeFileSync(files.profile, JSON.stringify(buildSampleTrace(model)));
   const { buildSamplePolicyExport } = await import("../src/demo/sample-policy.mjs");
   fs.writeFileSync(files.policy, JSON.stringify(buildSamplePolicyExport()));
+  const { buildSamplePath } = await import("../src/demo/sample-path.mjs");
+  fs.writeFileSync(files.path, JSON.stringify(buildSamplePath(model)));
 
   const port = 9300 + Math.floor(Math.random() * 500);
   const child = spawn(browserPath, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${path.join(work, "profile-dir")}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-gpu", "about:blank"], { stdio: "ignore" });
@@ -132,6 +135,7 @@ async function main() {
     const views = await evaluate(frame("d => [...d.querySelectorAll('nav a, .nav a')].map(a => a.textContent.trim()).filter(Boolean)"));
     for (const name of ["Overview", "Waterfall", "Policy", "Coverage", "Diagnostics"]) check(Array.isArray(views) && views.includes(name), `report has the ${name} tab`);
     check(await evaluate(frame("d => !!d.querySelector('#profile')")), "sample report shows the profile panel");
+    check(await evaluate(frame("d => !!d.querySelector('#path') && !d.querySelector('#path-prompt')")), "sample report shows the network path panel");
 
     // 2. Policy sample inside the report
     await evaluate(frame("d => { const b = [...d.querySelectorAll('button')].find(x => /sample export/i.test(x.textContent)); if (b) b.click(); return !!b; }"));
@@ -140,9 +144,11 @@ async function main() {
     // 3. Real file inputs: NetLog, then HAR and profile
     await send("Page.navigate", { url: pathToFileURL(viewer).href });
     await waitFor("document.readyState === 'complete'", "the viewer to reload");
-    await setFiles("#file-input", [files.netlog, files.har, files.profile]);
+    await setFiles("#file-input", [files.netlog, files.har, files.profile, files.path]);
     check(await waitFor(frame("d => !!d.querySelector('#profile')"), "the NetLog with its HAR and profile", 30000), "NetLog plus HAR plus profile load together through the file input");
     check(await evaluate("document.body.innerText.includes('capture.json')"), "the toolbar names the loaded file");
+    check(await waitFor(frame("d => !!d.querySelector('#path')"), "the network path panel", 15000), "the helper's file loads with the others and shows its panel");
+    check(await evaluate(frame("d => !!d.querySelector('#profile') && !d.querySelector('#path-prompt')")), "all three optional files are shown together");
 
     check(errors.length === 0, `no uncaught page errors${errors.length ? `: ${errors[0]}` : ""}`);
     const outside = requests.filter(url => !/^(file|data|blob|about):/i.test(url));
