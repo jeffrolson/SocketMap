@@ -186,6 +186,8 @@ node bin/traceviz.mjs <capture> [options]
 | `npm run build:viewer` | Builds `socketmap-viewer.html` (add `-- <file> --theme <DESIGN.md>` to customize) |
 | `npm run demo` | Builds `demo-report.html` from the synthetic sample capture |
 | `npm run verify` | Runs every test and repository check |
+| `npm run test:browser` | Real-browser smoke test of the built viewer (needs Chrome or Edge) |
+| `npm run audit:redaction -- <captures>` | Checks that no secret in your real capture files reaches the report |
 | `npm run generate:theme` | Recompiles the theme after editing `DESIGN.md` |
 
 HAR files and generic JSON traces produce an older diagram view instead of the report; see [docs/HAR-DIAGRAM.md](docs/HAR-DIAGRAM.md).

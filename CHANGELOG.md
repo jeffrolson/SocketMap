@@ -3,6 +3,19 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-09-30
+### Added
+- **Profile placement by the shared clock.** When a Performance profile and a NetLog share no request, the profile is now placed on the timeline anyway if it was recorded in the same browser session: its navigation must fall inside the capture's time span and its site must appear in the capture. Both files use Chrome's monotonic clock, which a real pair confirmed to within 5 ms. Per-request script details still need matching requests. A profile from a different run is refused, as before.
+- **Redaction audit** (`npm run audit:redaction -- <file or folder>`): reads real NetLog, HAR and Performance trace files, harvests the actual secret values in them (authorization and cookie headers, secret-named parameters, token shapes), builds the report, and fails if any value survives into it. Values are never printed. Request and correlation IDs are kept on purpose and not counted.
+- **Real-browser smoke test** (`npm run test:browser`): drives headless Chrome or Edge over the DevTools protocol against the built viewer. It loads the sample, the policy sample, and a NetLog with a HAR and a profile through the real file input, and fails on any page error or any request outside the local file. Skips when no browser is installed.
+- **CI** (`.github/workflows/ci.yml`): tests, the viewer build, the browser smoke test and a no-remote-loads check on Windows, macOS and Linux with Node 22 and 24.
+
+### Fixed
+- **A credential could survive under an unexpected parameter name.** The audit found a Google API key in a real capture under `sugkey=`, which the name rules did not cover. Well-known token shapes (JSON web tokens, Google API keys, AWS access keys, GitHub tokens, Slack tokens, payment keys) are now masked wherever they appear: in URLs, header lines and captured evidence. The audit is clean on every real NetLog, HAR and trace tested here.
+
+### Changed
+- **Smaller Diagnostics on large captures.** Event samples (first and last parameters per event type) are kept for the 100 most eventful sources and every source with an error; other sources keep their event types, counts and times, and the viewer can still replay any source from the capture file. A real 5 MB capture's report went from 8.2 MB to 6.2 MB.
+
 ## [0.12.1] - 2026-09-29
 ### Fixed
 - **Policy tab rejected exports from Chrome 134 and earlier** with "does not look like a browser policy export". Those versions write the policy list under `policyGroups`; newer Chrome writes `policyValues`. Both are read now, with the same structure.

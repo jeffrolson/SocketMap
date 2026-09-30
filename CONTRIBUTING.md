@@ -36,6 +36,7 @@ One logical change per commit. Do not bundle unrelated edits.
 - Squash merge into `main` unless history matters
 
 ## Verification and formatting
+- Before a release also run `npm run audit:redaction -- <your real captures>` (nothing may leak), `npm run test:browser` (real-browser smoke test) and `npm run check:policy-links`. CI runs verify and the browser test on Windows, macOS and Linux.
 - Run before commit: `npm run verify` (all tests plus the design-token freshness check). It runs the same on Windows, macOS, and Linux.
 
 ## Review checklist

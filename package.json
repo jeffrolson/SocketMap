@@ -1,6 +1,6 @@
 {
   "name": "socketmap",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "description": "Zero-dependency, self-contained network trace visualizer and sequence diagram generator",
   "type": "module",
   "bin": {
@@ -14,7 +14,9 @@
     "demo": "node scripts/demo-report.mjs",
     "generate:theme": "node scripts/generate-theme.mjs",
     "verify": "npm test && node scripts/generate-theme.mjs --check",
-    "check:policy-links": "node scripts/check-policy-links.mjs"
+    "check:policy-links": "node scripts/check-policy-links.mjs",
+    "audit:redaction": "node scripts/audit-redaction.mjs",
+    "test:browser": "node scripts/browser-smoke.mjs"
   },
   "keywords": [
     "netlog",
