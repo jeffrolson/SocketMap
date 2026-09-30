@@ -13,6 +13,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 - **A credential could survive under an unexpected parameter name.** The audit found a Google API key in a real capture under `sugkey=`, which the name rules did not cover. Well-known token shapes (JSON web tokens, Google API keys, AWS access keys, GitHub tokens, Slack tokens, payment keys) are now masked wherever they appear: in URLs, header lines and captured evidence. The audit is clean on every real NetLog, HAR and trace tested here.
 
+- **The viewer could keep showing the previous report.** When a HAR or profile was added right after a capture opened (the sample does this), assigning the report iframe's document a second time before the first had loaded could leave the old one in place. This showed up on a macOS CI runner. The viewer now applies one report at a time.
+
+### Verified
+- CI is green on Windows, macOS and Linux with Node 22 and 24, including the real-browser smoke test. This is the first time the test suite and viewer have run on Windows.
+
 ### Changed
 - **Smaller Diagnostics on large captures.** Event samples (first and last parameters per event type) are kept for the 100 most eventful sources and every source with an error; other sources keep their event types, counts and times, and the viewer can still replay any source from the capture file. A real 5 MB capture's report went from 8.2 MB to 6.2 MB.
 
