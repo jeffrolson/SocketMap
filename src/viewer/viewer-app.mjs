@@ -225,6 +225,7 @@ function init() {
     fillPages(pageSelect, a);
     fillPages(pageSelectB, b);
     $("comparison-controls").hidden = !b;
+    $("comparison-toolbar").hidden = !b;
     $("page-picker-b").hidden = !b;
     $("comparison-hint").hidden = !b;
     $("page-label").textContent = b ? "A page / site" : "Page / site";
@@ -242,6 +243,8 @@ function init() {
     $("add-lighthouse").textContent = a.lighthouse ? "Replace Lighthouse" : "Add Lighthouse";
     $("add-cpu").hidden = $("add-har").hidden || false;
     $("add-cpu").textContent = a.cpu ? "Replace CPU profile" : "Add CPU profile";
+    $("add-menu").hidden = ["add-har", "add-profile", "add-path", "add-lighthouse", "add-cpu"].every(id => $(id).hidden);
+    $("add-menu").open = false;
     $("add-profile").textContent = a.profile ? "Replace profile" : "Add a profile";
     fileName.title = fileName.textContent;
     const pages = report.comparison ? [report.comparison.a.page, report.comparison.b.page] : [report.analysis.page];
@@ -511,6 +514,9 @@ function init() {
       loadFiles(files);
     });
   }
+  // The add-files menu closes after a choice and when the page is clicked elsewhere.
+  document.addEventListener("click", (event) => { const menu = $("add-menu"); if (menu.open && !menu.contains(event.target)) menu.open = false; });
+  $("add-menu").addEventListener("click", (event) => { if (event.target.closest("button")) $("add-menu").open = false; });
   $("add-lighthouse").addEventListener("click", () => lighthouseInput.click());
   $("add-cpu").addEventListener("click", () => cpuInput.click());
   $("add-har").addEventListener("click", () => harInput.click());

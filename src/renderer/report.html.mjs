@@ -226,6 +226,24 @@ function renderRequestDetail(r, conn, serverInfo = null, harEntry = null, profil
     </div>`;
 }
 
+/** A strip over the waterfall: problem requests and long tasks on the timeline, and a window that narrows the rows. */
+function renderTimeline(pageRequests, connections, profile, page, span) {
+  const at = (ms) => `${Math.min(100, Math.max(0, ms / span * 100)).toFixed(3)}%`;
+  const marks = [];
+  for (const r of pageRequests) {
+    const flags = requestFlags(r, connections.get(r.connectionId));
+    const kind = flags.includes("error") ? "error" : flags.includes("slow") ? "slow" : null;
+    if (!kind) continue;
+    marks.push(`<button type="button" class="tl-mark tl-${kind}" style="left:${at(r.start - page.startMs)}" data-req="req-${r.id}" title="${esc(`${kind === "error" ? "Failed or errored" : "Slow"}: ${r.method || ""} ${r.host || ""}${String(r.url || "").replace(/^https?:\/\/[^/]+/, "").split("?")[0].slice(0, 60)}`)}" aria-label="${kind === "error" ? "Problem request" : "Slow request"} at ${esc(formatDuration(r.start - page.startMs))}"></button>`);
+  }
+  const tasks = (profile?.mainThread?.longTasks || []).filter(t => t.atMs != null).map(t => `<span class="tl-task" style="left:${at(t.atMs - page.startMs)};width:${Math.max(0.4, Math.min(100, t.durMs / span * 100)).toFixed(3)}%" title="Long task ${esc(ms(t.durMs))} on the page's main thread"></span>`);
+  if (!marks.length && !tasks.length && pageRequests.length < 8) return "";
+  return `<div class="tl" id="timeline" data-span="${Math.round(span)}"><div class="tl-head"><b>Timeline</b><span class="muted">${marks.length ? `${marks.length} problem request${marks.length === 1 ? "" : "s"} marked` : "No problem requests"}${tasks.length ? `, ${tasks.length} long task${tasks.length === 1 ? "" : "s"}` : ""}. Move the handles to show only the requests in that window.</span></div>
+<div class="tl-track" aria-label="Timeline of this page load">${tasks.join("")}${marks.join("")}<div class="tl-window" id="tl-window"></div></div>
+<div class="tl-controls"><label>From <input type="range" id="tl-from" min="0" max="1000" value="0" aria-label="Start of the time window"></label><label>To <input type="range" id="tl-to" min="0" max="1000" value="1000" aria-label="End of the time window"></label><output id="tl-out">Whole page load</output><button type="button" id="tl-reset">Show everything</button></div>
+<div class="tl-legend"><span><i class="tl-error"></i>Failed or errored</span><span><i class="tl-slow"></i>Slow</span>${tasks.length ? `<span><i class="tl-taskkey"></i>Long task</span>` : ""}</div></div>`;
+}
+
 function renderWaterfall(analysis, connections, serverInsights, enrichment = null, profile = null, lighthouse = null) {
   const { page, pageRequests } = analysis;
   const span = Math.max(1, page.observedSpanMs ?? page.loadMs ?? 1);
@@ -239,7 +257,7 @@ function renderWaterfall(analysis, connections, serverInsights, enrichment = nul
       .map(k => `<span class="seg seg-${k}" style="width:${(r.timing[k] / Math.max(1, r.observedDurationMs ?? r.durationMs ?? 1) * 100).toFixed(2)}%" title="${esc(TIMING_LABELS[k])}: ${esc(ms(r.timing[k]))}"></span>`).join("");
     const flags = requestFlags(r, connections.get(r.connectionId));
     return `
-      <details class="wf-row${flags.map(f => ` flag-${f}`).join("")}" id="req-${r.id}" data-flags="${flags.join(" ")}" data-search="${esc(searchText(r))}">
+      <details class="wf-row${flags.map(f => ` flag-${f}`).join("")}" id="req-${r.id}" data-flags="${flags.join(" ")}" data-t0="${Math.round(r.start - page.startMs)}" data-t1="${Math.round((r.observedEnd ?? r.end ?? r.start) - page.startMs)}" data-search="${esc(searchText(r))}">
         <summary>
           <span class="wf-label"><span class="method" tabindex="0" data-tip="${esc(methodTip(r.method))}">${esc(r.method || "Not recorded")}</span> ${enrichment?.perRequest.get(r.id)?.resourceType ? `<span class="wf-type ${typeClass(enrichment.perRequest.get(r.id).resourceType)}">${esc(enrichment.perRequest.get(r.id).resourceType)}</span>` : ""}<span class="wf-host" title="${esc(r.url)}">${esc(r.host)}</span><span class="wf-path" title="${esc(r.url)}">${esc(pathOf(r.url))}</span></span>
           <span class="wf-status" data-tip="${esc(resultTip(r))}">${esc(status)}</span>
@@ -259,6 +277,7 @@ function renderWaterfall(analysis, connections, serverInsights, enrichment = nul
         <ul class="legend">${SEGMENTS.map(k => `<li tabindex="0" data-tip="${esc(TIMING_MEANINGS[k])}"><span class="swatch seg-${k}" aria-hidden="true"></span>${esc(TIMING_LABELS[k])}</li>`).join("")}${milestones.drawn ? `<li tabindex="0" data-tip="Dashed vertical lines mark page milestones (${milestones.source === "profile" ? "first and largest contentful paint, DOMContentLoaded and load, from the Performance profile" : "DOMContentLoaded and load, from the HAR"}). They are the page's own events, not network events."><span class="swatch ms-swatch" aria-hidden="true"></span>Page milestones (${milestones.source === "profile" ? "profile" : "HAR"})</li>` : ""}${serverInsights.hasAnything ? `<li tabindex="0" data-tip="A thin line under the wait bar, as wide as the largest phase the server reported for itself (Server-Timing). It is the server's own figure and may overlap other phases."><span class="swatch srv-swatch" aria-hidden="true"></span>Server-reported time</li>` : ""}</ul>
       </div>
       ${renderProtocolGuide(pageRequests)}
+      ${renderTimeline(pageRequests, connections, profile, page, span)}
       <div class="wf">
         <div class="wf-axis"><span class="wf-label"></span><span class="wf-status"></span><span class="wf-proto"></span><span class="wf-track ticks">${ticks}${milestones.labels}</span><span class="wf-time"></span></div>
         ${mainBand}${rows}
@@ -446,7 +465,7 @@ function renderSequence(view, page, analysis) {
     <section id="sequence" class="seq-layout">
       <div class="seq-main card">
         <div class="seq-title">
-          <div class="seq-title-row"><h2>Sequence</h2><button type="button" id="toggle-details" aria-controls="explain" aria-expanded="true">Hide details panel</button></div>
+          <div class="seq-title-row"><h2>Sequence</h2><span class="seq-export"><button type="button" id="seq-save-png">Save as image</button><button type="button" id="seq-save-svg">Save as SVG</button><span class="muted" id="seq-export-status" role="status"></span></span><button type="button" id="toggle-details" aria-controls="explain" aria-expanded="true">Hide details panel</button></div>
           <p class="note">One column per server (the first ${MAX_SEQUENCE_HOSTS} contacted; the rest share the last column). A handshake row appears only where a new connection was opened.${view.truncated ? ` Showing the first ${MAX_SEQUENCE_REQUESTS} of ${page.requestCount} requests; the waterfall lists all of them.` : ""}</p>
           ${renderProtocolGuide(analysis.pageRequests)}
         </div>
@@ -676,6 +695,23 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .wf-key .legend { margin: 6px 0 0; }
   .wf-key [data-tip], .method[data-tip] { cursor: help; }
   .wf { font-size: 12px; }
+  .seq-export { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; margin-right: 8px; font-size: 12px; }
+  .tl { display: grid; gap: 8px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--canvas); }
+  .tl-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 12.5px; }
+  .tl-track { position: relative; height: 34px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); overflow: hidden; }
+  .tl-mark { position: absolute; top: 0; bottom: 0; width: 5px; margin-left: -2px; padding: 0; border: 0; border-radius: 2px; cursor: pointer; z-index: 2; }
+  .tl-mark:hover, .tl-mark:focus-visible { outline: 2px solid var(--text); }
+  .tl-error { background: var(--danger); }
+  .tl-slow { background: var(--warning); }
+  .tl-task { position: absolute; bottom: 0; height: 12px; background: color-mix(in srgb, var(--danger) 35%, transparent); border: 1px solid var(--danger); border-radius: 2px; z-index: 1; pointer-events: auto; }
+  .tl-window { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; background: color-mix(in srgb, var(--primary) 14%, transparent); border-left: 2px solid var(--primary); border-right: 2px solid var(--primary); pointer-events: none; z-index: 0; }
+  .tl-controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 12px; color: var(--text-muted); }
+  .tl-controls label { display: flex; gap: 6px; align-items: center; }
+  .tl-controls input[type=range] { width: 160px; }
+  .tl-controls output { font: 12px var(--font-mono); color: var(--text); }
+  .tl-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: var(--text-muted); }
+  .tl-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+  .tl-legend i.tl-taskkey { background: color-mix(in srgb, var(--danger) 35%, transparent); border: 1px solid var(--danger); }
   .wf-row, .wf-axis { border-bottom: 1px solid var(--border); }
   .wf-row > summary, .wf-axis { display: grid; grid-template-columns: minmax(180px, 34%) 70px 64px 1fr 70px; gap: 8px; align-items: center; padding: 4px 0; cursor: pointer; list-style: none; }
   .wf-row > summary::-webkit-details-marker { display: none; }
@@ -943,6 +979,7 @@ ${themePreferenceScript()}
 
   // Filter: the same search and chips apply to the waterfall and the sequence.
   var mode = "all";
+  var win = null; // the timeline window in ms, or null for the whole page load
   var input = document.getElementById("filter-text");
   var count = document.getElementById("filter-count");
   function applyFilter() {
@@ -952,11 +989,13 @@ ${themePreferenceScript()}
       var flags = " " + (row.getAttribute("data-flags") || "") + " ";
       var byMode = mode === "all" || (mode === "problems" ? /\\s(error|inspected)\\s/.test(flags) : flags.indexOf(" " + mode + " ") >= 0);
       var byText = !text || (row.getAttribute("data-search") || "").indexOf(text) >= 0;
-      var visible = byMode && byText;
+      var byTime = true;
+      if (win && row.classList.contains("wf-row")) { var t0 = Number(row.getAttribute("data-t0")), t1 = Number(row.getAttribute("data-t1")); byTime = t0 <= win.to && t1 >= win.from; }
+      var visible = byMode && byText && byTime;
       row.classList.toggle("is-filtered-out", !visible);
       if (row.classList.contains("wf-row")) { total++; if (visible) shown++; }
     });
-    count.textContent = (mode === "all" && !text) ? "" : "Showing " + shown + " of " + total + " requests";
+    count.textContent = (mode === "all" && !text && !win) ? "" : "Showing " + shown + " of " + total + " requests";
   }
   input.addEventListener("input", applyFilter);
   document.querySelectorAll("[data-filter]").forEach(function (b) {
@@ -970,6 +1009,111 @@ ${themePreferenceScript()}
       applyFilter();
     });
   });
+
+  // Export the sequence as an image. The diagram is HTML, so it is copied with its computed styles into an SVG
+  // foreignObject: nothing is fetched and nothing leaves the page. PNG is drawn from that SVG where the browser allows it.
+  (function () {
+    var png = document.getElementById("seq-save-png"), svgButton = document.getElementById("seq-save-svg"), status = document.getElementById("seq-export-status");
+    if (!png || !svgButton) return;
+    var PROPS = ["display", "position", "top", "right", "bottom", "left", "width", "height", "min-width", "max-width", "min-height", "max-height", "margin", "padding", "border-top", "border-right", "border-bottom", "border-left", "border-radius", "background-color", "background-image", "color", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "text-align", "text-transform", "text-decoration", "white-space", "overflow", "text-overflow", "box-sizing", "grid-template-columns", "grid-template-rows", "grid-column", "grid-row", "gap", "flex", "flex-direction", "flex-wrap", "align-items", "justify-content", "opacity", "transform", "z-index", "vertical-align", "box-shadow", "fill", "stroke", "stroke-width"];
+    function cloneStyled(el) {
+      var copy = el.cloneNode(false);
+      if (el.nodeType !== 1) return copy;
+      var cs = getComputedStyle(el);
+      if (cs.display === "none") return null;
+      var css = "";
+      for (var i = 0; i < PROPS.length; i++) css += PROPS[i] + ":" + cs.getPropertyValue(PROPS[i]) + ";";
+      if (cs.position === "sticky") css += "position:relative;";
+      copy.setAttribute("style", css);
+      ["id", "class", "title", "tabindex", "data-tip", "aria-label"].forEach(function (a) { copy.removeAttribute(a); });
+      for (var c = el.firstChild; c; c = c.nextSibling) { var child = cloneStyled(c); if (child) copy.appendChild(child); }
+      return copy;
+    }
+    function build() {
+      // The sequence may be on a tab that is not showing, where it has no size. Show it while measuring and copying.
+      var view = document.getElementById("view-sequence");
+      var wasActive = view.classList.contains("is-active");
+      if (!wasActive) view.classList.add("is-active");
+      try { return buildVisible(); } finally { if (!wasActive) view.classList.remove("is-active"); }
+    }
+    function buildVisible() {
+      var grid = document.querySelector(".seq-grid");
+      var w = Math.ceil(grid.scrollWidth), h = Math.ceil(grid.scrollHeight);
+      if (!(w > 0 && h > 0)) throw new Error("the sequence has no size");
+      var wrap = document.createElement("div");
+      wrap.setAttribute("style", "width:" + w + "px;height:" + h + "px;background:" + getComputedStyle(document.body).backgroundColor + ";");
+      wrap.appendChild(cloneStyled(grid));
+      var xhtml = "http://www.w3.org/1999/xhtml";
+      wrap.setAttribute("xmlns", xhtml);
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '"><foreignObject width="100%" height="100%">' + new XMLSerializer().serializeToString(wrap) + "</foreignObject></svg>";
+      return { svg: svg, w: w, h: h };
+    }
+    function save(blob, name) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    }
+    var stamp = function () { return "socketmap-sequence"; };
+    svgButton.addEventListener("click", function () {
+      try { save(new Blob([build().svg], { type: "image/svg+xml" }), stamp() + ".svg"); status.textContent = "Saved as SVG."; } catch (e) { status.textContent = "Could not build the image: " + e.message; }
+    });
+    png.addEventListener("click", function () {
+      status.textContent = "Building the image...";
+      var built;
+      try { built = build(); } catch (e) { status.textContent = "Could not build the image: " + e.message; return; }
+      var scale = Math.min(2, 16000 / Math.max(built.w, built.h));
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var canvas = document.createElement("canvas");
+          canvas.width = Math.round(built.w * scale); canvas.height = Math.round(built.h * scale);
+          var ctx = canvas.getContext("2d");
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob(function (blob) {
+            if (!blob) { status.textContent = "This browser would not draw the image. Use Save as SVG."; return; }
+            save(blob, stamp() + ".png"); status.textContent = "Saved as PNG.";
+          }, "image/png");
+        } catch (e) { status.textContent = "This browser would not draw the image (" + e.message + "). Use Save as SVG."; }
+      };
+      img.onerror = function () { status.textContent = "This browser could not read the image. Use Save as SVG."; };
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(built.svg);
+    });
+  })();
+
+  // Timeline: a window over the page load narrows the waterfall to the requests that overlap it; markers jump to a request.
+  (function () {
+    var tl = document.getElementById("timeline");
+    if (!tl) return;
+    var span = Number(tl.getAttribute("data-span")) || 1;
+    var from = document.getElementById("tl-from"), to = document.getElementById("tl-to");
+    var box = document.getElementById("tl-window"), out = document.getElementById("tl-out");
+    function fmt(ms) { return ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : Math.round(ms) + " ms"; }
+    function update() {
+      var a = Number(from.value), b = Number(to.value);
+      if (a > b) { if (this === from) { to.value = a; b = a; } else { from.value = b; a = b; } }
+      box.style.left = (a / 10) + "%";
+      box.style.width = Math.max(0.3, (b - a) / 10) + "%";
+      if (a <= 0 && b >= 1000) { win = null; out.textContent = "Whole page load"; }
+      else { win = { from: a / 1000 * span, to: b / 1000 * span }; out.textContent = fmt(win.from) + " to " + fmt(win.to); }
+      applyFilter();
+    }
+    from.addEventListener("input", update);
+    to.addEventListener("input", update);
+    document.getElementById("tl-reset").addEventListener("click", function () { from.value = 0; to.value = 1000; update(); });
+    tl.querySelectorAll(".tl-mark").forEach(function (mark) {
+      mark.addEventListener("click", function () {
+        var row = document.getElementById(mark.getAttribute("data-req"));
+        if (!row) return;
+        if (win) { from.value = 0; to.value = 1000; update(); }
+        row.classList.remove("is-filtered-out");
+        row.open = true;
+        row.scrollIntoView({ block: "center" });
+      });
+    });
+    update();
+  })();
 
   // Inspector: plain-language explanation of the selected row or column.
   var EXPLAIN = JSON.parse(document.getElementById("seq-explain").textContent || "{}");

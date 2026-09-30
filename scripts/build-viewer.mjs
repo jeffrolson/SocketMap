@@ -292,6 +292,16 @@ export function buildViewerHtml({ theme } = {}) {
   .capture-fast-steps strong { color: var(--text); }
   .page-context { min-width: 0; max-width: min(100%, 360px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font-mono); color: var(--text-muted); }
   .toolbar .spacer { flex: 1; }
+  .toolbar .file { max-width: 30ch; }
+  .toolbar-compare[hidden] { display: none; }
+  .add-menu { position: relative; }
+  .add-menu[hidden] { display: none; }
+  .add-menu summary { list-style: none; cursor: pointer; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: 13.5px var(--font-sans); user-select: none; }
+  .add-menu summary::-webkit-details-marker { display: none; }
+  .add-menu summary::after { content: " \\25BE"; }
+  .add-panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; gap: 4px; min-width: 210px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .add-panel button { text-align: left; }
+  .add-panel button[hidden] { display: none; }
   select { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font: 13.5px var(--font-sans); max-width: 420px; }
   #report-frame { flex: 1; width: 100%; border: 0; background: var(--bg); }
 
@@ -493,27 +503,32 @@ ${themePreferenceScript()}
   <div class="toolbar">
     <span class="brand">SocketMap</span>
     <span class="file" id="file-name"></span>
+    <label class="page-picker"><span id="page-label">Page / site</span> <select id="page-select" aria-label="Page or site to analyze"></select></label>
+    <label class="page-picker" id="page-picker-b" hidden>B page / site <select id="page-select-b" aria-label="B page or site to analyze"></select></label>
+    <span class="page-context" id="page-context" title="" hidden></span>
     <span class="spacer"></span>
-    <button type="button" id="add-har" hidden>Add a HAR</button>
-    <button type="button" id="add-profile" hidden>Add a profile</button>
-    <button type="button" id="add-path" hidden>Add network path</button>
-    <button type="button" id="add-lighthouse" hidden>Add Lighthouse</button>
-    <button type="button" id="add-cpu" hidden>Add CPU profile</button>
+    <details class="add-menu" id="add-menu" hidden>
+      <summary>Add files</summary>
+      <div class="add-panel" role="menu" aria-label="Add another file to this capture">
+        <button type="button" id="add-har" hidden role="menuitem">Add a HAR</button>
+        <button type="button" id="add-profile" hidden role="menuitem">Add a profile</button>
+        <button type="button" id="add-path" hidden role="menuitem">Add network path</button>
+        <button type="button" id="add-lighthouse" hidden role="menuitem">Add Lighthouse</button>
+        <button type="button" id="add-cpu" hidden role="menuitem">Add CPU profile</button>
+      </div>
+    </details>
     <button type="button" id="add-comparison">Compare with another capture</button>
     <button type="button" data-theme-toggle>Theme</button>
     <button type="button" id="open-another">Open another capture</button>
     <button type="button" id="save-report" class="primary">Save report</button>
   </div>
-  <div class="toolbar">
+  <div class="toolbar toolbar-compare" id="comparison-toolbar" hidden>
     <div id="comparison-controls" class="comparison-controls" role="group" aria-label="Comparison views" hidden>
       <button type="button" id="view-comparison" aria-pressed="true">Comparison</button>
       <button type="button" id="view-a" aria-pressed="false">A report</button>
       <button type="button" id="view-b" aria-pressed="false">B report</button>
       <button type="button" id="swap-captures">Swap A / B</button>
     </div>
-    <label class="page-picker"><span id="page-label">Page / site</span> <select id="page-select" aria-label="Page or site to analyze"></select></label>
-    <label class="page-picker" id="page-picker-b" hidden>B page / site <select id="page-select-b" aria-label="B page or site to analyze"></select></label>
-    <span class="page-context" id="page-context" title=""></span>
   </div>
   <p id="comparison-hint" class="comparison-hint" hidden>A is the baseline. Changes show B minus A. Select the same page or action in each capture for a useful comparison.</p>
   <iframe id="report-frame" title="SocketMap report"></iframe>

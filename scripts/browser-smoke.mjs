@@ -143,6 +143,16 @@ async function main() {
     check(await evaluate(frame("d => !!d.querySelector('#path') && !d.querySelector('#path-prompt')")), "sample report shows the network path panel");
     check(await evaluate(frame("d => !!d.querySelector('#lighthouse')")), "sample report shows the Lighthouse panel");
 
+    // Timeline strip: markers exist and the window narrows the waterfall
+    check(await evaluate(frame("d => !!d.querySelector('#timeline') && d.querySelectorAll('.tl-mark').length > 0")), "waterfall has a timeline with problem markers");
+    const narrowed = await evaluate(frame("d => { const to = d.getElementById('tl-to'); to.value = 150; to.dispatchEvent(new d.defaultView.Event('input', { bubbles: true })); const t = d.getElementById('filter-count').textContent; const shown = d.querySelectorAll('.wf-row:not(.is-filtered-out)').length; d.getElementById('tl-reset').click(); return { t, shown, after: d.getElementById('filter-count').textContent, all: d.querySelectorAll('.wf-row:not(.is-filtered-out)').length, total: d.querySelectorAll('.wf-row').length }; }"));
+    check(narrowed && /Showing \d+ of \d+ requests/.test(narrowed.t) && narrowed.shown < narrowed.total && narrowed.after === "" && narrowed.all === narrowed.total, "moving the timeline window narrows the waterfall and Show everything restores it");
+
+    // Sequence export: the SVG and PNG buttons produce real files
+    const exported = await evaluate(frame("d => new Promise(resolve => { const w = d.defaultView; const saved = []; const orig = w.HTMLAnchorElement.prototype.click; w.HTMLAnchorElement.prototype.click = function () { if (this.download) { const name = this.download; fetch(this.href).then(r => r.blob()).then(b => { saved.push({ name, size: b.size, type: b.type }); }); return; } return orig.call(this); }; d.getElementById('seq-save-svg').click(); d.getElementById('seq-save-png').click(); setTimeout(() => { w.HTMLAnchorElement.prototype.click = orig; resolve(saved); }, 6000); })"));
+    check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".svg") && f.size > 8000 && /svg/.test(f.type)), "the sequence exports as an SVG file");
+    check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".png") && f.size > 4000 && /png/.test(f.type)), "the sequence exports as a PNG file");
+
     // 2. Policy sample inside the report
     await evaluate(frame("d => { const b = [...d.querySelectorAll('button')].find(x => /sample export/i.test(x.textContent)); if (b) b.click(); return !!b; }"));
     check(await waitFor(frame("d => /Policies set/i.test((d.getElementById('policy') || d.body).innerText)"), "the policy sample", 8000), "policy sample renders results");
