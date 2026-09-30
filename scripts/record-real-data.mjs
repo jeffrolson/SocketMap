@@ -18,10 +18,10 @@ import { join, resolve } from "node:path";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function launch(bin, extra = []) {
+async function launch(bin, extra = [], { headed = false } = {}) {
   const port = 9333 + Math.floor(Math.random() * 500);
   const profile = mkdtempSync(join(tmpdir(), "sm-rec-"));
-  const child = spawn(bin, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--no-sandbox", ...extra, "about:blank"], { stdio: "ignore" });
+  const child = spawn(bin, [...(headed ? [] : ["--headless=new"]), `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--no-sandbox", ...extra, "about:blank"], { stdio: "ignore" });
   const json = async (path) => { for (let i = 0; i < 120; i++) { try { const r = await fetch(`http://127.0.0.1:${port}${path}`); if (r.ok) return r.json(); } catch {} await sleep(250); } throw new Error("the browser did not start"); };
   const version = await json("/json/version");
   const targets = await json("/json/list");
@@ -54,6 +54,22 @@ async function policy(bin, outFile, url = "chrome://policy") {
     mkdirSync(join(outFile, ".."), { recursive: true });
     writeFileSync(outFile, text);
     console.log(`saved ${text.length} chars to ${outFile}`);
+  } finally { await close(); }
+}
+
+// Opens the policy page in a VISIBLE browser and clicks Export to JSON, which opens a native save dialog. Something else
+// (the workflow's PowerShell keystrokes) must complete the dialog; this only clicks and then keeps the browser open.
+async function exportClick(bin, url = "edge://policy", holdSeconds = 45) {
+  const { version, page, close } = await launch(bin, [], { headed: true });
+  try {
+    console.log("browser:", version);
+    await page.send("Page.enable"); await page.send("Runtime.enable");
+    await page.send("Page.navigate", { url });
+    await sleep(5000);
+    const clicked = await page.send("Runtime.evaluate", { returnByValue: true, expression: `(() => { const find = (root) => { for (const el of root.querySelectorAll("*")) { if (el.shadowRoot) { const x = find(el.shadowRoot); if (x) return x; } if (/^(button|cr-button)$/i.test(el.tagName) && /export to json/i.test((el.textContent || "").trim())) return el; } return null; }; const b = find(document); if (b) b.click(); return !!b; })()` });
+    console.log("clicked export:", clicked.result.value);
+    if (!clicked.result.value) throw new Error("no Export to JSON button");
+    await sleep(holdSeconds * 1000);
   } finally { await close(); }
 }
 
@@ -91,6 +107,7 @@ const [mode, bin, a, b, c] = process.argv.slice(2);
 try {
   if (mode === "policy") await policy(bin, a, b);
   else if (mode === "pair") await pair(bin, a, b, c);
+  else if (mode === "export-click") await exportClick(bin, a, b ? Number(b) : undefined);
   else { console.error("Usage: record-real-data.mjs policy|pair <browser> ..."); process.exit(2); }
   process.exit(0);
 } catch (error) { console.error(`failed: ${error.message}`); process.exit(1); }

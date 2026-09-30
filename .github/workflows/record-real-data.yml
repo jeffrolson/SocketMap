@@ -106,3 +106,50 @@ jobs:
           name: windows-real-data
           path: out
           retention-days: 3
+
+  edge-export:
+    # Edge's policy page has no Copy as JSON button; its Export to JSON opens a native save dialog. This job drives that
+    # dialog with keystrokes on a disposable Windows runner, to capture an actual exported Edge file.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Set managed Edge policies on this disposable runner
+        shell: powershell
+        run: |
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty -Path $key -Name ProxyMode -Value 'pac_script' -Type String
+          Set-ItemProperty -Path $key -Name ProxyPacUrl -Value 'http://wpad.corp.example.com/proxy.pac' -Type String
+          Set-ItemProperty -Path $key -Name MaxConnectionsPerProxy -Value 32 -Type DWord
+          Set-ItemProperty -Path $key -Name QuicAllowed -Value 0 -Type DWord
+          Set-ItemProperty -Path $key -Name NetworkPredictionOptions -Value 2 -Type DWord
+      - name: Click Export to JSON and complete the save dialog
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path out -Force | Out-Null
+          $target = Join-Path (Get-Location).Path 'out\edge-policies.json'
+          $job = Start-Job -ArgumentList $target -ScriptBlock {
+            param($target)
+            Add-Type -AssemblyName System.Windows.Forms
+            Start-Sleep -Seconds 14
+            for ($i = 0; $i -lt 6; $i++) {
+              [System.Windows.Forms.SendKeys]::SendWait($target)
+              Start-Sleep -Milliseconds 800
+              [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+              Start-Sleep -Seconds 4
+              if (Test-Path $target) { break }
+            }
+          }
+          node scripts/record-real-data.mjs export-click "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" edge://policy 40
+          Wait-Job $job -Timeout 60 | Out-Null
+          Receive-Job $job | Out-Null
+          if (Test-Path $target) { Write-Host "exported:" (Get-Item $target).Length "bytes" } else { Write-Host "no file was saved" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edge-export
+          path: out
+          retention-days: 3
+          if-no-files-found: warn
