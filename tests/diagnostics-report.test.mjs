@@ -56,3 +56,21 @@ it("keeps a large snapshot bounded: capped tables, no duplicated nested JSON, fu
   assert.ok(html.includes("row-4999"), "the full JSON still carries every recorded row");
   assert.equal(html.split("row-4999").length - 1, 1, "each recorded value appears once");
 });
+
+describe("diagnostics report size", () => {
+  const type = (name, marker) => ({ name, count: 3, firstTime: 1, lastTime: 2, beginCount: 1, endCount: 1, firstParams: { marker }, lastParams: { marker } });
+  const source = (id, eventCount, errorCount) => ({ id: String(id), type: "URL_REQUEST", label: `s${id}`, firstTime: 1, lastTime: 2, eventCount, errorCount, dependencies: [], eventTypes: [type("EVENT", `sample-of-${id}`)] });
+  const sources = Array.from({ length: 300 }, (_, i) => source(i + 1, i + 1, i === 0 ? 2 : 0));
+  const html = renderDiagnostics({ diagnostics: { sources, timeline: [], snapshots: {}, firstTime: 1, lastTime: 2 } });
+  it("keeps samples for the most eventful sources and every source with errors, and says where the rest went", () => {
+    assert.ok(html.includes("sample-of-300"), "most eventful");
+    assert.ok(html.includes("sample-of-201"), "within the top 100");
+    assert.ok(html.includes("sample-of-1&quot;"), "a source with errors, even with few events");
+    assert.ok(!html.includes("sample-of-150&quot;"), "a quiet source keeps counts, not samples");
+    assert.match(html, /Samples are not kept for lower-activity sources/);
+  });
+  it("still lists every source and its event types", () => {
+    assert.equal((html.match(/data-source-id=/g) || []).length, 300);
+    assert.ok(html.includes("EVENT (3)"));
+  });
+});
