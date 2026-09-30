@@ -50,3 +50,12 @@ describe("redaction by token shape", () => {
     assert.equal(sanitize("GET /AIzaShort HTTP/1.1"), "GET /AIzaShort HTTP/1.1");
   });
 });
+
+describe("authentication response headers", () => {
+  it("masks challenge and authentication-info headers, which carry nonces and session data", () => {
+    const lines = redactHeaderLines(["www-authenticate: Digest realm=\"r\", nonce=\"abc123\"", "authentication-info: nextnonce=\"def456\"", "proxy-authenticate: NTLM TlRMTVNTUAAB", "content-type: text/html"]);
+    assert.deepEqual(lines.map(l => l.split(": ")[1]), ["[REDACTED]", "[REDACTED]", "[REDACTED]", "text/html"]);
+    const sanitize = createEvidenceSanitizer();
+    assert.equal(sanitize({ name: "WWW-Authenticate", value: "Digest nonce=abc" }).value, "[REDACTED]");
+  });
+});

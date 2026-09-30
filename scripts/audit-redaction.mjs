@@ -17,6 +17,7 @@ import { createCaptureReader, buildReport } from "../src/viewer/viewer-core.mjs"
 import { createHarReader } from "../src/parsers/har-stream.mjs";
 import { createTraceReader } from "../src/parsers/trace-stream.mjs";
 import { attachHar } from "../src/enrichment.mjs";
+import { buildCaptureFromHar } from "../src/har-capture.mjs";
 import { attachProfile } from "../src/profile.mjs";
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 
@@ -113,7 +114,15 @@ export function auditFile(file) {
     (kind === "har" ? attachHar : attachProfile)(model, r.finish());
   }
   const { html } = buildReport(model, null, null, { name: path.basename(file), bytes: raw.length });
-  return { file, kind, bytes: raw.length, harvested: secrets.length, kinds: countBy(secrets.map(s => s.kind)), leaks: findLeaks(secrets, html) };
+  let leaks = findLeaks(secrets, html);
+  if (kind === "har") {
+    // A HAR is also a main input: the report built from it alone keeps response headers (credentials masked).
+    const reader = createHarReader({ keepHeaders: true });
+    reader.write(raw);
+    const alone = buildCaptureFromHar(reader.finish(), { name: path.basename(file) });
+    if (alone) leaks = leaks.concat(findLeaks(secrets, buildReport(alone, null, null, { name: path.basename(file), bytes: raw.length }).html).map(l => ({ ...l, kind: `${l.kind} (HAR as main input)` })));
+  }
+  return { file, kind, bytes: raw.length, harvested: secrets.length, kinds: countBy(secrets.map(s => s.kind)), leaks };
 }
 
 export function detectKind(head) {

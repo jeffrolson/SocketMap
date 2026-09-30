@@ -17,7 +17,7 @@ const TOKEN_SHAPE_RE = /eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-
 const USERINFO_RE = /(\/\/[^/:@\s]+:)[^@/\s]+@/g;
 
 // Header names whose values are credentials.
-const SECRET_HEADER_RE = /cookie|authorization|token|secret|password|api[-_]?key|digest|signature|session/i;
+const SECRET_HEADER_RE = /cookie|authorization|authenticat|token|secret|password|api[-_]?key|digest|signature|session/i;
 const URL_HEADER_RE = /^(:path|location|referer|origin|content-location)$/i;
 // NetLog metadata can include the Chrome command line. Keep useful non-secret
 // switches, but never carry a credential passed as a switch value into a model
@@ -57,7 +57,7 @@ export function redactHeaderLines(lines) {
  */
 export function createEvidenceSanitizer() {
   const mask = "[REDACTED]";
-  const secretName = /authorization|cookie|password|passwd|(?:^|[_-])pwd(?:$|[_-])|token|secret|credentials?|private[_-]?key|(?:^session$|session[_-]?(?:id|ticket)$)|api[_-]?key|digest|signature|saml|assertion|(?:^|[_-])auth(?:$|[_-]|entication)|auth[_-]?(?:data|value|challenge|response)|^challenge$/i;
+  const secretName = /authorization|authenticat|cookie|password|passwd|(?:^|[_-])pwd(?:$|[_-])|token|secret|credentials?|private[_-]?key|(?:^session$|session[_-]?(?:id|ticket)$)|api[_-]?key|digest|signature|saml|assertion|(?:^|[_-])auth(?:$|[_-]|entication)|auth[_-]?(?:data|value|challenge|response)|^challenge$/i;
   const secretParamName = /token|secret|passw(?:or)?d|pwd|session|csrf|xsrf|signature|assertion|credential|api[-_]?key|^(?:tempauth|code|sig|key|auth|samlrequest|samlresponse)$|(?:^|[_-])auth(?:$|[_-])/i;
   function text(value) {
     return value
