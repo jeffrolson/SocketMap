@@ -52,6 +52,23 @@ describe("policy export reader", () => {
   });
 });
 
+describe("Edge's export shape", () => {
+  // Edge 154's own binary contains the keys chromeMetadata, policyGroups and policyIds, and neither policyValues nor edgeMetadata.
+  it("reads an export with chromeMetadata and policyGroups, identifying Edge by its product name", () => {
+    const input = chromeExport({ ProxyMode: entry("pac_script", { source: "cloud" }), MaxConnectionsPerProxy: entry(32) }, "Microsoft Edge");
+    input.policyGroups = input.policyValues;
+    delete input.policyValues;
+    input.chromeMetadata.version = "154.0.4258.48 (Official build) (arm64)";
+    const norm = engine.normalize(input);
+    assert.equal(norm.ok, true);
+    assert.equal(norm.meta.browser, "edge");
+    assert.match(norm.meta.version, /^154\./);
+    const result = engine.evaluate(norm, {}, POLICY_CATALOG, CATALOG_REVIEWED);
+    assert.equal(result.browser, "edge");
+    assert.ok(result.rows.some(r => r.name === "ProxyMode") && result.deprecated.some(d => d.name === "ProxyMode"));
+  });
+});
+
 describe("older Chrome exports", () => {
   // Chrome 134 (real export, shape only) wrote the policy list as policyGroups, not policyValues.
   const older = () => {

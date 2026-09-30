@@ -151,6 +151,21 @@ describe("profile in findings and the AI summary", () => {
 describe("real NetLog and trace pair (only when recorded locally)", () => {
   const netlog = "captures/pair-wiki-netlog.json";
   const tracePath = "captures/pair-wiki-trace.json";
+  for (const [label, netlogFile, traceFile, browserName] of [["macOS Edge", "captures/pair-edge-netlog.json", "captures/pair-edge-trace.json", /Edge/]]) {
+    it(`${label}: places the profile from shared requests and agrees with the shared browser clock`, { skip: !existsSync(netlogFile) || !existsSync(traceFile) }, async () => {
+      const feed = (reader, file) => new Promise((resolve, reject) => { const s = createReadStream(file, { encoding: "utf8" }); s.on("data", c => reader.write(c)); s.on("end", resolve); s.on("error", reject); });
+      const capture = createCaptureReader();
+      await feed(capture, netlogFile);
+      const model = capture.finish();
+      assert.match(model.environment.browser, browserName, "the NetLog names the browser");
+      const reader = createTraceReader();
+      await feed(reader, traceFile);
+      const profile = joinProfile(model, reader.finish());
+      assert.equal(profile.alignment.aligned, true);
+      assert.ok(profile.alignment.matched >= 25, `matched ${profile.alignment.matched}`);
+      assert.ok(Math.abs(profile.alignment.offsetMs + model.diagnostics.firstTime) < 50);
+    });
+  }
   it("places the profile from shared requests and agrees with the shared browser clock", { skip: !existsSync(netlog) || !existsSync(tracePath) }, async () => {
     const feed = (reader, file) => new Promise((resolve, reject) => { const s = createReadStream(file, { encoding: "utf8" }); s.on("data", c => reader.write(c)); s.on("end", resolve); s.on("error", reject); });
     const capture = createCaptureReader();
