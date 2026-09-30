@@ -67,6 +67,10 @@ jobs:
             Set-ItemProperty -Path $key -Name QuicAllowed -Value 0 -Type DWord
             Set-ItemProperty -Path $key -Name NetworkPredictionOptions -Value 2 -Type DWord
           }
+          # The same policies at user level with different values, so the export carries conflicts and superseded values.
+          New-Item -Path 'HKCU:\SOFTWARE\Policies\Google\Chrome' -Force | Out-Null
+          Set-ItemProperty -Path 'HKCU:\SOFTWARE\Policies\Google\Chrome' -Name DnsOverHttpsMode -Value 'off' -Type String
+          Set-ItemProperty -Path 'HKCU:\SOFTWARE\Policies\Google\Chrome' -Name MaxConnectionsPerProxy -Value 8 -Type DWord
       - name: Export the managed Chrome policy page as JSON
         run: node scripts/record-real-data.mjs policy "C:\Program Files\Google\Chrome\Application\chrome.exe" out/windows-chrome-policies.json
       - name: Try the Edge policy page (its page has no Copy as JSON button, so this may fail)

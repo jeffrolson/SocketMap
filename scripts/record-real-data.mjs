@@ -14,7 +14,7 @@
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -59,7 +59,8 @@ async function policy(bin, outFile, url = "chrome://policy") {
 
 async function pair(bin, outDir, tag, url = "https://en.wikipedia.org/wiki/HTTP/3") {
   mkdirSync(outDir, { recursive: true });
-  const netlog = join(outDir, `pair-${tag}-netlog.json`);
+  // Browsers resolve a relative NetLog path against their own working directory, so pass an absolute one.
+  const netlog = resolve(outDir,  `pair-${tag}-netlog.json`);
   const tracePath = join(outDir, `pair-${tag}-trace.json`);
   const { version, browser, page, close } = await launch(bin, [`--log-net-log=${netlog}`, "--net-log-capture-mode=Default", "--window-size=1280,900"]);
   try {
