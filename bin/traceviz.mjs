@@ -18,6 +18,8 @@ import { attachHar } from "../src/enrichment.mjs";
 import { attachProfile } from "../src/profile.mjs";
 import { readPathFile, attachPath } from "../src/path.mjs";
 import { buildCaptureFromHar } from "../src/har-capture.mjs";
+import { readLighthouse, attachLighthouse } from "../src/lighthouse.mjs";
+import { readCpuProfile, attachCpuProfile } from "../src/cpuprofile.mjs";
 import { looksLikeHar } from "../src/viewer/viewer-core.mjs";
 import { parseGenericTrace } from "../src/parsers/generic-parser.mjs";
 import { normalizeTrace } from "../src/normalizer.mjs";
@@ -45,6 +47,8 @@ Transform network traces into interactive, self-contained sequence diagrams.
   --har <file>           NetLog only: also read a HAR exported from DevTools (script, type and cache detail)
   --diagram              HAR only: draw the older sequence diagram instead of the report
   --profile <file>       NetLog or HAR: also read a DevTools Performance profile, .json or .json.gz (page code and paint)
+  --lighthouse <file>    NetLog or HAR: also read a Lighthouse JSON report (a separate lab load: scores, metrics, what to fix)
+  --cpuprofile <file>    NetLog or HAR: also read a V8 .cpuprofile (JavaScript time by script and function)
   --path <file>          NetLog or HAR: also read the file written by tools/socketmap-path.sh or .ps1 (link, DNS, proxy, route, curl timing)
   --sample               Generate an interactive demo diagram using rich synthetic data
   --open                 Automatically open the generated visual in your default browser
@@ -134,6 +138,8 @@ async function main() {
   let diagram = false;
   let profilePath = null;
   let pathFile = null;
+  let lighthousePath = null;
+  let cpuPath = null;
   let openAfter = false;
   let useSample = false;
 
@@ -159,6 +165,10 @@ async function main() {
       profilePath = args[++i];
     } else if (arg === "--path") {
       pathFile = args[++i];
+    } else if (arg === "--lighthouse") {
+      lighthousePath = args[++i];
+    } else if (arg === "--cpuprofile") {
+      cpuPath = args[++i];
     } else if (!arg.startsWith("-")) {
       inputFile = arg;
     }
@@ -248,6 +258,25 @@ async function main() {
         }
         console.log(`\x1b[32m● [Path]\x1b[0m ${attached.compare.length} host${attached.compare.length === 1 ? "" : "s"} measured with curl, ${attached.routes.length} route${attached.routes.length === 1 ? "" : "s"}, recorded ${attached.source.gapMinutes == null ? "at an unknown time relative to the capture" : `${Math.abs(attached.source.gapMinutes)} minutes ${attached.source.gapMinutes >= 0 ? "after" : "before"} the capture started`}.`);
       }
+      for (const [flag, file, label, read, attach, hint] of [
+        ["--lighthouse", lighthousePath, "Lighthouse report", readLighthouse, attachLighthouse, "Run Lighthouse with --output=json, or in DevTools choose Save as JSON."],
+        ["--cpuprofile", cpuPath, "CPU profile", readCpuProfile, attachCpuProfile, "Use the DevTools JavaScript Profiler, or node --cpu-prof."]
+      ]) {
+        if (!file) continue;
+        const resolvedFile = resolve(file);
+        if (!existsSync(resolvedFile)) {
+          console.error(`\x1b[31m[Error]\x1b[0m ${label} file not found: ${resolvedFile}`);
+          process.exit(1);
+        }
+        let parsed = { recognized: false };
+        try { parsed = read(JSON.parse(readFileSync(resolvedFile, "utf8"))); } catch { /* reported below */ }
+        const attached = parsed.recognized ? attach(model, parsed.data) : null;
+        if (!attached) {
+          console.error(`\x1b[31m[Error]\x1b[0m That file does not look like a ${label}. ${hint}`);
+          process.exit(1);
+        }
+        console.log(`\x1b[32m● [${flag.slice(2)}]\x1b[0m ${label} read (${(statSync(resolvedFile).size / 1024).toFixed(0)} KB reduced to a bounded summary).`);
+      }
       const analysis = analyzeCapture(model, { site: page });
       const p = analysis.page;
       console.log(`\x1b[32m● [Analysis]\x1b[0m Page ${p.site}: ${p.requestCount} requests, ${p.hostCount} hosts, ${analysis.findings.length} findings (${model.requests.length} requests in capture).`);
@@ -256,8 +285,8 @@ async function main() {
       const source = { name: basename(resolvedInput), bytes: statSync(resolvedInput).size };
       htmlOutput = renderReportHtml(model, analysis, theme ? { theme, source } : { source });
     } else {
-      if (harPath || profilePath || pathFile) {
-        console.error(`\x1b[31m[Error]\x1b[0m ${harPath ? "--har" : profilePath ? "--profile" : "--path"} needs a Chromium NetLog (or, for --profile and --path, a HAR) as the main input. This input opens as a diagram, which does not take extra files.`);
+      if (harPath || profilePath || pathFile || lighthousePath || cpuPath) {
+        console.error(`\x1b[31m[Error]\x1b[0m ${harPath ? "--har" : profilePath ? "--profile" : pathFile ? "--path" : lighthousePath ? "--lighthouse" : "--cpuprofile"} needs a Chromium NetLog (or, for the other options, a HAR) as the main input. This input opens as a diagram, which does not take extra files.`);
         process.exit(1);
       }
       console.log("\x1b[35m● [Parser]\x1b[0m Ingesting generic/HAR/trace JSON...");

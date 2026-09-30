@@ -57,7 +57,9 @@ async function main() {
     har: path.join(work, "trace.har"),
     profile: path.join(work, "profile.json"),
     policy: path.join(work, "policies.json"),
-    path: path.join(work, "socketmap-path.json")
+    path: path.join(work, "socketmap-path.json"),
+    lighthouse: path.join(work, "lighthouse.json"),
+    cpu: path.join(work, "profile.cpuprofile")
   };
   fs.writeFileSync(files.netlog, netlogText);
   fs.writeFileSync(files.har, JSON.stringify(buildSampleHar(model)));
@@ -66,6 +68,9 @@ async function main() {
   fs.writeFileSync(files.policy, JSON.stringify(buildSamplePolicyExport()));
   const { buildSamplePath } = await import("../src/demo/sample-path.mjs");
   fs.writeFileSync(files.path, JSON.stringify(buildSamplePath(model)));
+  const { buildSampleLighthouse } = await import("../src/demo/sample-lighthouse.mjs");
+  fs.writeFileSync(files.lighthouse, JSON.stringify(buildSampleLighthouse(model)));
+  fs.writeFileSync(files.cpu, JSON.stringify({ nodes: [{ id: 1, callFrame: { functionName: "(root)", url: "" }, children: [2] }, { id: 2, callFrame: { functionName: "work", url: "https://portal.example.com/app.js", lineNumber: 9 } }], startTime: 0, endTime: 5000, samples: [2, 2, 2], timeDeltas: [0, 1000, 1000] }));
 
   const port = 9300 + Math.floor(Math.random() * 500);
   const child = spawn(browserPath, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${path.join(work, "profile-dir")}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-gpu", "about:blank"], { stdio: "ignore" });
@@ -136,6 +141,7 @@ async function main() {
     for (const name of ["Overview", "Waterfall", "Policy", "Coverage", "Diagnostics"]) check(Array.isArray(views) && views.includes(name), `report has the ${name} tab`);
     check(await evaluate(frame("d => !!d.querySelector('#profile')")), "sample report shows the profile panel");
     check(await evaluate(frame("d => !!d.querySelector('#path') && !d.querySelector('#path-prompt')")), "sample report shows the network path panel");
+    check(await evaluate(frame("d => !!d.querySelector('#lighthouse')")), "sample report shows the Lighthouse panel");
 
     // 2. Policy sample inside the report
     await evaluate(frame("d => { const b = [...d.querySelectorAll('button')].find(x => /sample export/i.test(x.textContent)); if (b) b.click(); return !!b; }"));
@@ -149,6 +155,10 @@ async function main() {
     check(await evaluate("document.body.innerText.includes('capture.json')"), "the toolbar names the loaded file");
     check(await waitFor(frame("d => !!d.querySelector('#path')"), "the network path panel", 15000), "the helper's file loads with the others and shows its panel");
     check(await evaluate(frame("d => !!d.querySelector('#profile') && !d.querySelector('#path-prompt')")), "all three optional files are shown together");
+    await setFiles("#lighthouse-input", [files.lighthouse]);
+    check(await waitFor(frame("d => !!d.querySelector('#lighthouse')"), "the Lighthouse report", 15000), "a Lighthouse report can be added to the open report");
+    await setFiles("#cpu-input", [files.cpu]);
+    check(await waitFor(frame("d => !!d.querySelector('#cpuprofile')"), "the CPU profile", 15000), "a CPU profile can be added to the open report");
 
     // 4. A HAR on its own opens the report; a profile can then be added to it
     await send("Page.navigate", { url: pathToFileURL(viewer).href });

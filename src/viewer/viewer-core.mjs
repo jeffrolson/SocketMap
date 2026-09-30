@@ -55,6 +55,17 @@ export function looksLikePath(head) {
   return /"kind"\s*:\s*"socketmap-path"/.test(String(head || ""));
 }
 
+/** True when the first bytes look like a Lighthouse JSON report. */
+export function looksLikeLighthouse(head) {
+  return /"lighthouseVersion"\s*:/.test(String(head || ""));
+}
+
+/** True when the first bytes look like a V8 CPU profile (.cpuprofile). */
+export function looksLikeCpuProfile(head) {
+  const text = String(head || "");
+  return /^\s*\{/.test(text) && text.includes('"callFrame"') && !text.includes('"traceEvents"') && !text.includes('"constants"');
+}
+
 /** True when the first bytes look like a Chrome trace (a DevTools Performance profile). */
 export function looksLikeTrace(head) {
   const text = String(head || "");

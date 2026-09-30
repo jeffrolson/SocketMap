@@ -9,6 +9,7 @@ import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mj
 import { buildSampleHar } from "../src/demo/sample-har.mjs";
 import { buildSampleTrace } from "../src/demo/sample-trace.mjs";
 import { buildSamplePath } from "../src/demo/sample-path.mjs";
+import { buildSampleLighthouse } from "../src/demo/sample-lighthouse.mjs";
 import { gzipSync } from "node:zlib";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 
@@ -24,11 +25,13 @@ const tempTrace = resolve(__dirname, "temp-trace.json");
 const tempTraceGz = resolve(__dirname, "temp-trace.json.gz");
 const testOutEnriched = resolve(__dirname, "temp-enriched.html");
 const tempPath = resolve(__dirname, "temp-path.json");
+const tempLighthouse = resolve(__dirname, "temp-lighthouse.json");
+const tempCpu = resolve(__dirname, "temp-cpu.cpuprofile");
 
 describe("CLI Integration Tests", () => {
   after(() => {
     // Clean up temporary test files
-    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog, tempHar, testOutEnriched, tempTrace, tempTraceGz, tempPath]) {
+    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog, tempHar, testOutEnriched, tempTrace, tempTraceGz, tempPath, tempLighthouse, tempCpu]) {
       if (existsSync(f)) {
         try { unlinkSync(f); } catch {}
       }
@@ -114,6 +117,29 @@ describe("CLI Integration Tests", () => {
     assert.ok(content.includes('id="path"') && content.includes("The path from this computer"));
     assert.ok(!content.includes('id="path-prompt"'), "the how-to card is replaced by the data");
     assert.ok(content.includes("NETWORK PATH"), "the AI summary carries it");
+  });
+
+  it("adds a Lighthouse report and a CPU profile with --lighthouse and --cpuprofile", async () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    const model = await parseNetLog(fixtureNetLog);
+    writeFileSync(tempLighthouse, JSON.stringify(buildSampleLighthouse(model)));
+    writeFileSync(tempCpu, JSON.stringify({ nodes: [{ id: 1, callFrame: { functionName: "(root)", url: "" }, children: [2] }, { id: 2, callFrame: { functionName: "work", url: "https://portal.example.com/app.js", lineNumber: 9 } }], startTime: 0, endTime: 5000, samples: [2, 2, 2], timeDeltas: [0, 1000, 1000] }));
+    const out = execFileSync(process.execPath, [cliPath, fixtureNetLog, "--lighthouse", tempLighthouse, "--cpuprofile", tempCpu, "-o", testOutEnriched], { encoding: "utf8" });
+    assert.match(out, /Lighthouse report read/);
+    assert.match(out, /CPU profile read/);
+    const content = readFileSync(testOutEnriched, "utf8");
+    assert.ok(content.includes('id="lighthouse"') && content.includes('id="cpuprofile"'));
+    assert.ok(content.includes("LIGHTHOUSE (a separate lab load") && content.includes("CPU PROFILE"));
+    assert.ok(content.includes("From Lighthouse (lab)"), "the waterfall's request details carry it");
+  });
+
+  it("explains --lighthouse and --cpuprofile problems instead of failing quietly", () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--lighthouse", "/no/such.json", "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /Lighthouse report file not found/);
+    writeFileSync(tempLighthouse, '{"hello":1}');
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--lighthouse", tempLighthouse, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like a Lighthouse report/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--cpuprofile", tempLighthouse, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like a CPU profile/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--diagram", "--lighthouse", tempLighthouse, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
   });
 
   it("shows how to collect the path when no helper file is given", () => {

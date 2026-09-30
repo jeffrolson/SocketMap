@@ -34,7 +34,9 @@ function tri(known, total) {
   return known >= total ? "recorded" : "partial";
 }
 
-function javascriptItem(profile) {
+function javascriptItem(profile, lighthouse = null, cpu = null) {
+  if (!profile && cpu) return item("javascript", "JavaScript execution and long tasks", "partial", `From the CPU profile: JavaScript self time by script and function over ${Math.round(cpu.durationMs)} ms. It is not lined up with the network, and long tasks and rendering are not in it.`, { short: `${cpu.functionCount} functions` });
+  if (!profile && lighthouse?.scripts.length) return item("javascript", "JavaScript execution and long tasks", "partial", `From Lighthouse: script execution time by script and ${lighthouse.longTasks.count} long task${lighthouse.longTasks.count === 1 ? "" : "s"}, from a separate lab load, not this capture.`, { short: `${lighthouse.scripts.length} scripts (lab)` });
   if (!profile) return never("javascript", "JavaScript execution and long tasks", "A NetLog records network events, not what the page's code was doing while it waited or ran.");
   const t = profile.mainThread;
   return item("javascript", "JavaScript execution and long tasks", t.taskCount ? "recorded" : "missing",
@@ -79,6 +81,8 @@ export function buildCoverage(model) {
   const enrichment = model?.enrichment || null;
   const profile = model?.profile || null;
   const helper = model?.path || null;
+  const lighthouse = model?.lighthouse?.source || null;
+  const cpu = model?.cpuProfile || null;
   const profileRows = profile ? profile.perRequest : null;
   const harRows = enrichment ? enrichment.perRequest : null;
   const cacheKnown = count(requests, r => typeof r.fromCache === "boolean" || (harRows ? harRows.has(r.id) : false));
@@ -110,7 +114,7 @@ export function buildCoverage(model) {
       title: "Page code",
       blurb: "What the page's own scripts and rendering were doing.",
       items: [
-        javascriptItem(profile),
+        javascriptItem(profile, lighthouse, cpu),
         enrichment || profile
           ? item("script-initiator", "Which script started a request", tri(initiatorKnown, total), total ? `From the ${[enrichment && "HAR", profile && "profile"].filter(Boolean).join(" and ")}: ${share(initiatorKnown, total, "requests")} name the script or HTML parser that asked for them. A NetLog records only the origin.` : "No requests to check.", { short: some(initiatorKnown, total, "have one") })
           : never("script-initiator", "Which script started a request", "A request records the origin that started it, not the script or line."),
@@ -118,7 +122,9 @@ export function buildCoverage(model) {
           ? item("rendering", "Rendering and page-experience timings", "partial", "From the profile: first paint, first and largest contentful paint, DOMContentLoaded, load and layout shift. Responsiveness (INP) needs interaction and is not in a load profile.")
           : enrichment && enrichment.milestones.length
             ? item("rendering", "Rendering and page-experience timings", "partial", "From the HAR: DOMContentLoaded and load times only. Paint, LCP, layout shift and INP are still not recorded.")
-            : never("rendering", "Rendering and page-experience timings", "Layout, paint, and measures like LCP, CLS, and INP are outside the network stack.")
+            : lighthouse && (lighthouse.metrics.lcp || lighthouse.metrics.fcp)
+              ? item("rendering", "Rendering and page-experience timings", "partial", "From Lighthouse: first and largest contentful paint, layout shift and blocking time from a separate lab load (simulated throttling by default), not from this capture. Responsiveness (INP) needs interaction and is not in a lab load.")
+              : never("rendering", "Rendering and page-experience timings", "Layout, paint, and measures like LCP, CLS, and INP are outside the network stack.")
       ]
     },
     {
@@ -208,7 +214,7 @@ export function buildCoverage(model) {
     if (shorts[entry.id]) entry.short = shorts[entry.id];
   }
   const comparison = buildComparison(stages);
-  comparison.loaded = ["netlog", ...(enrichment ? ["har"] : []), ...(profile ? ["profile"] : []), ...(helper?.routes.length ? ["route"] : [])];
+  comparison.loaded = ["netlog", ...(enrichment ? ["har"] : []), ...(profile || cpu ? ["profile"] : []), ...(lighthouse ? ["lighthouse"] : []), ...(helper?.routes.length ? ["route"] : [])];
   return { stages, summary, next: nextSteps(stages), comparison, har: enrichment ? { entries: enrichment.source.entryCount, matched: enrichment.alignment.matched, method: enrichment.alignment.method } : null, profile: profile ? { longTasks: profile.mainThread.longTaskCount, aligned: profile.alignment.aligned } : null };
 }
 

@@ -351,7 +351,7 @@ ${themePreferenceScript()}
         <strong>Drop a NetLog capture here</strong>
         <span>or click to choose the file (chrome-net-export-log.json)</span>
       </div>
-      <input type="file" id="file-input" accept=".json,.har,application/json" multiple hidden>
+      <input type="file" id="file-input" accept=".json,.har,.cpuprofile,application/json" multiple hidden>
       <p class="comparison-entry"><button type="button" id="compare-files">Compare two captures</button>Choose or drop two NetLog files. First file is A (baseline), second is B (comparison). You can swap them.</p>
       <div class="hero-actions">
         <button type="button" data-open-sample>${shellIcon("play", 14)}No capture yet? Try the sample</button>
@@ -479,6 +479,8 @@ ${themePreferenceScript()}
 <input type="file" id="har-input" accept=".har,.json,application/json" hidden>
 <input type="file" id="profile-input" accept=".json,.gz,application/json,application/gzip" hidden>
 <input type="file" id="path-input" accept=".json,application/json" hidden>
+<input type="file" id="lighthouse-input" accept=".json,application/json" hidden>
+<input type="file" id="cpu-input" accept=".cpuprofile,.json,application/json" hidden>
 <div id="load-feedback" class="load-feedback" hidden>
   <div id="progress" class="progress" hidden>
     <div class="progress-track"><div id="progress-bar"></div></div>
@@ -495,6 +497,8 @@ ${themePreferenceScript()}
     <button type="button" id="add-har" hidden>Add a HAR</button>
     <button type="button" id="add-profile" hidden>Add a profile</button>
     <button type="button" id="add-path" hidden>Add network path</button>
+    <button type="button" id="add-lighthouse" hidden>Add Lighthouse</button>
+    <button type="button" id="add-cpu" hidden>Add CPU profile</button>
     <button type="button" id="add-comparison">Compare with another capture</button>
     <button type="button" data-theme-toggle>Theme</button>
     <button type="button" id="open-another">Open another capture</button>

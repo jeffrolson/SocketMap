@@ -21,6 +21,8 @@ import { buildServerInsights } from "../server-insights.mjs";
 import { renderEnrichmentPanel, renderRequestSource, renderMilestones, enrichmentCss, typeClass } from "./enrichment.mjs";
 import { renderProfilePanel, renderMainThreadBand, renderProfileSource, profileCss } from "./profile.mjs";
 import { renderPathPanel, renderPathPrompt, pathCss } from "./path.mjs";
+import { renderLighthousePanel, renderLighthouseSource, lighthouseCss } from "./lighthouse.mjs";
+import { renderCpuProfilePanel, cpuProfileCss } from "./cpuprofile.mjs";
 import { hostsToMeasure } from "../path.mjs";
 import { renderPolicyView, policyScript, policyCss } from "./policy.mjs";
 import { buildPolicyEvidence } from "../policy/engine.mjs";
@@ -190,7 +192,7 @@ function renderHosts(hosts) {
     </section>`;
 }
 
-function renderRequestDetail(r, conn, serverInfo = null, harEntry = null, profileEntry = null) {
+function renderRequestDetail(r, conn, serverInfo = null, harEntry = null, profileEntry = null, lighthouseEntry = null) {
   const timing = SEGMENTS.map(k => `<tr><th>${esc(TIMING_LABELS[k])}</th><td>${esc(ms(r.timing[k]))}</td></tr>`).join("");
   const connRows = conn ? [
     ["Connection", `${conn.kind.toUpperCase()} ${r.reusedConnection ? "(reused)" : r.reusedConnection === false ? "(new)" : ""}`],
@@ -217,13 +219,14 @@ function renderRequestDetail(r, conn, serverInfo = null, harEntry = null, profil
       </div>
       ${renderRequestSource(harEntry)}
       ${renderProfileSource(profileEntry)}
+      ${renderLighthouseSource(lighthouseEntry)}
       ${renderServerDetail(serverInfo, r.timing.wait ?? null)}
       ${r.requestHeaders.length ? `<details class="more"><summary>Request headers</summary><pre>${esc(r.requestHeaders.join("\n"))}</pre></details>` : ""}
       ${r.responseHeaders.length ? `<details class="more"><summary>Response headers</summary><pre>${esc(r.responseHeaders.join("\n"))}</pre></details>` : ""}
     </div>`;
 }
 
-function renderWaterfall(analysis, connections, serverInsights, enrichment = null, profile = null) {
+function renderWaterfall(analysis, connections, serverInsights, enrichment = null, profile = null, lighthouse = null) {
   const { page, pageRequests } = analysis;
   const span = Math.max(1, page.observedSpanMs ?? page.loadMs ?? 1);
   const pct = (v) => `${Math.max(0, v / span * 100).toFixed(3)}%`;
@@ -244,7 +247,7 @@ function renderWaterfall(analysis, connections, serverInsights, enrichment = nul
           <span class="wf-track" title="${r.endRecorded === false ? "End not recorded. Bar extends only to the last observed capture event." : "Recorded request duration"}"><span class="wf-bar" style="left:${pct(r.start - page.startMs)};width:${pct(Math.max(r.observedDurationMs ?? r.durationMs ?? 0, span / 400))}">${segs}${renderServerMark(serverInsights.perRequest.get(r.id), r, SEGMENTS)}</span>${milestones.marks}</span>
           <span class="wf-time">${r.endRecorded === false ? "Unfinished" : esc(ms(r.durationMs))}</span>
         </summary>
-        ${renderRequestDetail(r, connections.get(r.connectionId), serverInsights.perRequest.get(r.id), enrichment?.perRequest.get(r.id) ?? null, profile?.perRequest.get(r.id) ?? null)}
+        ${renderRequestDetail(r, connections.get(r.connectionId), serverInsights.perRequest.get(r.id), enrichment?.perRequest.get(r.id) ?? null, profile?.perRequest.get(r.id) ?? null, lighthouse?.perRequest.get(r.id) ?? null)}
       </details>`;
   }).join("");
   return `
@@ -519,6 +522,8 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   const enrichment = model.enrichment || null;
   const profile = model.profile || null;
   const pathData = model.path || null;
+  const lighthouseData = model.lighthouse || null;
+  const cpuData = model.cpuProfile || null;
   const fromHar = model.source?.kind === "har";
   const harNote = (what) => `<section class="card"><p class="note">This report was built from a HAR. ${what} A HAR records what DevTools saw for each request; for browser-wide evidence, record a NetLog with chrome://net-export or edge://net-export.</p></section>`;
   const connections = new Map(model.connections.map(c => [c.id, c]));
@@ -552,6 +557,8 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   ${enrichmentCss()}
   ${profileCss()}
   ${pathCss()}
+  ${lighthouseCss()}
+  ${cpuProfileCss()}
   .ms-swatch { background: transparent; border-left: 1px dashed var(--secondary); height: 12px; width: 0; }
   .srv-swatch { background: var(--text); height: 3px; align-self: center; }
   .event-replay { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -843,11 +850,13 @@ ${themePreferenceScript()}
       ${renderServerInsights(serverInsights)}
       ${renderEnrichmentPanel(enrichment, analysis.pageRequests)}
       ${renderProfilePanel(profile, analysis.pageRequests)}
+      ${renderCpuProfilePanel(cpuData)}
+      ${renderLighthousePanel(lighthouseData)}
       ${pathData ? renderPathPanel(pathData) : renderPathPrompt(hostsToMeasure(analysis))}
       ${renderHosts(analysis.hosts)}
     </div>
     <div class="view" id="view-waterfall" data-view="waterfall">
-      ${renderWaterfall(analysis, connections, serverInsights, enrichment, profile)}
+      ${renderWaterfall(analysis, connections, serverInsights, enrichment, profile, lighthouseData)}
     </div>
     <div class="view" id="view-sequence" data-view="sequence">
       ${renderSequence(view, page, analysis)}

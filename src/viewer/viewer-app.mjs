@@ -4,10 +4,13 @@
  * the file is read locally and never sent anywhere.
  */
 
-import { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, looksLikeTrace, looksLikePath } from "./viewer-core.mjs";
+import { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, looksLikeTrace, looksLikePath, looksLikeLighthouse, looksLikeCpuProfile } from "./viewer-core.mjs";
 import { createTraceReader } from "../parsers/trace-stream.mjs";
 import { attachProfile } from "../profile.mjs";
 import { readPathFile, attachPath } from "../path.mjs";
+import { readLighthouse, attachLighthouse } from "../lighthouse.mjs";
+import { readCpuProfile, attachCpuProfile } from "../cpuprofile.mjs";
+import { buildSampleLighthouse } from "../demo/sample-lighthouse.mjs";
 import { buildSamplePath } from "../demo/sample-path.mjs";
 import { buildSampleTrace } from "../demo/sample-trace.mjs";
 import { createHarReader } from "../parsers/har-stream.mjs";
@@ -22,6 +25,7 @@ const SAMPLE_NAME = "sample-capture.json (synthetic example)";
 const SAMPLE_HAR_NAME = "sample-network.har (synthetic example)";
 const SAMPLE_PROFILE_NAME = "sample-profile.json (synthetic example)";
 const SAMPLE_PATH_NAME = "sample-path.json (synthetic example)";
+const SAMPLE_LIGHTHOUSE_NAME = "sample-lighthouse.json (synthetic example)";
 
 const YIELD_EVERY_BYTES = 8 * 1024 * 1024;
 
@@ -100,7 +104,7 @@ async function isGzip(file) {
 async function kindOf(file) {
   if (await isGzip(file)) return "trace";
   const head = await file.slice(0, 4096).text();
-  return looksLikePath(head) ? "path" : looksLikeHar(head) ? "har" : looksLikeTrace(head) ? "trace" : "netlog";
+  return looksLikePath(head) ? "path" : looksLikeLighthouse(head) ? "lighthouse" : looksLikeCpuProfile(head) ? "cpu" : looksLikeHar(head) ? "har" : looksLikeTrace(head) ? "trace" : "netlog";
 }
 
 async function readTrace(file, onProgress) {
@@ -142,6 +146,8 @@ function init() {
   const harInput = $("har-input");
   const profileInput = $("profile-input");
   const pathInput = $("path-input");
+  const lighthouseInput = $("lighthouse-input");
+  const cpuInput = $("cpu-input");
   const progress = $("progress");
   const bar = $("progress-bar");
   const progressText = $("progress-text");
@@ -226,12 +232,16 @@ function init() {
     $("add-comparison").textContent = b ? "Replace B capture" : "Compare with another capture";
     $("save-report").textContent = nextView === "comparison" ? "Save comparison" : "Save report";
     for (const name of ["comparison", "a", "b"]) $("view-" + name).setAttribute("aria-pressed", String(view === name));
-    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}${a.profile ? ` + profile ${a.profile.name}` : ""}${a.path ? ` + path ${a.path.name}` : ""}`;
+    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}${a.profile ? ` + profile ${a.profile.name}` : ""}${a.path ? ` + path ${a.path.name}` : ""}${a.lighthouse ? ` + Lighthouse ${a.lighthouse.name}` : ""}${a.cpu ? ` + CPU profile ${a.cpu.name}` : ""}`;
     $("add-har").hidden = nextView === "comparison" || nextView === "b" || a.model.source?.kind === "har";
     $("add-har").textContent = a.har ? "Replace HAR" : "Add a HAR";
     $("add-profile").hidden = $("add-har").hidden;
     $("add-path").hidden = $("add-har").hidden;
     $("add-path").textContent = a.path ? "Replace network path" : "Add network path";
+    $("add-lighthouse").hidden = $("add-har").hidden || false;
+    $("add-lighthouse").textContent = a.lighthouse ? "Replace Lighthouse" : "Add Lighthouse";
+    $("add-cpu").hidden = $("add-har").hidden || false;
+    $("add-cpu").textContent = a.cpu ? "Replace CPU profile" : "Add CPU profile";
     $("add-profile").textContent = a.profile ? "Replace profile" : "Add a profile";
     fileName.title = fileName.textContent;
     const pages = report.comparison ? [report.comparison.a.page, report.comparison.b.page] : [report.analysis.page];
@@ -246,7 +256,7 @@ function init() {
   function setLoading(value) {
     loading = value;
     document.body.setAttribute("aria-busy", String(value));
-    for (const element of [input, compareInput, secondInput, harInput, profileInput, pathInput]) element.disabled = value;
+    for (const element of [input, compareInput, secondInput, harInput, profileInput, pathInput, lighthouseInput, cpuInput]) element.disabled = value;
     drop.setAttribute("aria-disabled", String(value));
     drop.classList.remove("is-over");
     for (const id of ["compare-files", "add-comparison", "add-har", "add-profile", "open-another", "save-report", "swap-captures", "page-select", "page-select-b", "view-comparison", "view-a", "view-b"]) $(id).disabled = value;
@@ -334,24 +344,52 @@ function init() {
     show(next, view === "comparison" ? "a" : view);
   }
 
+  // Lighthouse and CPU profile files are small JSON summaries read whole here, checked against an allowlist, never uploaded.
+  async function readJsonFile(file, label, limitMb) {
+    if (file.size > limitMb * 1048576) throw new Error(`That file is too large to be a ${label} (over ${limitMb} MB).`);
+    try { return JSON.parse(await file.text()); } catch { return null; }
+  }
+
+  async function addLighthouse(file) {
+    if (!captures.length) throw new Error("A Lighthouse report adds detail to a NetLog or HAR. Open the capture first, then add the report.");
+    const name = redactCapturedText(file.name);
+    const read = readLighthouse(await readJsonFile(file, "Lighthouse report", 60));
+    const model = captures[0].model;
+    delete model.lighthouse;
+    if (!read.recognized || !attachLighthouse(model, read.data)) throw new Error("That file does not look like a Lighthouse JSON report. Run Lighthouse with --output=json, or in DevTools choose Save as JSON.");
+    show(captures.map((capture, i) => i === 0 ? { ...capture, lighthouse: { name, bytes: file.size } } : capture), view === "comparison" ? "a" : view);
+  }
+
+  async function addCpuProfile(file) {
+    if (!captures.length) throw new Error("A CPU profile adds detail to a NetLog or HAR. Open the capture first, then add the profile.");
+    const name = redactCapturedText(file.name);
+    const read = readCpuProfile(await readJsonFile(file, "CPU profile", 150));
+    const model = captures[0].model;
+    delete model.cpuProfile;
+    if (!read.recognized || !attachCpuProfile(model, read.data)) throw new Error("That file does not look like a V8 CPU profile (.cpuprofile). In DevTools, use the JavaScript Profiler or the Performance panel's profile export; from Node use --cpu-prof.");
+    show(captures.map((capture, i) => i === 0 ? { ...capture, cpu: { name, bytes: file.size } } : capture), view === "comparison" ? "a" : view);
+  }
+
   async function loadFiles(files, { append = false, requireTwo = false } = {}) {
     if (loading || !files.length) return;
     const kinds = await Promise.all(files.map(kindOf));
     const hars = files.filter((_, i) => kinds[i] === "har");
     const traces = files.filter((_, i) => kinds[i] === "trace");
     const paths = files.filter((_, i) => kinds[i] === "path");
-    if (hars.length || traces.length || paths.length) {
-      if (hars.length > 1 || traces.length > 1 || paths.length > 1) { showError("Add one HAR, one profile and one network path file at a time. Choose the files that were recorded with this NetLog."); return; }
+    const lighthouses = files.filter((_, i) => kinds[i] === "lighthouse");
+    const cpus = files.filter((_, i) => kinds[i] === "cpu");
+    if (hars.length || traces.length || paths.length || lighthouses.length || cpus.length) {
+      if ([hars, traces, paths, lighthouses, cpus].some(list => list.length > 1)) { showError("Add one file of each kind at a time (one HAR, one profile, one network path file, one Lighthouse report, one CPU profile), all recorded with the same capture."); return; }
       const logs = files.filter((_, i) => kinds[i] === "netlog");
       if (logs.length) await loadFiles(logs, { append: false, requireTwo });
       let harIsMain = false;
       if (!captures.length && !logs.length && hars.length) { await openHarCapture(hars[0]); harIsMain = captures.length > 0; }
       if (!captures.length) {
-        if (!logs.length && !hars.length) showError("A profile or a network path file adds detail to a NetLog or a HAR. Open the capture first (or drop the files together), then add them.");
+        if (!logs.length && !hars.length) showError("Extra files (a profile, network path, Lighthouse report or CPU profile) add detail to a NetLog or a HAR. Open the capture first (or drop the files together), then add them.");
         return;
       }
       if (error.hidden === false) return;
-      if (harIsMain && !traces.length && !paths.length) return;
+      if (harIsMain && !traces.length && !paths.length && !lighthouses.length && !cpus.length) return;
       setLoading(true);
       error.hidden = true;
       $("load-feedback").hidden = false;
@@ -360,6 +398,8 @@ function init() {
         if (hars.length && !harIsMain) await addHar(hars[0]);
         if (traces.length) await addProfile(traces[0]);
         if (paths.length) await addPath(paths[0]);
+        if (lighthouses.length) await addLighthouse(lighthouses[0]);
+        if (cpus.length) await addCpuProfile(cpus[0]);
         $("load-feedback").hidden = true;
       } catch (err) {
         showError(err.message || String(err));
@@ -417,7 +457,8 @@ function init() {
     traceReader.write(JSON.stringify(buildSampleTrace(model)));
     const profileAttached = attachProfile(model, traceReader.finish());
     const pathAttached = attachPath(model, readPathFile(buildSamplePath(model)).data);
-    if (harAttached || profileAttached || pathAttached) show(captures.map((capture, i) => i === 0 ? { ...capture, ...(harAttached ? { har: { name: SAMPLE_HAR_NAME, bytes: 0 } } : {}), ...(profileAttached ? { profile: { name: SAMPLE_PROFILE_NAME, bytes: 0 } } : {}), ...(pathAttached ? { path: { name: SAMPLE_PATH_NAME, bytes: 0 } } : {}), site: selectPageSite(model) } : capture));
+    const lighthouseAttached = attachLighthouse(model, readLighthouse(buildSampleLighthouse(model)).data);
+    if (harAttached || profileAttached || pathAttached || lighthouseAttached) show(captures.map((capture, i) => i === 0 ? { ...capture, ...(harAttached ? { har: { name: SAMPLE_HAR_NAME, bytes: 0 } } : {}), ...(profileAttached ? { profile: { name: SAMPLE_PROFILE_NAME, bytes: 0 } } : {}), ...(pathAttached ? { path: { name: SAMPLE_PATH_NAME, bytes: 0 } } : {}), ...(lighthouseAttached ? { lighthouse: { name: SAMPLE_LIGHTHOUSE_NAME, bytes: 0 } } : {}), site: selectPageSite(model) } : capture));
   }
 
   function selectedFiles(element, options) {
@@ -458,6 +499,20 @@ function init() {
     }
     loadFiles(files);
   });
+  for (const [input2, check, message, kind] of [
+    [lighthouseInput, looksLikeLighthouse, "That file does not look like a Lighthouse JSON report. Run Lighthouse with --output=json, or in DevTools choose Save as JSON.", "lighthouse"],
+    [cpuInput, looksLikeCpuProfile, "That file does not look like a V8 CPU profile (.cpuprofile). In DevTools, use the JavaScript Profiler or the Performance panel's profile export; from Node use --cpu-prof.", "cpu"]
+  ]) {
+    input2.addEventListener("change", async () => {
+      const files = Array.from(input2.files).slice(0, 1);
+      input2.value = "";
+      if (!files.length) return;
+      if (!check(await files[0].slice(0, 4096).text())) { showError(message); return; }
+      loadFiles(files);
+    });
+  }
+  $("add-lighthouse").addEventListener("click", () => lighthouseInput.click());
+  $("add-cpu").addEventListener("click", () => cpuInput.click());
   $("add-har").addEventListener("click", () => harInput.click());
   $("add-path").addEventListener("click", () => pathInput.click());
   $("add-profile").addEventListener("click", () => profileInput.click());
@@ -558,5 +613,5 @@ function init() {
   });
 }
 
-globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar, looksLikeTrace, createTraceReader, attachProfile, looksLikePath, readPathFile, attachPath, buildCaptureFromHar };
+globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar, looksLikeTrace, createTraceReader, attachProfile, looksLikePath, readPathFile, attachPath, buildCaptureFromHar, looksLikeLighthouse, readLighthouse, attachLighthouse, looksLikeCpuProfile, readCpuProfile, attachCpuProfile };
 if (typeof document !== "undefined") init();

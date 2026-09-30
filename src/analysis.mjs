@@ -15,6 +15,8 @@ import { buildServerInsights, inspectResponse, serverInsightsText } from "./serv
 import { harEvidenceText } from "./enrichment.mjs";
 import { profileEvidenceText } from "./profile.mjs";
 import { pathEvidenceText } from "./path.mjs";
+import { lighthouseEvidenceText } from "./lighthouse.mjs";
+import { cpuProfileEvidenceText } from "./cpuprofile.mjs";
 
 const RANK = { best: 0, better: 1, good: 2, poor: 3 };
 const TIMING_KEYS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
@@ -514,6 +516,14 @@ export function buildAiSummary(model, analysis, { source } = {}) {
   }
   if (model.path) {
     lines.push(pathEvidenceText(model.path));
+    lines.push("");
+  }
+  if (model.lighthouse) {
+    lines.push(lighthouseEvidenceText(model.lighthouse));
+    lines.push("");
+  }
+  if (model.cpuProfile) {
+    lines.push(cpuProfileEvidenceText(model.cpuProfile));
     lines.push("");
   }
   lines.push(coverageText(buildCoverage(model)));
