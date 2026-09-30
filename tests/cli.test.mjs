@@ -43,7 +43,7 @@ describe("CLI Integration Tests", () => {
 
   it("should display version with --version", () => {
     const out = execFileSync(process.execPath, [cliPath, "--version"], { encoding: "utf8" });
-    assert.ok(out.includes("SocketMap v0.13.0"));
+    assert.ok(out.includes("SocketMap v0.14.0"));
   });
 
   it("should generate sample diagram via --sample -o", () => {

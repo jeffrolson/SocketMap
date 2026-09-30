@@ -40,10 +40,7 @@ Planned but not scheduled.
 - Performance profile follow-ups: alignment is validated on one real same-session pair
   (macOS Chrome, 34 of 37 requests matched); still to try a Windows and an Edge pair and a
   trace recorded in a different run from the NetLog; CPU profile (`.cpuprofile`) and Lighthouse JSON as further optional files (added 2026-09-29)
-- Phase 4: capture helper script (Windows PowerShell and macOS shell) that records
-  machine name, public IP and a TCP traceroute to the slowest hosts, plus adapter, DNS,
-  proxy and PAC facts, saved as a small file the report can load. Fills the "Network path"
-  rows
+- Network path helper follow-ups: run on real Windows machines and on Linux desktops (CI covers the runners, not real Wi-Fi or corporate proxies); TCP-based route probes; a 'run it for me' one-liner; per-hop loss with several probes (added 2026-09-30)
 
 ## Parking lot
 Ideas, deferred features, nice-to-haves. No commitment.
@@ -64,11 +61,11 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-30: Network path helper: Mac and Linux shell script, Windows PowerShell script, viewer and CLI support, Overview panel, Coverage rows (0.14.0)
 - 2026-09-30: Clock-based profile placement, redaction audit (found and fixed a leaked API key shape), real-browser smoke test, CI on three operating systems, smaller Diagnostics (0.13.0)
 - 2026-09-29: Policy tab reads Chrome 134's policyGroups exports (0.12.1)
 - 2026-09-29: Profile alignment validated on a real same-session NetLog and trace pair; profile now finds the page when blank or internal tabs navigate after it (0.11.1)
 - 2026-09-29: Optional Performance profile: what the page's code was doing (long tasks, scripts by main-thread time, paint milestones, waterfall main-thread band), aligned to the NetLog by shared requests (0.11.0)
-- 2026-09-29: Optional HAR alongside the NetLog: initiators, resource types, cache and service worker answers, load milestones; redaction by parameter name pattern (0.10.0)
 - 2026-09-26: Design system from DESIGN.md, company theming, tabbed report, filters, HTML sequence view with docked inspector
 - 2026-09-26: Drag-and-drop viewer that builds the report in the browser
 - 2026-09-26: Truthful NetLog troubleshooting report (streaming parser, ratings, findings, plain-language explanations)

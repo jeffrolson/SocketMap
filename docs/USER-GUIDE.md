@@ -42,6 +42,14 @@ Drop it with the NetLog, or click **Add a HAR** once the report opens. From the 
 
 Drop it with the NetLog, or click **Add a profile** once the report opens. From the command line, add `--profile trace.json.gz`. Record it during the same page load as the NetLog: SocketMap lines the two up from the requests both recorded, so at least one request must appear in both. SocketMap keeps only the page's main thread and never keeps screenshots or source text. It is never uploaded.
 
+**Optional: record the path from this computer.** A browser cannot see its own Wi-Fi signal, the DNS servers and proxy settings the computer uses, or the route to the server. A small helper script records them, and also times each host with curl so you can compare the browser's numbers with a direct connection.
+
+1. Open your report. The Overview shows a card with the exact command for this capture, listing its slowest hosts, and links to save the two scripts. (Or take them from the release page.)
+2. On the computer that made the capture, as close in time as you can, run it: `./socketmap-path.sh host1 host2` on a Mac or Linux, or `.\socketmap-path.ps1 host1 host2` in Windows PowerShell. It takes up to a minute (the route trace is the slow part), needs no admin rights, changes nothing, and writes `socketmap-path.json`.
+3. Click **Add network path** and choose that file, or drop it with the NetLog. From the command line, add `--path socketmap-path.json`.
+
+The script makes two kinds of request and nothing else: an optional public-address lookup (`api.ipify.org`, turned off with `--no-public-ip` or `-NoPublicIp`) and a plain `GET /` to each host you list. The file records the computer's name, its addresses, the Wi-Fi network name when the operating system provides it, and the public address, so read it before sharing. It is a snapshot from when the script ran, so the report shows how far apart the two were and says when the network may have changed in between. On Windows the Wi-Fi signal is converted from the percentage Windows reports and is an estimate.
+
 **Capture twice when you can.** Repeat the same page or action from two places (office and home, VPN on and off, your machine and a colleague's). The comparison shows what changed; a controlled follow-up test helps establish the cause.
 
 ## 2. Open the report
@@ -106,6 +114,10 @@ Only shown when you add a Performance profile. It reports how busy the page's ma
 On the waterfall, the **Main thread (profile)** row shows how busy the page was across the timeline, with long tasks outlined, and dashed lines mark first and largest contentful paint, DOMContentLoaded and load. This is what turns an unexplained quiet stretch in the waterfall into "the page was working": if the network is idle while the main thread is busy, the wait is on the computer.
 
 Read it as evidence, not proof: a script started by another script can be attributed to the wrong file, and responsiveness (INP) needs a real interaction and is not in a load profile. The finding **The page's own code kept the main thread busy** is worded as consistent with, not a diagnosis. If no request appears in both files the profile is shown but not placed on the timeline, and the panel says so.
+
+### The path from this computer (with the network path helper)
+
+Only shown when you add the helper's file; without it the Overview shows how to collect it. It has four tiles (this computer's link and Wi-Fi signal, its DNS servers marked private or public, its proxy and PAC settings, its public address), "what stands out" observations with their limits stated (a weak signal, a proxy, a delay jump in the route, a browser much slower than curl on the same computer), a table putting the browser's DNS, connect, TLS and server-wait numbers next to curl's for each host, and the route to each host with the delay at each hop. Curl does not use the system proxy, so a gap between the two points at the browser's own path, not at a cause. Routers often ignore route probes, so a silent hop does not mean loss.
 
 ### What the page is made of (with a HAR)
 

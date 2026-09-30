@@ -162,7 +162,7 @@ Fonts are used only if installed on the viewer's machine; nothing is downloaded.
 
 ## What SocketMap cannot see
 
-A NetLog records network activity only. It cannot show time spent running the page's own code (use a Chrome DevTools Performance profile), security software acting inside the browser, packet-level problems such as retransmissions (use Wireshark), or what servers do internally. The report says so rather than guessing, and its **Coverage** tab shows what was and was not recorded, with suggestions for what to collect next.
+A NetLog records network activity only. It cannot show time spent running the page's own code (use a Chrome DevTools Performance profile), security software acting inside the browser, packet-level problems such as retransmissions (use Wireshark), or what servers do internally. A small helper script (`tools/socketmap-path.sh` for Mac and Linux, `tools/socketmap-path.ps1` for Windows) records the computer's Wi-Fi signal, DNS servers, proxy settings and the route to each host, and times each host directly with curl, as an optional file for the report. The report says so rather than guessing, and its **Coverage** tab shows what was and was not recorded, with suggestions for what to collect next.
 
 ---
 
@@ -186,6 +186,8 @@ node bin/traceviz.mjs <capture> [options]
 | `npm run build:viewer` | Builds `socketmap-viewer.html` (add `-- <file> --theme <DESIGN.md>` to customize) |
 | `npm run demo` | Builds `demo-report.html` from the synthetic sample capture |
 | `npm run verify` | Runs every test and repository check |
+| `npm run generate:tools` | Recompiles the helper scripts into the report after editing `tools/` |
+| `npm run check:helper -- <file>` | Checks a file written by the network path helper |
 | `npm run test:browser` | Real-browser smoke test of the built viewer (needs Chrome or Edge) |
 | `npm run audit:redaction -- <captures>` | Checks that no secret in your real capture files reaches the report |
 | `npm run generate:theme` | Recompiles the theme after editing `DESIGN.md` |

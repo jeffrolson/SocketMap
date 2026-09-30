@@ -3,6 +3,18 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-09-30
+### Added
+- **Network path helper.** Two small scripts, `tools/socketmap-path.sh` (Mac and Linux) and `tools/socketmap-path.ps1` (Windows PowerShell), record what a browser capture cannot see: this computer's link and Wi-Fi signal, its DNS servers, proxy and PAC settings, its public address, curl timing (DNS, connect, TLS, first byte) for each host you list, and the route to each host. They write one small JSON file. They only read settings, need no admin rights, and make two kinds of request: an optional public-address lookup and a plain `GET /` to each listed host.
+- **Add it to the report.** Drop the file with the NetLog, click **Add network path** in the viewer, or use `--path` on the command line. The Overview gains "The path from this computer": link and signal, DNS servers marked private or public, proxy and PAC, public address, observations with their limits stated, the browser's timings next to curl's for each host, and the route with the delay at each hop. Without the file, the Overview shows the exact command for this capture (its slowest hosts) and offers both scripts as offline downloads.
+- The helper's file is a snapshot from when it ran, so the report shows how far apart it and the capture were and warns when it is more than an hour. Curl does not use the system proxy, so a gap between it and the browser is worded as pointing at the browser's own path, not as a cause. Route probes are one per hop, and silent hops are common, so route findings are hints.
+- Coverage: "Per-hop delay", "Wi-Fi, network card and operating system quality" and a new "Timing measured outside the browser (curl)" move from "never in a NetLog" to partial. The AI summary gains a labeled section. The viewer's sample includes a made-up helper file.
+- The reader is an allowlist: only known fields survive, everything is bounded, hostnames and addresses are validated, and credentials are removed from proxy and PAC addresses. `npm run check:helper -- <file>` checks a file with the same reader.
+- CI runs the Mac and Linux script on macOS and Linux runners and the PowerShell script on a Windows runner, and fails if the output does not read back. `npm run generate:tools` embeds the scripts in the report; `verify` fails if that copy is stale.
+
+### Notes
+- Verified on a real Mac (Wi-Fi, curl timings and routes for two hosts). The Windows script's first real run is in CI; it has not been tried on a physical Windows machine with Wi-Fi or a corporate proxy. On Windows the Wi-Fi signal is converted from the percentage Windows reports, so it is an estimate.
+
 ## [0.13.0] - 2026-09-30
 ### Added
 - **Profile placement by the shared clock.** When a Performance profile and a NetLog share no request, the profile is now placed on the timeline anyway if it was recorded in the same browser session: its navigation must fall inside the capture's time span and its site must appear in the capture. Both files use Chrome's monotonic clock, which a real pair confirmed to within 5 ms. Per-request script details still need matching requests. A profile from a different run is refused, as before.
