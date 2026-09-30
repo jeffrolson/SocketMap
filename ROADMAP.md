@@ -36,7 +36,7 @@ Planned but not scheduled.
 - Performance profile follow-ups: alignment is validated on real same-session pairs (macOS Chrome
   and Edge, Windows Chrome and Edge, Linux Chrome; 34 of 37 requests matched each); still to try a trace recorded in a
   different run from the NetLog (added 2026-09-29)
-- Network path helper follow-ups: run on real Windows machines with Wi-Fi and a corporate proxy, and on Linux desktops (CI runs the scripts on all three runner OSes, which have no Wi-Fi or proxy); TCP-based route probes; a 'run it for me' one-liner; per-hop loss with several probes (added 2026-09-30)
+- Network path helper follow-ups: run on real Windows machines with Wi-Fi and a corporate proxy, and on Linux desktops (validated on Windows and Linux runners, including registry proxy, PAC and auto-detect settings; the runners have no Wi-Fi, and their route probes are dropped, so Wi-Fi signal and answered route hops are unobserved on real Windows); TCP-based route probes; a 'run it for me' one-liner; per-hop loss with several probes (added 2026-09-30)
 
 ## Parking lot
 Ideas, deferred features, nice-to-haves. No commitment.
@@ -56,6 +56,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-30: Helper 1.1: proxy credential leak, two-host bug and failed-probe reporting found and fixed on real runners (0.17.3)
 - 2026-09-30: Windows, Linux and managed-policy data recorded on disposable CI runners and validated; conflict notes name what they override (0.17.2)
 - 2026-09-30: Edge and A/B comparison validated on real recordings; comparison no longer colours changes under 10 ms (0.17.1)
 - 2026-09-30: Waterfall timeline with problem markers and a window filter, sequence PNG and SVG export, one-row viewer toolbar (0.17.0)

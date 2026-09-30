@@ -17,7 +17,7 @@
 # lookup and a plain GET / to each host you list). Nothing is uploaded; read the file before sharing.
 # The Wi-Fi network name is recorded when the operating system provides it.
 
-VERSION="1.0"
+VERSION="1.1"
 OUT="socketmap-path.json"
 PUBLIC_IP=1
 PROBE=1

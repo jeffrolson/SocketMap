@@ -41,7 +41,7 @@ param(
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
-$Version = '1.0'
+$Version = '1.1'
 $notes = New-Object System.Collections.ArrayList
 function Add-Note([string]$text) { [void]$notes.Add($text) }
 

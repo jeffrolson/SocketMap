@@ -3,6 +3,18 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.3] - 2026-09-30
+### Fixed
+- **Network path helper 1.1** (found by running the scripts on real Windows and Linux CI runners):
+  - **A proxy credential could be left in the file.** The scripts masked `scheme://user:pass@host` but not the bare `user:pass@host` form Windows uses in proxy settings, so a Windows proxy setting with a password wrote it into `socketmap-path.json`. Both scripts now mask both forms, and the viewer's reader masks both forms whatever the file says. If you shared a helper file from 1.0 on a computer with a credentialed proxy, treat that credential as exposed.
+  - **With two or more hosts, the PowerShell script did nothing useful** after a parameter was added in development; only `-Hosts` is positional now, and CI measures two hosts on every operating system.
+  - **A failed curl probe** now records a clear reason ("curl exit code 28", "Could not resolve proxy") and no timings, instead of raw curl output.
+  - The report no longer says curl never uses a proxy: on Mac and Linux curl honors proxy environment variables, so the file records whether it did (`probeUsesProxy`) and the panel says so.
+- The PowerShell route parser is now tested in CI on Windows against sample `tracert` lines, since the runners drop route probes and no hop answers there.
+
+### Validated
+- On a real Windows runner, the helper read genuine registry proxy settings: web and secure proxy, the PAC address, the bypass list and the auto-detect flag. Chrome's export of a cloud-only policy set at machine level shows `Ignored because the policy is not set by a cloud source.`, which the Policy tab reports.
+
 ## [0.17.2] - 2026-09-30
 ### Validated
 - **Real Windows and Linux recordings.** A manual workflow (`record-real-data`) records genuine data on disposable GitHub runners, so nothing touches a personal machine: NetLog and Performance trace pairs from real Windows Chrome, Windows Edge and Linux Chrome. Each aligned by shared requests (34 of 37 matched, 32 to 33 within 50 ms) and agrees with the shared browser clock to within 1.2 ms (clock domains `WIN_QPC` and `LINUX_CLOCK_MONOTONIC`), so the shared-clock assumption holds on Windows and Linux, not only on macOS. Profile alignment is now confirmed on macOS Chrome, macOS Edge, Windows Chrome, Windows Edge and Linux Chrome.
