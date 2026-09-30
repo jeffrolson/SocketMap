@@ -26,6 +26,8 @@ SocketMap reads a **NetLog**: Chrome's and Edge's own detailed record of network
 5. In another tab, load the page, or perform the action you want to understand (open the document, sign in, click the button).
 6. Wait until the page finishes, then go back to the net-export tab and click **Stop Logging**.
 
+**A HAR on its own works too.** If all you have is a HAR (DevTools, Network tab, Export HAR (sanitized)), drop it in the viewer or run `node bin/traceviz.mjs file.har`. You get the same report built from what the HAR recorded: the waterfall with each request's queue, DNS, connect, TLS, wait and download time, hosts, findings, server timing from response headers, Coverage and the AI summary. A HAR cannot show proxy decisions, certificates, browser settings or browser-wide diagnostics; those show as not recorded, and the Diagnostics and Events tabs are hidden. A HAR's connect time includes TLS, so SocketMap separates them. You can still add a Performance profile or the network path file to it.
+
 **Optional: record a HAR at the same time.** A HAR adds what a NetLog cannot show: which script or the HTML parser asked for each request, each request's type (script, stylesheet, image, font), and which answers came from the cache or a service worker.
 
 1. Before you load the page, open DevTools (F12) and choose the **Network** tab.
@@ -289,7 +291,7 @@ The report's **Learn** tab links to all of these.
 
 | Problem | Fix |
 |---|---|
-| The viewer says "This is a HAR file" | The viewer reads NetLog captures from net-export. HAR files work with the command line (`node bin/traceviz.mjs file.har`) and produce the older diagram view. |
+| A HAR report has empty or "not recorded" fields | A HAR does not record proxy decisions, certificates, TLS versions, browser settings or browser diagnostics. Those are shown as not recorded, and Diagnostics and Events are hidden. Record a NetLog for them. |
 | The viewer says the file "does not look like a NetLog capture" | Make sure you saved the file from `chrome://net-export` or `edge://net-export`, not a DevTools export. |
 | Double-clicking the viewer opens the wrong program | Right-click it and choose **Open with > Microsoft Edge** or **Google Chrome**. |
 | The report analyzes the wrong site | Pick the site in the viewer's **Page** menu, or use `--page` on the command line. |

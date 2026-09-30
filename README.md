@@ -192,7 +192,7 @@ node bin/traceviz.mjs <capture> [options]
 | `npm run audit:redaction -- <captures>` | Checks that no secret in your real capture files reaches the report |
 | `npm run generate:theme` | Recompiles the theme after editing `DESIGN.md` |
 
-HAR files and generic JSON traces produce an older diagram view instead of the report; see [docs/HAR-DIAGRAM.md](docs/HAR-DIAGRAM.md).
+A HAR on its own opens in the same report (unrecorded fields are shown as not recorded). Generic JSON traces, and a HAR with `--diagram`, produce an older diagram view; see [docs/HAR-DIAGRAM.md](docs/HAR-DIAGRAM.md).
 
 ## For developers
 

@@ -27,7 +27,6 @@ Queued, priority-ordered.
 
 - Merge the viewer's toolbar into the report header
 - From the design mockup: timeline slider with problem markers; export the sequence as an image
-- Bring the HAR diagram up to the "only real values" rule, or route HAR files into the report
 
 ## Later (this quarter)
 Planned but not scheduled.
@@ -61,6 +60,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-30: A HAR on its own opens in the full report (viewer and CLI); the older diagram remains for generic JSON and --diagram (0.15.0)
 - 2026-09-30: Network path helper: Mac and Linux shell script, Windows PowerShell script, viewer and CLI support, Overview panel, Coverage rows (0.14.0)
 - 2026-09-30: Clock-based profile placement, redaction audit (found and fixed a leaked API key shape), real-browser smoke test, CI on three operating systems, smaller Diagnostics (0.13.0)
 - 2026-09-29: Policy tab reads Chrome 134's policyGroups exports (0.12.1)

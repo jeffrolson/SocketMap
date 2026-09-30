@@ -39,6 +39,7 @@ NetLog path (troubleshooting report)          HAR / JSON path (diagram)
 | `src/renderer/path.mjs` | Overview panel for the path data, and the card that shows the command and offers the scripts as offline downloads | Node.js or browser |
 | `src/renderer/helper-scripts.generated.mjs` | Text of tools/*.sh and *.ps1 (`npm run generate:tools`; `verify` checks it is current) | Node.js or browser |
 | `tools/socketmap-path.sh`, `tools/socketmap-path.ps1` | The helper scripts: read link, DNS, proxy and PAC, public address, time hosts with curl, trace routes; write one JSON file | Mac and Linux shell, Windows PowerShell |
+| `src/har-capture.mjs` | Builds a capture model from a HAR alone so it opens in the same report: unrecorded fields are null, TLS is split out of connect, entries with no page are background | Node.js or browser |
 | `src/parsers/har-stream.mjs` | Streaming HAR tokenizer and per-entry summary: whitelists fields, drops bodies, headers, cookies and titles, redacts URLs | Node.js or browser |
 | `src/enrichment.mjs` | Joins a summarized HAR to the capture model: nearest-start pairing, alignment quality, resource types, requesters, cache answers, load milestones | Node.js or browser |
 | `src/renderer/enrichment.mjs` | HAR Overview panel, per-request block, waterfall type chips and milestone lines | Node.js or browser |
@@ -124,6 +125,8 @@ HAR or generic JSON, end to end:
 
 - The HAR is an optional enrichment, never a second source of truth. `attachHar` sets `model.enrichment`; every view reads it from there, and absent data stays absent. Requests join on method plus redacted URL, pairing repeated URLs by nearest start on the wall clock (NetLog `captureStartedAt` plus request start against the HAR `startedDateTime`); a HAR entry with no partner stays unmatched and is explained (redirect step, cache, service worker). URLs are kept whole for matching because login URLs are long.
 
+- A HAR on its own is a first-class input: `buildCaptureFromHar` gives the report the same model a NetLog does. A HAR's `connect` includes `ssl`, so TLS is subtracted from connect; `blocked` is kept as queue time; a null (`-1` in the file) means not applicable or not recorded and stays null rather than becoming zero. Entries with no page are background when the HAR names its pages. Response headers are kept (credentials masked) only in this mode, feeding server insights; request headers, bodies and cookies are never read. The report hides Diagnostics and Events and says why.
+
 - The network path helper's file is a snapshot of the computer, not of the capture. `collectedAt` against the capture's start gives the gap, shown in the panel and worded into the AI text. Curl runs without the system proxy, so browser-versus-curl gaps are worded as pointing at the browser's path, never as a cause. Route probes are one per hop (UDP on Mac and Linux, ICMP on Windows) and silent hops are common, so route findings are hints. The scripts read settings and make only the requests their header states; a test fails if a script gains a command that changes settings or an unexpected URL. Windows Wi-Fi signal is estimated from the percentage Windows reports. The Windows script is run by CI on a Windows runner, the Mac script on macOS and Linux runners.
 
 - A policy export from a managed browser adds per-policy flags (`ignored`, `deprecated`, `future`, `info`, `restartRequired`, `conflicts`, `superseded`) on top of `value`, `scope`, `level` and `source`. Their names come from Chromium's exporter; a real managed export (Chrome 134) confirmed `level`, `scope`, `source`, `value` and `error`. The policy list sits under `policyValues` in newer Chrome and `policyGroups` in Chrome 134 and earlier; the reader accepts both. The engine reports them as "Browser reported" statements and never judges them. Edge's own keys are inferred: same exporter, product name in `chromeMetadata.application`.
@@ -158,7 +161,7 @@ HAR or generic JSON, end to end:
 - Decision: NetLog captures produce a report: findings, host ratings, waterfall, then the sequence diagram as a drill-down.
 - Rationale: The audience needs data-driven insights into how a page loaded and what to investigate next. Findings, a waterfall, and per-host ratings provide context for those decisions alongside the detailed sequence diagram.
 - Alternatives considered: Sequence diagram as the only view.
-- Trade-offs accepted: Two renderers (`report.html.mjs` for NetLog, `template.html.mjs` for HAR/JSON) until HAR moves to the report.
+- Trade-offs accepted: Two renderers. `report.html.mjs` serves a NetLog and a HAR on its own; `template.html.mjs` (the older diagram) remains for generic JSON traces and `--diagram`.
 
 ### Redact Secrets, Keep Evidence
 - Status: Accepted
@@ -203,8 +206,8 @@ HAR or generic JSON, end to end:
 
 ## Known risks
 
-- HAR/JSON diagrams with thousands of requests are tall. Mitigation: `--filter`, and the HAR parser's entry limit.
-- The HAR parser still uses the fixed four-lifeline model and adds an invented upstream hop and default values. It does not yet meet the Truthful Capture Model decision.
+- HAR/JSON diagrams (generic JSON, and a HAR with `--diagram`) with thousands of requests are tall. Mitigation: `--filter`, and the HAR parser's entry limit.
+- The legacy diagram parser (generic JSON, and a HAR with `--diagram`) still uses the fixed four-lifeline model and adds an invented upstream hop and default values. It does not meet the Truthful Capture Model decision; a HAR on its own no longer goes through it.
 - Pages with tens of thousands of requests produce a report HTML of tens of megabytes (every waterfall row carries its detail).
 - The Diagnostics view embeds recorded evidence: raw snapshot JSON and first/last event samples per source. On a 5 MB real capture it is most of an 8 MB report, versus a few hundred KB before Diagnostics existed. Snapshot and DNS tables are capped at 100 rows (the raw JSON keeps every row), and event samples are kept only for the 100 most eventful sources plus any with errors (a real 5 MB capture: 8.2 MB down to 6.2 MB). The viewer replays any source from the original file.
 - NetLog cannot see page JavaScript/CPU time or security software inside the browser; findings say so rather than guess.

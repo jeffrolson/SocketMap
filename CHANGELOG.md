@@ -3,6 +3,19 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-09-30
+### Added
+- **A HAR on its own opens in the full report.** Drop a HAR (DevTools, Network tab, Export HAR) in the viewer or run `node bin/traceviz.mjs file.har`. The report is built from what the HAR recorded: waterfall with queue, DNS, connect, TLS, wait and download per request, hosts and ratings, findings, server timing and CDN headers from response headers, Coverage and the AI summary. Everything a HAR does not record (proxy decisions, certificates, TLS versions, browser settings, browser diagnostics) is null and shown as not recorded, and the Diagnostics and Events tabs, which have nothing to show, are hidden.
+- A HAR's `connect` time includes TLS, so SocketMap separates them; `blocked` is kept as queue time; an unrecorded phase stays empty instead of becoming zero. Entries that belong to no page are background traffic when the HAR names its pages.
+- A profile or the network path file can be added to a HAR-based report. `--diagram` keeps the older sequence diagram for a HAR.
+- Response headers are kept for a HAR opened on its own, with credentials masked (cookies, authorization, tokens and now authentication challenges); request headers, bodies and cookies are still never read. The redaction audit checks this path too, and found nothing to fix on real HARs including a login flow.
+
+### Fixed
+- `WWW-Authenticate`, `Proxy-Authenticate` and `Authentication-Info` header values are now masked; they can carry nonces and session data.
+
+### Changed
+- The older HAR diagram no longer applies to a plain HAR, which retires its invented upstream hop and default values for that input. It remains for generic JSON traces and `--diagram`.
+
 ## [0.14.0] - 2026-09-30
 ### Added
 - **Network path helper.** Two small scripts, `tools/socketmap-path.sh` (Mac and Linux) and `tools/socketmap-path.ps1` (Windows PowerShell), record what a browser capture cannot see: this computer's link and Wi-Fi signal, its DNS servers, proxy and PAC settings, its public address, curl timing (DNS, connect, TLS, first byte) for each host you list, and the route to each host. They write one small JSON file. They only read settings, need no admin rights, and make two kinds of request: an optional public-address lookup and a plain `GET /` to each listed host.

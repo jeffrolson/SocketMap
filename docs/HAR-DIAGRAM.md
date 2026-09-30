@@ -1,8 +1,8 @@
 # HAR and JSON diagram view
 
-SocketMap's main workflow is the NetLog troubleshooting report (see the [README](../README.md) and the [user guide](USER-GUIDE.md)). This page covers the older **diagram view**, which the command line produces for HAR files and generic JSON traces.
+SocketMap's main workflow is the troubleshooting report (see the [README](../README.md) and the [user guide](USER-GUIDE.md)). A HAR on its own now opens in that same report (`node bin/traceviz.mjs file.har`, or drop it in the viewer), with what a HAR does not record shown as not recorded. This page covers the older **diagram view**, which the command line still produces for generic JSON traces and, with `--diagram`, for a HAR.
 
-> The HAR diagram does not yet follow the NetLog report's "only real values" rule: it draws a fixed four-column layout and adds an upstream hop and default values that are not in the HAR file. Prefer a NetLog capture for troubleshooting. This is listed under Known risks in `ARCHITECTURE.md`.
+> The diagram does not follow the report's "only real values" rule: it draws a fixed four-column layout and adds an upstream hop and default values that are not in the file. Prefer the report for troubleshooting. This is listed under Known risks in `ARCHITECTURE.md`.
 
 ## Make a diagram
 

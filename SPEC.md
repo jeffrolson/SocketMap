@@ -8,7 +8,7 @@ and the code disagree, this file wins and the code gets fixed.
 ### Resilient Trace Ingestion
 - Purpose: Ingest Chromium NetLog (`chrome://net-export/`, `edge://net-export/`), HAR files, and generic JSON execution traces.
 - Inputs: Path to NetLog JSON, HAR file, or JSON trace file.
-- Outputs: For NetLog, a capture model (environment, pages, requests, connections, DNS lookups). For HAR/JSON, the IR.
+- Outputs: For NetLog and for a HAR on its own, a capture model (environment, pages, requests, connections, DNS lookups) and the report; a HAR's model marks what it did not record as null. For generic JSON (and a HAR with --diagram), the IR.
 - Business rules:
   - NetLog files are tokenized one event at a time; the event list is never held in memory. Truncated captures parse.
   - Each request is linked through Chrome's `source_dependency` graph to the stream job, socket or HTTP/2 or QUIC session, connect job, and certificate verifier job it actually used.
@@ -136,7 +136,7 @@ and the code disagree, this file wins and the code gets fixed.
 - Outputs: The same report the CLI produces, shown in the page, plus a downloadable standalone report.
 - Business rules:
   - The file is read in chunks inside the browser. Nothing is uploaded and no network access is needed.
-  - The first bytes are checked first; HAR files and other files get a plain explanation instead of a failure.
+  - The first bytes are checked first; a HAR opens as a report, and other files get a plain explanation instead of a failure.
   - Page picker lists every site in the capture; the default is the loaded page.
   - Progress shows bytes read of the total.
 - Acceptance criteria: For the same capture, the viewer's report equals the CLI's report.
