@@ -38,7 +38,7 @@ Planned but not scheduled.
   check:policy-links` before each release (added 2026-09-29)
 - Performance profile follow-ups: alignment is validated on one real same-session pair
   (macOS Chrome, 34 of 37 requests matched); still to try a Windows and an Edge pair and a
-  trace recorded in a different run from the NetLog; CPU profile (`.cpuprofile`) and Lighthouse JSON as further optional files (added 2026-09-29)
+  trace recorded in a different run from the NetLog (added 2026-09-29)
 - Network path helper follow-ups: run on real Windows machines and on Linux desktops (CI covers the runners, not real Wi-Fi or corporate proxies); TCP-based route probes; a 'run it for me' one-liner; per-hop loss with several probes (added 2026-09-30)
 
 ## Parking lot
@@ -50,7 +50,6 @@ Ideas, deferred features, nice-to-haves. No commitment.
 - Interactive timeline playback scrubber
 - Standalone desktop companion app (Tauri / Electron)
 - Binary PCAP to NetLog/JSON converter utility
-- Lighthouse JSON import: scored audit summary by script, render blockers, main-thread work
 - `chrome://webrtc-internals` JSON dump import for Teams call quality (loss, jitter, round
   trip, TURN relay); only if Teams quality comes into scope
 - Guided paste for pages that only copy or screenshot: `chrome://gpu` (hardware
@@ -60,6 +59,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-30: Lighthouse JSON and V8 CPU profile as optional files, labelled as lab and summary views (0.16.0)
 - 2026-09-30: A HAR on its own opens in the full report (viewer and CLI); the older diagram remains for generic JSON and --diagram (0.15.0)
 - 2026-09-30: Network path helper: Mac and Linux shell script, Windows PowerShell script, viewer and CLI support, Overview panel, Coverage rows (0.14.0)
 - 2026-09-30: Clock-based profile placement, redaction audit (found and fixed a leaked API key shape), real-browser smoke test, CI on three operating systems, smaller Diagnostics (0.13.0)

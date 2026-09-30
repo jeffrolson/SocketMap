@@ -3,6 +3,15 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-09-30
+### Added
+- **Lighthouse report as an optional file.** Run Lighthouse with `--output=json` (or DevTools, Save as JSON) and drop it with the capture, click **Add Lighthouse**, or use `--lighthouse`. The Overview shows its performance score, the six core metrics coloured by Lighthouse's own score bands, what it says to look at with the addresses and sizes it names (unused JavaScript, cache lifetimes, render-blocking requests and so on), main-thread time by kind, and scripts by execution time. Requests it names that are also in the capture are marked in the waterfall's request details.
+- It is always labelled as a separate lab load. Lighthouse's default throttling is simulated, so its numbers are estimates from another load; they are shown as what a clean run would flag and are never set against the capture's own timings. The gap between the two runs is shown.
+- Works with Lighthouse 12 and 13's insight audits as well as the classic ones. A real 554 KB report reduces to about 6 KB; screenshots, page snippets and audit prose are dropped and credentials in URLs are masked.
+- **V8 CPU profile as an optional file.** A `.cpuprofile` (DevTools JavaScript Profiler, `node --cpu-prof`) adds a panel with JavaScript busy, garbage collection, idle and native time, and scripts and functions by self time. It is summarized and not placed on the timeline.
+- Coverage: with either file, "JavaScript execution" becomes partial, and Lighthouse makes "Rendering and page-experience timings" partial, worded as lab results. The AI summary gains labelled sections; the redaction audit covers both formats.
+- The viewer's sample now includes a made-up Lighthouse report.
+
 ## [0.15.0] - 2026-09-30
 ### Added
 - **A HAR on its own opens in the full report.** Drop a HAR (DevTools, Network tab, Export HAR) in the viewer or run `node bin/traceviz.mjs file.har`. The report is built from what the HAR recorded: waterfall with queue, DNS, connect, TLS, wait and download per request, hosts and ratings, findings, server timing and CDN headers from response headers, Coverage and the AI summary. Everything a HAR does not record (proxy decisions, certificates, TLS versions, browser settings, browser diagnostics) is null and shown as not recorded, and the Diagnostics and Events tabs, which have nothing to show, are hidden.

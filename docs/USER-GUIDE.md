@@ -52,6 +52,10 @@ Drop it with the NetLog, or click **Add a profile** once the report opens. From 
 
 The script makes two kinds of request and nothing else: an optional public-address lookup (`api.ipify.org`, turned off with `--no-public-ip` or `-NoPublicIp`) and a plain `GET /` to each host you list. The file records the computer's name, its addresses, the Wi-Fi network name when the operating system provides it, and the public address, so read it before sharing. It is a snapshot from when the script ran, so the report shows how far apart the two were and says when the network may have changed in between. On Windows the Wi-Fi signal is converted from the percentage Windows reports and is an estimate.
 
+**Optional: a Lighthouse report.** Lighthouse loads the page itself in a controlled lab run and scores it. Run `npx lighthouse https://your.site --output=json --output-path=report.json`, or in DevTools open Lighthouse and choose Save as JSON. Click **Add Lighthouse**, drop it with the capture, or use `--lighthouse report.json`. It is a different load of the page, usually with simulated slow-network and slow-CPU settings, so its numbers are estimates: the report labels them as a separate lab load and never sets them against the capture's own timings. Its value is what a clean run would flag (unused JavaScript, cache lifetimes, render-blocking requests) and, when a URL it names is in your capture, a note on that request in the waterfall.
+
+**Optional: a CPU profile.** A V8 `.cpuprofile` (DevTools JavaScript Profiler, or `node --cpu-prof`) shows where JavaScript CPU time went, by script and by function. Click **Add CPU profile**, drop it, or use `--cpuprofile file.cpuprofile`. It is summarized only and is not lined up with the waterfall; a Performance profile is the one that places work on the timeline.
+
 **Capture twice when you can.** Repeat the same page or action from two places (office and home, VPN on and off, your machine and a colleague's). The comparison shows what changed; a controlled follow-up test helps establish the cause.
 
 ## 2. Open the report
@@ -116,6 +120,10 @@ Only shown when you add a Performance profile. It reports how busy the page's ma
 On the waterfall, the **Main thread (profile)** row shows how busy the page was across the timeline, with long tasks outlined, and dashed lines mark first and largest contentful paint, DOMContentLoaded and load. This is what turns an unexplained quiet stretch in the waterfall into "the page was working": if the network is idle while the main thread is busy, the wait is on the computer.
 
 Read it as evidence, not proof: a script started by another script can be attributed to the wrong file, and responsiveness (INP) needs a real interaction and is not in a load profile. The finding **The page's own code kept the main thread busy** is worded as consistent with, not a diagnosis. If no request appears in both files the profile is shown but not placed on the timeline, and the panel says so.
+
+### What Lighthouse measured, and where JavaScript CPU time went
+
+Only shown when you add the files. Lighthouse's panel shows its performance score, the six core metrics coloured by Lighthouse's own score bands, what it says to look at (with the addresses and sizes it names), main-thread time by kind and scripts by execution time, all labelled as a separate lab load. The CPU profile panel shows JavaScript busy, garbage collection, idle and native time, and scripts and functions by self time.
 
 ### The path from this computer (with the network path helper)
 
