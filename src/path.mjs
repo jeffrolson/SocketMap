@@ -21,7 +21,9 @@ const num = (value) => (typeof value === "number" && Number.isFinite(value) ? va
 const ms = (value) => (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 600000 ? Math.round(value * 10) / 10 : null);
 const bool = (value) => (typeof value === "boolean" ? value : null);
 const ip = (value) => (typeof value === "string" && IP_RE.test(value.trim()) ? value.trim() : null);
-const url = (value) => { const t = text(value, 500); return t ? redactUrl(t) : null; };
+// Proxy and PAC addresses lose credentials in both forms: scheme://user:pass@host and a bare user:pass@host
+// (Windows writes proxy settings like http=user:pass@host:port).
+const url = (value) => { const t = text(value, 500); return t ? redactUrl(t).replace(/(^|[;,=\s])[^/@\s:;=]+:[^/@\s;]*@/g, "$1[REDACTED]@") : null; };
 const list = (value, map, cap) => (Array.isArray(value) ? value.slice(0, cap).map(map).filter(item => item != null) : []);
 
 export function isPrivateAddress(address) {
@@ -53,6 +55,7 @@ export function readPathFile(input) {
     },
     dns: { servers: list(input.dns?.servers, ip, 8), searchDomains: list(input.dns?.searchDomains, v => text(v, 80), 8) },
     proxy: { http: url(proxy.http), https: url(proxy.https), autoConfigUrl: url(proxy.autoConfigUrl), autoConfigEnabled: bool(proxy.autoConfigEnabled), autoDetect: bool(proxy.autoDetect), bypass: list(proxy.bypass, v => text(v, 80), 20) },
+    probeUsesProxy: bool(input.probeUsesProxy),
     publicIp: ip(input.publicIp),
     publicIpSource: text(input.publicIpSource, 40),
     hosts: list(input.hosts, h => {
@@ -113,7 +116,7 @@ export function joinPath(model, data) {
   else if (data.link.type === "wifi" && q === "fair") findings.push({ id: "wifi-fair", severity: "low", title: "The Wi-Fi signal was fair", detail: `${dbm(data.link.wifi.rssiDbm)}. Above -67 dBm is a common target. Measured when the helper ran, not during the capture.` });
 
   const proxyOn = data.proxy.http || data.proxy.https || data.proxy.autoConfigUrl || data.proxy.autoConfigEnabled;
-  if (proxyOn) findings.push({ id: "proxy-configured", severity: "info", title: "This computer is set to use a proxy", detail: `${data.proxy.autoConfigUrl ? `Automatic configuration (PAC): ${data.proxy.autoConfigUrl}. ` : ""}${data.proxy.http ? `Web proxy: ${data.proxy.http}. ` : ""}${data.proxy.https && data.proxy.https !== data.proxy.http ? `Secure web proxy: ${data.proxy.https}. ` : ""}The timings below were measured with curl, which does not use these system settings, so they show the path without the proxy.` });
+  if (proxyOn) findings.push({ id: "proxy-configured", severity: "info", title: "This computer is set to use a proxy", detail: `${data.proxy.autoConfigUrl ? `Automatic configuration (PAC): ${data.proxy.autoConfigUrl}. ` : ""}${data.proxy.http ? `Web proxy: ${data.proxy.http}. ` : ""}${data.proxy.https && data.proxy.https !== data.proxy.http ? `Secure web proxy: ${data.proxy.https}. ` : ""}${data.probeUsesProxy ? "Curl used a proxy from its environment variables, so its timings include that proxy." : "The timings below were measured with curl, which does not use these system settings, so they show the path without the proxy."}` });
 
   const publicResolvers = data.dns.servers.filter(s => isPrivateAddress(s) === false);
   if (publicResolvers.length) findings.push({ id: "dns-public", severity: "info", title: "DNS servers outside private address space", detail: `${publicResolvers.join(", ")}. That can be normal (a public resolver or a provider's). If the network is expected to use internal DNS, this is worth checking.` });
@@ -140,7 +143,7 @@ export function joinPath(model, data) {
     }
   }
 
-  return { source: { tool: data.tool, collectedAt: data.collectedAt, gapMinutes, platform: data.platform, os: data.os, computer: data.computer }, link: data.link, dns: data.dns, proxy: data.proxy, publicIp: data.publicIp, publicIpSource: data.publicIpSource, compare, routes: data.routes, notes: data.notes, findings };
+  return { probeUsesProxy: data.probeUsesProxy, source: { tool: data.tool, collectedAt: data.collectedAt, gapMinutes, platform: data.platform, os: data.os, computer: data.computer }, link: data.link, dns: data.dns, proxy: data.proxy, publicIp: data.publicIp, publicIpSource: data.publicIpSource, compare, routes: data.routes, notes: data.notes, findings };
 }
 
 const gapText = (minutes) => minutes == null ? "at an unknown time relative to the capture" : Math.abs(minutes) < 2 ? "at about the same time as the capture" : minutes > 0 ? `${minutes} minutes after the capture started` : `${-minutes} minutes before the capture started`;

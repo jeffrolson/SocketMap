@@ -37,6 +37,8 @@ jobs:
         run: |
           .\tools\socketmap-path.ps1 -NoPublicIp -Out path-ci.json github.com
           node scripts/check-helper-output.mjs path-ci.json --require-probe
+          .\tools\socketmap-path.ps1 -SelfTestTracert '  1    <1 ms    <1 ms    <1 ms  192.0.2.1','  2     *        *        *     Request timed out.','  3    12 ms    11 ms    13 ms  198.51.100.9','  4    45 ms     *       47 ms  203.0.113.7','Trace complete.' | Out-File -Encoding utf8 tracert-selftest.json
+          node scripts/check-helper-output.mjs --tracert-selftest tracert-selftest.json
       - name: The viewer makes no remote requests
         shell: bash
         run: |

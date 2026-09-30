@@ -7,6 +7,19 @@
 import fs from "node:fs";
 import { readPathFile } from "../src/path.mjs";
 
+if (process.argv[2] === "--tracert-selftest") {
+  // Checks the PowerShell tracert parser (run with -SelfTestTracert on Windows) against the expected hops.
+  const raw = fs.readFileSync(process.argv[3], "utf8").replace(/^\uFEFF/, "");
+  const hops = [].concat(JSON.parse(raw));
+  const expected = [[1, "192.0.2.1", 1], [3, "198.51.100.9", 12], [4, "203.0.113.7", 45], [2, null, null]];
+  const sorted = hops.slice().sort((a, b) => a.n - b.n);
+  const want = [[1, "192.0.2.1", 1], [2, null, null], [3, "198.51.100.9", 12], [4, "203.0.113.7", 45]];
+  const ok = sorted.length === want.length && sorted.every((h, i) => h.n === want[i][0] && h.ip === want[i][1] && h.rttMs === want[i][2]);
+  console.log(JSON.stringify(sorted));
+  if (!ok) { console.error("tracert parser output differs from the expected hops"); process.exit(1); }
+  console.log("tracert parser ok");
+  process.exit(0);
+}
 const file = process.argv[2];
 const requireProbe = process.argv.includes("--require-probe");
 if (!file) { console.error("Usage: node scripts/check-helper-output.mjs <file> [--require-probe]"); process.exit(2); }

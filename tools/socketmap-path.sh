@@ -62,7 +62,8 @@ jlist() { # strings -> JSON array
   printf ']'
 }
 ms() { awk -v a="$1" -v b="${2:-0}" 'BEGIN { if (a == "" || a ~ /[^0-9.]/) { print "null"; exit } v = (a - b) * 1000; if (v < 0) v = 0; printf "%.1f", v }'; }
-strip_userinfo() { sed -E 's#(://)[^/@ ]*@#\1#'; }
+# Removes credentials from a proxy address, both as scheme://user:pass@host and as a bare user:pass@host.
+strip_userinfo() { sed -E -e 's#(://)[^/@ ]*@#\1#g' -e 's#(^|[;, =])[^/@ :;=]+:[^/@ ;]*@#\1#g'; }
 
 # ---- link ------------------------------------------------------------------------------------
 IFACE="" GATEWAY="" IPV4="" IPV6="" LINK_TYPE="" SSID="" RSSI="" NOISE="" CHANNEL="" TXRATE="" PHY="" SECURITY=""
@@ -151,7 +152,13 @@ probes_json() {
   for h in "${HOSTS[@]}"; do
     [ $first -eq 0 ] && printf ','; first=0
     err=""
-    line="$(curl -sS -o /dev/null --max-time 15 -w '%{time_namelookup} %{time_connect} %{time_appconnect} %{time_starttransfer} %{http_version} %{remote_ip} %{http_code}' "https://$h/" 2>/tmp/socketmap-path-err.$$)" || err="$(head -c 160 /tmp/socketmap-path-err.$$ 2>/dev/null)"
+    line="$(curl -sS -o /dev/null --max-time 15 -w '%{time_namelookup} %{time_connect} %{time_appconnect} %{time_starttransfer} %{http_version} %{remote_ip} %{http_code}' "https://$h/" 2>/tmp/socketmap-path-err.$$)"
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      # A failed request: report why, and record no timings (curl still prints partial fields).
+      err="$(head -c 160 /tmp/socketmap-path-err.$$ 2>/dev/null | tr '\n' ' ')"; [ -z "$err" ] && err="curl exit code $rc"
+      line=""
+    fi
     read -r dns conn app start ver ip code <<< "$line"
     printf '{"host":%s,"dnsMs":%s,"connectMs":%s,"tlsMs":%s,"firstByteMs":%s,"httpVersion":%s,"remoteIp":%s,"status":%s,"error":%s}' \
       "$(jstr "$h")" "$(ms "$dns")" "$(ms "$conn" "$dns")" "$(ms "$app" "$conn")" "$(ms "$start" "$app")" "$(jstr "$ver")" "$(jstr "$ip")" "$(jnum "$code")" "$(jstr "$err")"
@@ -190,6 +197,7 @@ routes_json() {
   printf '"wifi":{"ssid":%s,"rssiDbm":%s,"noiseDbm":%s,"channel":%s,"txRateMbps":%s,"phyMode":%s,"security":%s}},' "$(jstr "$SSID")" "$(jnum "$RSSI")" "$(jnum "$NOISE")" "$(jstr "$CHANNEL")" "$(jnum "$TXRATE")" "$(jstr "$PHY")" "$(jstr "$SECURITY")"
   printf '"dns":{"servers":%s,"searchDomains":%s},' "$(jlist "${DNS_SERVERS[@]}")" "$(jlist "${DNS_SEARCH[@]}")"
   printf '"proxy":{"http":%s,"https":%s,"autoConfigUrl":%s,"autoConfigEnabled":%s,"autoDetect":%s,"bypass":%s},' "$(jstr "$PROXY_HTTP")" "$(jstr "$PROXY_HTTPS")" "$(jstr "$PAC_URL")" "$( [ "$PAC_ON" = 1 ] && echo true || ( [ "$PAC_ON" = 0 ] && echo false || echo null ) )" "$( [ "$AUTODETECT" = 1 ] && echo true || ( [ "$AUTODETECT" = 0 ] && echo false || echo null ) )" "$(jlist "${BYPASS[@]}")"
+  printf '"probeUsesProxy":%s,' "$( [ -n "${https_proxy:-$HTTPS_PROXY}${all_proxy:-$ALL_PROXY}" ] && echo true || echo false )"
   printf '"publicIp":%s,"publicIpSource":%s,' "$(jstr "$PUBLIC")" "$( [ -n "$PUBLIC" ] && jstr api.ipify.org || echo null )"
   if [ $PROBE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && command -v curl >/dev/null 2>&1; then printf '"hosts":%s,' "$(probes_json)"; else printf '"hosts":[],'; fi
   if [ $ROUTE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && command -v traceroute >/dev/null 2>&1; then printf '"routes":%s,' "$(routes_json)"; else printf '"routes":[],'; [ $ROUTE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && note "traceroute was not found, so no route was recorded."; fi

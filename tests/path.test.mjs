@@ -8,6 +8,7 @@ import { analyzeCapture, buildAiSummary } from "../src/analysis.mjs";
 import { createCaptureReader, looksLikePath } from "../src/viewer/viewer-core.mjs";
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 import { HELPER_SH, HELPER_PS1 } from "../src/renderer/helper-scripts.generated.mjs";
+import { existsSync, readFileSync } from "node:fs";
 
 function sampleModel() {
   const reader = createCaptureReader();
@@ -43,6 +44,12 @@ describe("network path file reader", () => {
     const { data } = read({ ...sample, proxy: { ...sample.proxy, http: "http://user:hunter2@proxy.example.com:8080", autoConfigUrl: "http://wpad.example.com/p.pac?token=abc12345" } });
     assert.ok(!JSON.stringify(data.proxy).includes("hunter2") && !JSON.stringify(data.proxy).includes("abc12345"));
     assert.ok(data.proxy.http.includes("proxy.example.com"));
+  });
+  it("removes credentials from Windows-style bare proxy addresses too (found on a real Windows runner)", () => {
+    const { data } = read({ ...sample, proxy: { ...sample.proxy, http: "user:secret@proxy.example.com:3128", https: "http=user:hunter2@proxy.example.com:3128;https=proxy.example.com:3128", autoConfigUrl: null } });
+    const text = JSON.stringify(data.proxy);
+    assert.ok(!text.includes("secret") && !text.includes("hunter2") && !text.includes("user:"), text);
+    assert.ok(data.proxy.http.includes("proxy.example.com:3128") && data.proxy.https.includes("https=proxy.example.com:3128"));
   });
   it("says nothing it was not told", () => {
     const { data } = read({ kind: "socketmap-path", version: 1 });
@@ -86,6 +93,14 @@ describe("joining the helper's file to a capture", () => {
     assert.ok(f && /not proof of the cause/.test(f.detail));
     const fine = joinPath(sampleModel(), read({ ...sample, hosts: [{ host, dnsMs: 20, connectMs: 10, tlsMs: 10, firstByteMs: 10 }] }).data);
     assert.ok(!fine.findings.some(x => x.id === "dns-browser-slower"));
+  });
+  it("says curl went through the proxy when its environment had one, and directly when not", () => {
+    const via = joinPath(model, read({ ...sample, probeUsesProxy: true }).data);
+    assert.ok(via.findings.find(f => f.id === "proxy-configured").detail.includes("Curl used a proxy from its environment variables"));
+    assert.ok(renderPathPanel(via).includes("through the proxy in its environment variables"));
+    const direct = joinPath(model, read({ ...sample, probeUsesProxy: false }).data);
+    assert.ok(direct.findings.find(f => f.id === "proxy-configured").detail.includes("which does not use these system settings"));
+    assert.ok(renderPathPanel(direct).includes("directly, without the system proxy"));
   });
   it("classifies addresses and signal strength", () => {
     for (const [address, expected] of [["10.1.2.3", true], ["172.20.0.1", true], ["192.168.1.1", true], ["100.64.0.1", true], ["8.8.8.8", false], ["fd00::1", true], ["2001:4860:4860::8888", false]]) assert.equal(isPrivateAddress(address), expected, address);
@@ -135,11 +150,44 @@ describe("the helper scripts", () => {
     assert.ok(HELPER_SH.startsWith("#!/bin/bash") && HELPER_SH.includes("socketmap-path"));
     assert.ok(HELPER_PS1.includes("socketmap-path") && HELPER_PS1.includes("ConvertTo-Json"));
   });
+  it("mask bare user:pass@ proxy credentials and report a failed curl as an error with no timings", () => {
+    for (const [name, script] of [["sh", HELPER_SH], ["ps1", HELPER_PS1]]) {
+      assert.ok(/\[\^\/@ ?\\?s? ?:;=\]|\[\^\/@\\s:;=\]/.test(script), `${name}: strips a bare user:pass@`);
+      assert.ok(script.includes("probeUsesProxy"), `${name}: says whether curl had a proxy`);
+    }
+    assert.ok(HELPER_SH.includes("rc=$?") && HELPER_SH.includes("curl exit code"), "sh checks curl's exit status");
+    assert.ok(HELPER_PS1.includes("$LASTEXITCODE") && HELPER_PS1.includes("Parse-TracertHop") && HELPER_PS1.includes("SelfTestTracert"));
+  });
   it("only read settings and make the requests they say they make", () => {
     for (const [name, script] of [["sh", HELPER_SH], ["ps1", HELPER_PS1]]) {
       const urls = [...script.matchAll(/https?:\/\/[^\s"'`)]+/g)].map(m => m[0]).filter(u => !/example\.com|\$\{?h|\$h/.test(u));
       assert.ok(urls.every(u => /api\.ipify\.org/.test(u) || /^https?:\/\/(www\.)?(socketmap|github)/.test(u)), `${name}: ${urls.join(" ")}`);
       assert.ok(!/\b(rm -rf|Set-ItemProperty|Remove-Item|netsh\s+(?!wlan show|winhttp show)|networksetup -set|scutil --set|sudo)\b/.test(script), `${name} changes nothing`);
     }
+  });
+});
+
+// Real helper output from disposable CI runners (gitignored). The Windows file was written by the first version of the
+// script, which left a proxy credential in place; the reader must still mask it.
+describe("real helper output from CI runners (only when recorded locally)", () => {
+  const load = (file) => JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+  it("Windows: reads the registry proxy, PAC, bypass list and auto-detect flag, and masks the credential", { skip: !existsSync("captures/real-path-windows.json") }, () => {
+    const raw = load("captures/real-path-windows.json");
+    assert.ok(JSON.stringify(raw.proxy).includes("secret"), "the recorded file did contain the credential");
+    const { recognized, data } = read(raw);
+    assert.equal(recognized, true);
+    assert.equal(data.platform, "windows");
+    assert.equal(data.proxy.autoDetect, true);
+    assert.equal(data.proxy.autoConfigEnabled, true);
+    assert.match(data.proxy.autoConfigUrl, /wpad\.corp\.example\.com\/proxy\.pac/);
+    assert.ok(data.proxy.bypass.includes("<local>"));
+    assert.ok(!JSON.stringify(data).includes("secret"), "no credential survives the reader");
+    assert.ok(data.hosts[0].connectMs > 0 && data.hosts[0].status === 200);
+  });
+  it("Linux: reads the environment proxy without its password, and the failed probes as errors", { skip: !existsSync("captures/real-path-linux.json") }, () => {
+    const { data } = read(load("captures/real-path-linux.json"));
+    assert.ok(!JSON.stringify(data).includes("secret"));
+    assert.equal(data.link.type, "ethernet");
+    assert.ok(data.hosts.every(h => h.error));
   });
 });

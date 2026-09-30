@@ -36,7 +36,8 @@ param(
   [string]$Out = 'socketmap-path.json',
   [switch]$NoPublicIp,
   [switch]$NoProbe,
-  [switch]$NoRoute
+  [switch]$NoRoute,
+  [string[]]$SelfTestTracert
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
@@ -52,7 +53,30 @@ foreach ($h in @($Hosts)) {
 }
 if ($clean.Count -gt 12) { $clean = $clean[0..11] }
 
-function Strip-UserInfo([string]$value) { if ($value) { return ($value -replace '(://)[^/@\s]*@', '$1') } return $null }
+# Removes credentials from a proxy address, both as scheme://user:pass@host and as a bare user:pass@host.
+function Strip-UserInfo([string]$value) {
+  if ($value) { return (($value -replace '(://)[^/@\s]*@', '$1') -replace '(^|[;,=\s])[^/@\s:;=]+:[^/@\s;]*@', '$1') }
+  return $null
+}
+
+# One line of tracert output to a hop: number, address (if any) and the median of the answered probes in ms.
+function Parse-TracertHop([string]$l) {
+  if ($l -match '^\s*(\d+)\s+(.*)$') {
+    $n = [int]$Matches[1]; $rest = $Matches[2]
+    $ip = $null; if ($rest -match '([0-9]{1,3}(\.[0-9]{1,3}){3}|[0-9a-fA-F]*:[0-9a-fA-F:]+)\s*$') { $ip = $Matches[1] }
+    $rtts = @([regex]::Matches($rest, '(<?\d+)\s*ms') | ForEach-Object { [double]($_.Groups[1].Value -replace '<', '') })
+    $rtt = $null; if ($rtts.Count -gt 0) { $rtt = ($rtts | Sort-Object)[[int][math]::Floor(($rtts.Count - 1) / 2)] }
+    return [ordered]@{ n = $n; ip = $ip; rttMs = $rtt }
+  }
+  return $null
+}
+
+# Test hook: parse the given lines as tracert output and print the hops, so CI can check the parser on Windows.
+if ($SelfTestTracert) {
+  $parsed = @(); foreach ($l in $SelfTestTracert) { $h = Parse-TracertHop $l; if ($h) { $parsed += $h } }
+  ConvertTo-Json -InputObject @($parsed) -Depth 4
+  exit 0
+}
 function Ms($seconds, $from) {
   if ($null -eq $seconds -or $seconds -eq '') { return $null }
   $a = 0.0; $b = 0.0
@@ -143,9 +167,20 @@ if (-not $NoProbe -and $clean.Count -gt 0) {
   else {
     foreach ($h in $clean) {
       $errText = $null
-      $line = & $curl.Source -sS -o NUL --max-time 15 -w '%{time_namelookup} %{time_connect} %{time_appconnect} %{time_starttransfer} %{http_version} %{remote_ip} %{http_code}' "https://$h/" 2>&1 | Out-String
-      $parts = ($line.Trim() -split '\s+')
-      if ($parts.Count -lt 7) { $errText = $line.Trim(); if ($errText.Length -gt 160) { $errText = $errText.Substring(0, 160) }; $parts = @($null, $null, $null, $null, $null, $null, $null) }
+      $errFile = [IO.Path]::GetTempFileName()
+      $line = & $curl.Source -sS -o NUL --max-time 15 -w '%{time_namelookup} %{time_connect} %{time_appconnect} %{time_starttransfer} %{http_version} %{remote_ip} %{http_code}' "https://$h/" 2>$errFile | Out-String
+      $exit = $LASTEXITCODE
+      if ($exit -ne 0) {
+        # A failed request: report why, and record no timings (curl still prints partial fields).
+        $errText = ((Get-Content -Path $errFile -Raw) -replace '\s+', ' ').Trim()
+        if (-not $errText) { $errText = "curl exit code $exit" }
+        if ($errText.Length -gt 160) { $errText = $errText.Substring(0, 160) }
+        $parts = @($null, $null, $null, $null, $null, $null, $null)
+      } else {
+        $parts = ($line.Trim() -split ' ')
+        if ($parts.Count -lt 7) { $errText = 'curl gave an unexpected answer'; $parts = @($null, $null, $null, $null, $null, $null, $null) }
+      }
+      [IO.File]::Delete($errFile)
       $code = $null; if ($parts[6] -match '^\d+$') { $code = [int]$parts[6] }
       $probes += [ordered]@{
         host = $h; dnsMs = (Ms $parts[0] $null); connectMs = (Ms $parts[1] $parts[0]); tlsMs = (Ms $parts[2] $parts[1]); firstByteMs = (Ms $parts[3] $parts[2])
@@ -161,15 +196,7 @@ if (-not $NoRoute -and $clean.Count -gt 0) {
   foreach ($h in $clean) {
     $hops = @()
     $lines = tracert -d -h 20 -w 1000 $h 2>$null
-    foreach ($l in $lines) {
-      if ($l -match '^\s*(\d+)\s+(.*)$') {
-        $n = [int]$Matches[1]; $rest = $Matches[2]
-        $ip = $null; if ($rest -match '([0-9]{1,3}(\.[0-9]{1,3}){3}|[0-9a-fA-F]*:[0-9a-fA-F:]+)\s*$') { $ip = $Matches[1] }
-        $rtts = @([regex]::Matches($rest, '(<?\d+)\s*ms') | ForEach-Object { [double]($_.Groups[1].Value -replace '<', '') })
-        $rtt = $null; if ($rtts.Count -gt 0) { $rtt = ($rtts | Sort-Object)[[int][math]::Floor(($rtts.Count - 1) / 2)] }
-        $hops += [ordered]@{ n = $n; ip = $ip; rttMs = $rtt }
-      }
-    }
+    foreach ($l in $lines) { $hop = Parse-TracertHop $l; if ($hop) { $hops += $hop } }
     $routes += [ordered]@{ host = $h; method = 'icmp'; hops = $hops }
   }
 }
@@ -183,6 +210,7 @@ $result = [ordered]@{
   link = $link
   dns = [ordered]@{ servers = @($dnsServers); searchDomains = @($dnsSearch) }
   proxy = $proxy
+  probeUsesProxy = [bool]($env:https_proxy -or $env:HTTPS_PROXY -or $env:all_proxy -or $env:ALL_PROXY)
   publicIp = $publicIp; publicIpSource = $(if ($publicIp) { 'api.ipify.org' } else { $null })
   hosts = @($probes); routes = @($routes); notes = @($notes)
 }
