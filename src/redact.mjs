@@ -12,6 +12,8 @@ const MASK = "[REDACTED]";
 // exact list, so variants such as session_id, sessionToken or csrf_token are covered too.
 const SECRET_PARAM_NAME = /token|secret|passw(?:or)?d|pwd|session|csrf|xsrf|signature|assertion|credential|api[-_]?key|^(?:tempauth|code|sig|key|auth|samlrequest|samlresponse)$|(?:^|[_-])auth(?:$|[_-])/i;
 const PARAM_RE = /([?&#;])([^=&#;\s"']+)=([^&#\s"']*)/g;
+// Credentials that are recognizable by their shape, wherever they appear (any parameter name, any header).
+const TOKEN_SHAPE_RE = /eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|\bAIza[0-9A-Za-z_-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}\b|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g;
 const USERINFO_RE = /(\/\/[^/:@\s]+:)[^@/\s]+@/g;
 
 // Header names whose values are credentials.
@@ -25,7 +27,7 @@ const COMMAND_SECRET_RE = /((?:--?)(?:access[-_]?token|auth[-_]?token|refresh[-_
 /** Masks secret parameter values and embedded passwords in a URL or path. */
 export function redactUrl(url) {
   if (typeof url !== "string") return url;
-  return url.replace(USERINFO_RE, `$1${MASK}@`).replace(PARAM_RE, (all, sep, name) => SECRET_PARAM_NAME.test(name) ? `${sep}${name}=${MASK}` : all);
+  return url.replace(USERINFO_RE, `$1${MASK}@`).replace(PARAM_RE, (all, sep, name) => SECRET_PARAM_NAME.test(name) ? `${sep}${name}=${MASK}` : all).replace(TOKEN_SHAPE_RE, MASK);
 }
 
 /** Redacts URLs and credential-like command-line switches in captured metadata. */
@@ -44,7 +46,7 @@ export function redactHeaderLines(lines) {
     const name = line.slice(0, idx).trim();
     if (SECRET_HEADER_RE.test(name)) return `${line.slice(0, idx)}: ${MASK}`;
     if (URL_HEADER_RE.test(name)) return `${line.slice(0, idx)}:${redactUrl(line.slice(idx + 1))}`;
-    return line;
+    return line.replace(TOKEN_SHAPE_RE, MASK);
   });
 }
 
@@ -62,6 +64,7 @@ export function createEvidenceSanitizer() {
       .replace(/(\/\/[^/:@\s]+:)[^@/\s]+@/g, "$1" + mask + "@")
       .replace(/([?&#;])([^=&#;\s"']+)=([^&#\s"']*)/g, (all, sep, name) => secretParamName.test(name) ? sep + name + "=" + mask : all)
       .replace(/((?:--?)(?:access[-_]?token|auth[-_]?token|refresh[-_]?token|id[-_]?token|token|auth(?:orization)?|password|passwd|pwd|secret|api[-_]?key|cookie|session|credential)(?:=|\s+))(?:(?:"[^"]*")|(?:'[^']*')|\S+)/gi, "$1" + mask)
+      .replace(/eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|\bAIza[0-9A-Za-z_-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}\b|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, mask)
       .replace(/\b(Bearer|Basic|Negotiate|NTLM)\s+[A-Za-z0-9+/_=.-]+/gi, "$1 " + mask)
       .replace(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g, mask)
       .split(/\r?\n/).map(line => {
