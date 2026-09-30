@@ -151,7 +151,7 @@ describe("profile in findings and the AI summary", () => {
 describe("real NetLog and trace pair (only when recorded locally)", () => {
   const netlog = "captures/pair-wiki-netlog.json";
   const tracePath = "captures/pair-wiki-trace.json";
-  for (const [label, netlogFile, traceFile, browserName] of [["macOS Edge", "captures/pair-edge-netlog.json", "captures/pair-edge-trace.json", /Edge/]]) {
+  for (const [label, netlogFile, traceFile, browserName] of [["macOS Edge", "captures/pair-edge-netlog.json", "captures/pair-edge-trace.json", /Edge/], ["Windows Chrome (CI runner)", "captures/pair-windows-chrome-netlog.json", "captures/pair-windows-chrome-trace.json", /Chrome/], ["Windows Edge (CI runner)", "captures/pair-windows-edge-netlog.json", "captures/pair-windows-edge-trace.json", /Edge/], ["Linux Chrome (CI runner)", "captures/pair-linux-chrome-netlog.json", "captures/pair-linux-chrome-trace.json", /Chrome/]]) {
     it(`${label}: places the profile from shared requests and agrees with the shared browser clock`, { skip: !existsSync(netlogFile) || !existsSync(traceFile) }, async () => {
       const feed = (reader, file) => new Promise((resolve, reject) => { const s = createReadStream(file, { encoding: "utf8" }); s.on("data", c => reader.write(c)); s.on("end", resolve); s.on("error", reject); });
       const capture = createCaptureReader();

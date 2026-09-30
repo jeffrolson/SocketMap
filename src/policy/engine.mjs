@@ -46,12 +46,16 @@ export function createPolicyEngine(sanitize) {
     const browser = /edge/i.test(application) ? "edge" : /chrome/i.test(application) ? "chrome" : null;
     const meta = { browser, application: application || null, version: source.version || null, os: source.OS || null, exportedAt: input.policyExportTime || null };
     const policies = [];
+    // The other values a policy overrides or supersedes: where they came from, and what they were.
+    function sources(list, name) {
+      return Array.isArray(list) ? list.slice(0, 5).filter(item => item && typeof item === "object").map(item => ({ level: item.level ?? null, scope: item.scope ?? null, source: item.source ?? null, value: sanitize(item.value, name) })) : [];
+    }
     function add(dict, section) {
       for (const name of Object.keys(dict)) {
         const raw = dict[name];
         const shaped = raw && typeof raw === "object" && !Array.isArray(raw) && ("value" in raw || "level" in raw || "scope" in raw || "source" in raw);
         const entry = shaped ? raw : { value: raw };
-        policies.push({ name, section, level: entry.level ?? null, scope: entry.scope ?? null, source: entry.source ?? null, value: sanitize(entry.value, name), error: entry.error ?? null, warning: entry.warning ?? null, info: entry.info ?? null, ignored: entry.ignored === true, flaggedDeprecated: entry.deprecated === true, flaggedFuture: entry.future === true, restartRequired: entry.restartRequired === true, overrides: Array.isArray(entry.conflicts) ? entry.conflicts.length : 0, supersedes: Array.isArray(entry.superseded) ? entry.superseded.length : 0 });
+        policies.push({ name, section, level: entry.level ?? null, scope: entry.scope ?? null, source: entry.source ?? null, value: sanitize(entry.value, name), error: entry.error ?? null, warning: entry.warning ?? null, info: entry.info ?? null, ignored: entry.ignored === true, flaggedDeprecated: entry.deprecated === true, flaggedFuture: entry.future === true, restartRequired: entry.restartRequired === true, overrides: sources(entry.conflicts, name), supersedes: sources(entry.superseded, name) });
       }
     }
     let recognized = false;
@@ -117,8 +121,9 @@ export function createPolicyEngine(sanitize) {
       if (p.ignored) notes.push({ kind: "reported", name: p.name, text: "The browser marks this policy as ignored, so it is set but not in effect." });
       if (p.flaggedDeprecated && !deprecated.some(d => d.name.toLowerCase() === p.name.toLowerCase())) notes.push({ kind: "reported", name: p.name, text: "The browser flags this policy as deprecated." });
       if (p.flaggedFuture) notes.push({ kind: "reported", name: p.name, text: "The browser flags this policy as not yet in effect for this version (a future policy)." });
-      if (p.overrides) notes.push({ kind: "reported", name: p.name, text: `Another source also sets this policy and this value overrides ${p.overrides} of them (${plural(p.overrides, "conflict", "conflicts")} in the export).` });
-      if (p.supersedes) notes.push({ kind: "reported", name: p.name, text: `A higher-precedence source supersedes ${p.supersedes} other ${plural(p.supersedes, "value", "values")} for this policy.` });
+      const describe = (list) => list.map(o => `a ${[o.level, o.scope && `${o.scope}-level`].filter(Boolean).join(" ") || "lower-precedence"} value${o.source ? ` from ${o.source}` : ""}${o.value === undefined ? "" : ` (${show(o.value)})`}`).join("; ");
+      if (p.overrides.length) notes.push({ kind: "reported", name: p.name, text: `Another source also sets this policy. This value overrides ${describe(p.overrides)}.` });
+      if (p.supersedes.length) notes.push({ kind: "reported", name: p.name, text: `A higher-precedence source supersedes ${plural(p.supersedes.length, "another value", `${p.supersedes.length} other values`)} for this policy: ${describe(p.supersedes)}.` });
       if (p.restartRequired) notes.push({ kind: "reported", name: p.name, text: "The browser reports that a restart is needed before this value takes effect." });
     }
     const other = browserPolicies.filter(p => !known.has(p.name.toLowerCase()));

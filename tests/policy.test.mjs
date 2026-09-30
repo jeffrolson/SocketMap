@@ -4,6 +4,7 @@ import { createPolicyEngine, buildPolicyEvidence } from "../src/policy/engine.mj
 import { POLICY_CATALOG, CATALOG_REVIEWED } from "../src/policy/catalog.mjs";
 import { createEvidenceSanitizer } from "../src/redact.mjs";
 import { buildSamplePolicyExport } from "../src/demo/sample-policy.mjs";
+import { existsSync, readFileSync } from "node:fs";
 
 const engine = createPolicyEngine(createEvidenceSanitizer());
 const entry = (value, extra = {}) => ({ level: "mandatory", scope: "machine", source: "platform", value, ...extra });
@@ -168,7 +169,7 @@ describe("what a managed browser adds to each policy", () => {
   const texts = (result) => result.notes.filter(n => n.kind === "reported").map(n => `${n.name}: ${n.text}`);
   it("reports each flag once, as the browser's statement rather than a judgment", () => {
     const list = texts(evaluate(managed));
-    for (const expected of [/DnsOverHttpsMode: .*ignored/, /DnsOverHttpsMode: .*older platform policy/, /SomeRetiredPolicy: .*deprecated/, /SomeFuturePolicy: .*future/, /ProxyPacUrl: .*overrides 1/, /MaxConnectionsPerProxy: .*supersedes 1 other value/, /MaxConnectionsPerProxy: .*restart/]) {
+    for (const expected of [/DnsOverHttpsMode: .*ignored/, /DnsOverHttpsMode: .*older platform policy/, /SomeRetiredPolicy: .*deprecated/, /SomeFuturePolicy: .*future/, /ProxyPacUrl: .*overrides a mandatory machine-level value from platform \(http:\/\/old\.corp\.example\.com/, /MaxConnectionsPerProxy: .*supersedes another value for this policy: a recommended user-level value from platform \(16\)/, /MaxConnectionsPerProxy: .*restart/]) {
       assert.equal(list.filter(t => expected.test(t)).length, 1, String(expected));
     }
     assert.equal(list.filter(t => /^ProxyMode:/.test(t)).length, 0, "a cleanly merged policy adds no note");
@@ -261,5 +262,31 @@ describe("sample export", () => {
     assert.ok(result.deprecated.length >= 1);
     assert.match(JSON.stringify(sample), /example\.(com|test)/);
     assert.doesNotMatch(JSON.stringify(sample.policyValues), /[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/, "no IP addresses in the policies");
+  });
+});
+
+// Real chrome://policy "Copy as JSON" output from Chrome with managed policies set on disposable CI runners (gitignored).
+describe("real managed exports (only when recorded locally)", () => {
+  const load = (file) => JSON.parse(readFileSync(file, "utf8"));
+  it("Linux Chrome 153: reads errors and deprecation flags exactly as the browser wrote them", { skip: !existsSync("captures/real-managed-linux-chrome.json") }, () => {
+    const norm = engine.normalize(load("captures/real-managed-linux-chrome.json"));
+    assert.equal(norm.ok, true);
+    assert.equal(norm.meta.browser, "chrome");
+    const result = engine.evaluate(norm, {}, POLICY_CATALOG, CATALOG_REVIEWED);
+    const notes = result.notes.filter(n => n.kind === "reported").map(n => `${n.name}: ${n.text}`);
+    assert.ok(notes.includes("MaxConnectionsPerProxy: The browser reports an error: Expected integer value."));
+    assert.ok(notes.includes("NotARealPolicy: The browser reports an error: Unknown policy."));
+    assert.ok(result.deprecated.some(d => d.name === "ProxyMode"));
+    assert.ok(notes.some(n => /^ProxyPacUrl: .*deprecated/.test(n)), "flagged by the browser, not listed as deprecated for Chrome in the catalog");
+    assert.equal(result.rows.find(r => r.name === "ProxyMode")?.level, "mandatory");
+  });
+  it("Windows Chrome: names the conflicting user-level values it overrides", { skip: !existsSync("captures/real-managed-windows-chrome.json") }, () => {
+    const norm = engine.normalize(load("captures/real-managed-windows-chrome.json"));
+    assert.equal(norm.ok, true);
+    assert.match(norm.meta.os, /Windows/);
+    const result = engine.evaluate(norm, {}, POLICY_CATALOG, CATALOG_REVIEWED);
+    const notes = result.notes.filter(n => n.kind === "reported").map(n => `${n.name}: ${n.text}`);
+    assert.ok(notes.some(n => /^DnsOverHttpsMode: Another source also sets this policy\. This value overrides a mandatory user-level value from platform \(off\)/.test(n)), notes.join("\n"));
+    assert.ok(notes.some(n => /^MaxConnectionsPerProxy: .*overrides a mandatory user-level value from platform \(8\)/.test(n)));
   });
 });
