@@ -13,10 +13,12 @@
     "build:viewer": "node scripts/build-viewer.mjs",
     "demo": "node scripts/demo-report.mjs",
     "generate:theme": "node scripts/generate-theme.mjs",
-    "verify": "npm test && node scripts/generate-theme.mjs --check",
+    "generate:tools": "node scripts/generate-tools.mjs",
+    "verify": "npm test && node scripts/generate-theme.mjs --check && node scripts/generate-tools.mjs --check",
     "check:policy-links": "node scripts/check-policy-links.mjs",
     "audit:redaction": "node scripts/audit-redaction.mjs",
-    "test:browser": "node scripts/browser-smoke.mjs"
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "check:helper": "node scripts/check-helper-output.mjs"
   },
   "keywords": [
     "netlog",
