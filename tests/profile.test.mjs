@@ -70,6 +70,32 @@ describe("joining a profile to a NetLog", () => {
     assert.ok(out.mainThread.longTaskCount >= 1, "the findings themselves still stand");
   });
 
+  describe("when no request is shared but the files share the browser clock", () => {
+    const nav = summary.page.navTsMs;
+    const mk = (firstTime, lastTime, url = "https://portal.example.com/other") => ({ requests: [{ id: 1, method: "GET", url, start: 0 }], environment: {}, diagnostics: { firstTime, lastTime } });
+    it("places the profile by the clock when it starts inside the capture and its site is in it", () => {
+      const out = joinProfile(mk(nav - 500, nav + 6000), summary);
+      assert.equal(out.alignment.aligned, true);
+      assert.equal(out.alignment.method, "clock");
+      assert.equal(out.alignment.matched, 0);
+      assert.equal(Math.round(out.page.startAt), 500);
+      assert.ok(out.milestones.length > 0 && out.milestones.every(x => x.atMs >= 500));
+      assert.equal(out.perRequest.size, 0, "per-request details need matching requests");
+      assert.match(profileEvidenceText(out), /shared clock/);
+    });
+    it("refuses when the profile starts outside the capture (recorded in a different run)", () => {
+      assert.equal(joinProfile(mk(nav + 10 * 60000, nav + 11 * 60000), summary).alignment.aligned, false);
+      assert.equal(joinProfile(mk(nav - 60000, nav - 30000), summary).alignment.aligned, false);
+    });
+    it("refuses when the profile's site is not in the capture, even if the times overlap", () => {
+      assert.equal(joinProfile(mk(nav - 500, nav + 6000, "https://elsewhere.example.net/"), summary).alignment.aligned, false);
+    });
+    it("prefers shared requests over the clock", () => {
+      const withShared = { ...model, diagnostics: { firstTime: 0, lastTime: 1e12 } };
+      assert.equal(joinProfile(withShared, summary).alignment.method, "requests");
+    });
+  });
+
   it("returns nothing for a file that is not a profile", () => {
     assert.equal(joinProfile(model, { recognized: false }), null);
     assert.equal(joinProfile(model, null), null);

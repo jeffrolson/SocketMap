@@ -51,9 +51,11 @@ export function renderProfilePanel(profile, requests = null) {
   const maxScript = Math.max(1, ...scripts.slice(0, 8).map(s => s.totalMs));
   const longest = [...(t.longTasks || [])].sort((x, y) => y.durMs - x.durMs).slice(0, 8).sort((x, y) => x.startMs - y.startMs);
   const maxTask = Math.max(1, ...longest.map(task => task.durMs));
-  const placed = alignment.aligned
+  const placed = alignment.aligned && alignment.method === "clock"
+    ? "Placed on the network timeline by the browser's shared clock: no request appears in both files, but the profile starts inside this capture and its site appears in it, so both were recorded in one browser session. The main-thread band and paint lines on the waterfall come from that. Per-request script details need matching requests, so they are not shown."
+    : alignment.aligned
     ? `Placed on the network timeline using ${alignment.matched} request${alignment.matched === 1 ? "" : "s"} both files recorded (${alignment.within50} agree within 50 ms). The main-thread band and paint lines on the waterfall come from that.`
-    : "Not lined up with the network: no request appears in both files, so page code cannot be matched to individual requests. The findings here stand on their own.";
+    : "Not lined up with the network: no request appears in both files and their clocks do not overlap, so page code cannot be matched to individual requests. The findings here stand on their own.";
   return `<section class="card prf" id="profile"><header><h2>What the page's code was doing</h2><p class="note">From a DevTools Performance profile recorded alongside this capture. It shows the page's main thread, not the network. It is not proof of a cause: a script started by another script can be attributed to the wrong file.</p></header>
 <div class="prf-tiles">
 <div class="prf-tile"><div class="prf-ring" style="--pct:${pct}" role="img" aria-label="Main thread busy ${pct} percent until load"><b>${pct}%</b></div><h3>Main thread busy until load</h3><p>${esc(dur(t.loadBusyMs))} of the first ${esc(dur(t.loadWindowMs))}. The page cannot respond or paint while it is busy.</p></div>

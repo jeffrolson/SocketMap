@@ -3,7 +3,10 @@
  * trace-stream) on the NetLog's timeline. A profile's clock is not the NetLog's, so the two
  * are aligned from the requests they both recorded (method plus URL, paired in time order):
  * the median difference in start time is the offset. Nothing is assumed about the clocks.
- * If no request is shared, nothing is placed and the profile's own findings stand alone.
+ * If no request is shared, the two files may still share Chrome's monotonic clock (true when
+ * recorded in one browser session, shown on a real pair); that is used only when the profile's
+ * navigation falls inside the capture's time span and its page host appears in the capture.
+ * Otherwise nothing is placed and the profile's own findings stand alone.
  *
  * No Node APIs: runs in the browser viewer as well.
  */
@@ -18,6 +21,8 @@ function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 }
+
+const hostOf = (url) => { try { return new URL(url).host; } catch { return null; } };
 
 const secs = (value) => value == null ? "not recorded" : `${(value / 1000).toFixed(2)} s`;
 const ms = (value) => value == null ? "not recorded" : `${Math.round(value)} ms`;
@@ -54,7 +59,18 @@ export function joinProfile(model, trace) {
     kept = pairs.filter(p => Math.abs((p.net.start ?? 0) - p.trace.tsMs - offset) <= OUTLIER_MS);
     offset = median(kept.map(p => (p.net.start ?? 0) - p.trace.tsMs));
   }
-  const aligned = offset != null && kept.length > 0;
+  let method = "requests";
+  let aligned = offset != null && kept.length > 0;
+  if (!aligned) {
+    // Fallback: the shared browser clock. NetLog event times and trace timestamps are both Chrome ticks.
+    const first = model?.diagnostics?.firstTime;
+    const last = model?.diagnostics?.lastTime;
+    const nav = trace.page.navTsMs;
+    const host = hostOf(trace.page.url);
+    const inSpan = typeof first === "number" && typeof last === "number" && typeof nav === "number" && nav >= first - 1000 && nav <= last + 1000;
+    const sameSite = host != null && netRequests.some(r => hostOf(r.url) === host);
+    if (inSpan && sameSite) { offset = -first; kept = []; aligned = true; method = "clock"; }
+  }
   const deviations = kept.map(p => Math.abs((p.net.start ?? 0) - p.trace.tsMs - offset));
   const toNet = (traceMs) => traceMs + offset;
 
@@ -73,7 +89,7 @@ export function joinProfile(model, trace) {
     source: { eventCount: trace.eventCount ?? null, integrity: trace.integrity || null, capturedAt: trace.environment?.capturedAt ?? null },
     alignment: {
       aligned,
-      method: "requests",
+      method,
       matched: kept.length,
       traceRequests: traceRequests.length,
       offsetMs: aligned ? offset : null,
@@ -96,7 +112,7 @@ export function profileEvidenceText(profile) {
   if (!profile) return "";
   const { metrics: m, mainThread: t, scripts, environment: env, alignment } = profile;
   const lines = ["PERFORMANCE PROFILE (a DevTools Performance recording read alongside this NetLog; it describes what the page's code and rendering did, and does not prove a cause)"];
-  lines.push(alignment.aligned ? `Placed on the network timeline using ${alignment.matched} requests both files recorded (${alignment.within50} agree within 50 ms).` : "Not placed on the network timeline: no request was recorded by both files, so page code cannot be lined up with individual requests.");
+  lines.push(alignment.aligned ? (alignment.method === "clock" ? "Placed on the network timeline by the browser's shared clock (no request was recorded by both files; the profile's start falls inside the capture and its site appears in it)." : `Placed on the network timeline using ${alignment.matched} requests both files recorded (${alignment.within50} agree within 50 ms).`) : "Not placed on the network timeline: no request was recorded by both files and the two files do not share a clock, so page code cannot be lined up with individual requests.");
   lines.push(`Milestones after navigation start: first contentful paint ${secs(m.fcpMs)}, largest contentful paint ${secs(m.lcpMs)}${m.lcpType ? ` (${m.lcpType})` : ""}, DOMContentLoaded ${secs(m.domContentLoadedMs)}, load ${secs(m.loadMs)}; layout shift score ${m.layoutShiftScore == null ? "not recorded" : m.layoutShiftScore.toFixed(3)}. Responsiveness (INP) needs interaction and is not in a load profile.`);
   lines.push(`Main thread: busy ${ms(t.loadBusyMs)} of the first ${secs(t.loadWindowMs)} (until load); ${t.longTaskCount} long task(s) over 50 ms, ${ms(t.blockingMs)} beyond that threshold; longest ${ms(t.longestMs)}.`);
   for (const task of (t.longTasks || []).slice(0, 5)) lines.push(`- long task ${ms(task.durMs)} at +${secs(task.startMs)}: ${task.top.length ? task.top.map(s => `${fileOf(s.url)} ${ms(s.ms)}`).join(", ") : "no script recorded"}${task.layoutMs > 5 ? `, layout ${ms(task.layoutMs)}` : ""}`);
