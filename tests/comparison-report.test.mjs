@@ -26,6 +26,16 @@ const comparison = {
 };
 
 describe("comparison report", () => {
+  it("calls a few milliseconds the same, and larger changes faster or slower", () => {
+    const withMetrics = (metrics) => (renderComparisonHtml({ ...comparison, metrics }).match(/<article class="metric">[\s\S]*?<\/article>/) || [""])[0];
+    const noise = withMetrics([{ key: "median-server-wait", label: "Median server wait", unit: "ms", a: 14, b: 12, delta: -2, percent: -14.3, coverageA: 1, coverageB: 1 }]);
+    assert.ok(noise.includes("about the same") && !noise.includes("faster") && noise.includes("delta similar"));
+    const real = withMetrics([{ key: "median-server-wait", label: "Median server wait", unit: "ms", a: 140, b: 40, delta: -100, percent: -71, coverageA: 1, coverageB: 1 }]);
+    assert.ok(real.includes("faster") && !real.includes("about the same"));
+    const boundary = withMetrics([{ key: "x", label: "X", unit: "ms", a: 100, b: 110, delta: 10, percent: 10, coverageA: 1, coverageB: 1 }]);
+    assert.ok(boundary.includes("slower"), "10 ms is the first difference that counts");
+  });
+
   it("is a self-contained accessible comparison with direction and unknown values", () => {
     const html = renderComparisonHtml(comparison);
     assert.ok(html.startsWith("<!doctype html>"));
@@ -70,5 +80,24 @@ describe("comparison report", () => {
     assert.ok(html.includes("&lt;img src=x onerror=alert(1)&gt;"));
     assert.ok(!html.includes('<img src=x onerror=alert(1)>'));
     assert.ok(!html.includes('</script><img src=x onerror=alert(1)>'));
+  });
+});
+
+// Local validation against two genuinely recorded loads of one page, the second with emulated slow network (gitignored).
+import { existsSync } from "node:fs";
+import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
+import { buildComparison } from "../src/viewer/viewer-core.mjs";
+import { selectPageSite } from "../src/analysis.mjs";
+describe("real A/B pair (only when recorded locally)", () => {
+  it("shows a slow network as a big span and duration change with server wait about the same", { skip: !existsSync("captures/ab-a-netlog.json") || !existsSync("captures/ab-b-netlog.json") }, async () => {
+    const a = await parseNetLog("captures/ab-a-netlog.json");
+    const b = await parseNetLog("captures/ab-b-netlog.json");
+    const out = buildComparison(a, b, { siteA: selectPageSite(a), siteB: selectPageSite(b), sourceA: { name: "a.json", bytes: 1 }, sourceB: { name: "b.json", bytes: 1 } });
+    const metric = (key) => out.comparison.metrics.find(m => m.key === key);
+    assert.ok(metric("observed-span").b > 3 * metric("observed-span").a, "the throttled load took much longer");
+    assert.ok(metric("median-duration").b > 5 * metric("median-duration").a);
+    assert.ok(Math.abs(metric("median-server-wait").delta) < 20, "the server did not get slower");
+    assert.ok(out.comparison.counts.matched > 20);
+    assert.ok(out.html.length > 50000);
   });
 });

@@ -54,12 +54,16 @@ function sourceCard(label, data, observedSpan) {
   </article>`;
 }
 
+const NOISE_MS = 10;
+
 function metric(metric) {
   const timing = metric.unit === "ms";
-  const direction = timing && metric.delta != null ? (metric.delta < 0 ? "faster" : metric.delta > 0 ? "slower" : "unchanged") : "changed";
+  // A few milliseconds is measurement noise between two loads, not a change worth colouring.
+  const withinNoise = timing && metric.delta != null && Math.abs(metric.delta) < NOISE_MS;
+  const direction = timing && metric.delta != null ? (withinNoise ? "similar" : metric.delta < 0 ? "faster" : metric.delta > 0 ? "slower" : "unchanged") : "changed";
   const detail = metric.percent == null ? "" : ` (${metric.percent > 0 ? "+" : ""}${metric.percent.toFixed(1)}%)`;
   const coverage = metric.coverageA == null && metric.coverageB == null ? "" : `<span class="coverage">Observed: ${Math.round((metric.coverageA || 0) * 100)}% A · ${Math.round((metric.coverageB || 0) * 100)}% B</span>`;
-  return `<article class="metric"><span>${esc(metric.label)}</span><strong>${esc(number(metric.a, metric.unit))} <i>→</i> ${esc(number(metric.b, metric.unit))}</strong><b class="delta ${direction}">${esc(signed(metric.delta, metric.unit))}${esc(detail)}${timing && metric.delta != null ? ` ${direction}` : ""}</b>${coverage}</article>`;
+  return `<article class="metric"><span>${esc(metric.label)}</span><strong>${esc(number(metric.a, metric.unit))} <i>→</i> ${esc(number(metric.b, metric.unit))}</strong><b class="delta ${direction}">${esc(signed(metric.delta, metric.unit))}${esc(detail)}${timing && metric.delta != null ? (withinNoise ? " (about the same)" : ` ${direction}`) : ""}</b>${coverage}</article>`;
 }
 
 function phaseDetail(request, label) {
