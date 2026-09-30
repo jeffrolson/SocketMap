@@ -345,13 +345,13 @@ ${themePreferenceScript()}
         <li><strong>2. Load the page</strong><br>Use another tab while logging.</li>
         <li><strong>3. Stop Logging</strong><br>Drop the saved file below.</li>
       </ol>
-      <p class="optional-har">Optional: record a HAR (DevTools, Network tab, Export HAR sanitized) and a Performance profile (DevTools, Performance tab, record while reloading, Save profile) at the same time. Drop them with the NetLog, or use Add a HAR and Add a profile once the report opens, to see which script asked for each request, what came from cache, and what the page's code was doing. They are read here and never uploaded. A small helper script can also record this computer's Wi-Fi signal, DNS, proxy settings and the route to each host; the report shows how to run it once your capture is open.</p>
+      <p class="optional-har">Optional: record a HAR (DevTools, Network tab, Export HAR sanitized) and a Performance profile (DevTools, Performance tab, record while reloading, Save profile) at the same time. Drop them with the NetLog, or use Add a HAR and Add a profile once the report opens, to see which script asked for each request, what came from cache, and what the page's code was doing. A HAR on its own also opens the report, with everything a HAR cannot record shown as not recorded. They are read here and never uploaded. A small helper script can also record this computer's Wi-Fi signal, DNS, proxy settings and the route to each host; the report shows how to run it once your capture is open.</p>
       <div id="drop" class="drop" role="button" tabindex="0" aria-label="Choose a NetLog capture file">
         ${shellIcon("upload", 28)}
         <strong>Drop a NetLog capture here</strong>
         <span>or click to choose the file (chrome-net-export-log.json)</span>
       </div>
-      <input type="file" id="file-input" accept=".json,application/json" multiple hidden>
+      <input type="file" id="file-input" accept=".json,.har,application/json" multiple hidden>
       <p class="comparison-entry"><button type="button" id="compare-files">Compare two captures</button>Choose or drop two NetLog files. First file is A (baseline), second is B (comparison). You can swap them.</p>
       <div class="hero-actions">
         <button type="button" data-open-sample>${shellIcon("play", 14)}No capture yet? Try the sample</button>

@@ -12,7 +12,7 @@
  * No Node APIs: runs in the browser viewer as well.
  */
 
-import { redactUrl } from "../redact.mjs";
+import { redactUrl, redactHeaderLines } from "../redact.mjs";
 
 const MAX_FIELD = 200;
 
@@ -42,8 +42,25 @@ function readInitiator(raw) {
   return { type };
 }
 
-/** Reduces one raw HAR entry to the small set of fields SocketMap uses, or null. */
-export function summarizeHarEntry(raw) {
+const MAX_HEADERS = 80;
+const MAX_HEADER_LINE = 500;
+
+/** Response headers as "name: value" lines with credentials masked. Only kept when the HAR is the main input. */
+function readResponseHeaders(response) {
+  const list = Array.isArray(response?.headers) ? response.headers : [];
+  const lines = [];
+  for (const header of list.slice(0, MAX_HEADERS)) {
+    if (!header || typeof header.name !== "string" || typeof header.value !== "string") continue;
+    lines.push(`${header.name}: ${header.value}`.slice(0, MAX_HEADER_LINE));
+  }
+  return redactHeaderLines(lines);
+}
+
+/**
+ * Reduces one raw HAR entry to the small set of fields SocketMap uses, or null.
+ * keepHeaders: also keep the response header lines (credentials masked); off when the HAR only enriches a NetLog.
+ */
+export function summarizeHarEntry(raw, { keepHeaders = false } = {}) {
   if (!raw || typeof raw !== "object") return null;
   const request = raw.request || {};
   const response = raw.response || {};
@@ -52,7 +69,8 @@ export function summarizeHarEntry(raw) {
   const worker = num(timings._workerStart);
   const version = text(response.httpVersion, 16);
   const cache = text(raw._fromCache, 16);
-  return {
+  const summary = {
+    pageref: text(raw.pageref, 40),
     method: text(request.method, 16),
     url: safeUrl(request.url, 8000),
     startedMs: Number.isFinite(started) ? started : null,
@@ -76,6 +94,8 @@ export function summarizeHarEntry(raw) {
       ssl: duration(timings.ssl), send: duration(timings.send), wait: duration(timings.wait), receive: duration(timings.receive)
     }
   };
+  if (keepHeaders) summary.responseHeaders = readResponseHeaders(response);
+  return summary;
 }
 
 function summarizePage(raw) {
@@ -211,7 +231,7 @@ export function createHarTokenizer({ onEntry, onPage, onMeta, onEntriesStart } =
 }
 
 /** Incremental reader: write() text chunks, then finish() for the bounded summary. */
-export function createHarReader({ maxEntries = 20000 } = {}) {
+export function createHarReader({ maxEntries = 20000, keepHeaders = false } = {}) {
   const entries = [];
   const pages = [];
   const meta = {};
@@ -222,7 +242,7 @@ export function createHarReader({ maxEntries = 20000 } = {}) {
     onEntry: (raw) => {
       entryCount++;
       if (entries.length >= maxEntries) return;
-      const summary = summarizeHarEntry(raw);
+      const summary = summarizeHarEntry(raw, { keepHeaders });
       if (summary) entries.push(summary);
     },
     onPage: (raw) => { const page = summarizePage(raw); if (page) pages.push(page); },

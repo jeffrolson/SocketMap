@@ -128,7 +128,8 @@ describe("CLI Integration Tests", () => {
     assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--path", "/no/such/path.json", "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /Network path file not found/);
     writeFileSync(tempPath, '{"hello":1}');
     assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--path", tempPath, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like the output of the SocketMap network path helper/);
-    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--path", tempPath, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--diagram", "--path", tempPath, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--path", tempPath, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like the output of the SocketMap network path helper/, "a HAR now accepts the file, and still checks it");
   });
 
   it("explains --profile problems instead of failing quietly", () => {
@@ -136,7 +137,7 @@ describe("CLI Integration Tests", () => {
     assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--profile", "/no/such/trace.json", "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /Profile file not found/);
     writeFileSync(tempTrace, '{"events":[]}');
     assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--profile", tempTrace, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like a DevTools Performance profile/);
-    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--profile", tempTrace, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--diagram", "--profile", tempTrace, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
   });
 
   it("explains --har problems instead of failing quietly", () => {
@@ -144,7 +145,7 @@ describe("CLI Integration Tests", () => {
     assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--har", "/no/such/file.har", "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /HAR file not found/);
     writeFileSync(tempHar, '{"events":[]}');
     assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--har", tempHar, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like a HAR/);
-    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--har", tempHar, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--har", tempHar, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /already a HAR/);
   });
 
   it("should report on a chosen page with --page", () => {
@@ -153,8 +154,17 @@ describe("CLI Integration Tests", () => {
     assert.ok(out.includes("chrome-extension://abcdefghijklmnop"));
   });
 
-  it("should generate diagram from HAR fixture", () => {
-    execFileSync(process.execPath, [cliPath, fixtureHar, "-o", testOutHar], { encoding: "utf8" });
+  it("opens a HAR on its own in the full report, with unrecorded things marked as such", () => {
+    const out = execFileSync(process.execPath, [cliPath, fixtureHar, "-o", testOutHar], { encoding: "utf8" });
+    assert.match(out, /Detected a HAR/);
+    const content = readFileSync(testOutHar, "utf8");
+    assert.ok(!content.includes("HAR Network Trace"), "not the older diagram");
+    assert.ok(content.includes('id="view-waterfall"') && content.includes("api.socketmap.io"));
+    assert.ok(content.includes("built from a HAR"), "the report says where it came from");
+  });
+
+  it("should generate diagram from HAR fixture with --diagram", () => {
+    execFileSync(process.execPath, [cliPath, fixtureHar, "--diagram", "-o", testOutHar], { encoding: "utf8" });
     assert.ok(existsSync(testOutHar));
 
     const content = readFileSync(testOutHar, "utf8");

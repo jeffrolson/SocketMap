@@ -17,6 +17,8 @@ import { readHarEnrichment, readTraceProfile } from "../src/parsers/generic-pars
 import { attachHar } from "../src/enrichment.mjs";
 import { attachProfile } from "../src/profile.mjs";
 import { readPathFile, attachPath } from "../src/path.mjs";
+import { buildCaptureFromHar } from "../src/har-capture.mjs";
+import { looksLikeHar } from "../src/viewer/viewer-core.mjs";
 import { parseGenericTrace } from "../src/parsers/generic-parser.mjs";
 import { normalizeTrace } from "../src/normalizer.mjs";
 import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
@@ -38,11 +40,12 @@ Transform network traces into interactive, self-contained sequence diagrams.
 \x1b[1mOPTIONS:\x1b[0m
   -o, --output <file>    Target output HTML file path (default: ./trace-diagram.html)
   --filter <regex>       Filter requests by URL or method pattern
-  --page <site>          NetLog only: analyze this site (e.g. https://contoso.sharepoint.com)
-  --theme <DESIGN.md>    NetLog only: style the report with another design.md theme
+  --page <site>          NetLog or HAR: analyze this site (e.g. https://contoso.sharepoint.com)
+  --theme <DESIGN.md>    NetLog or HAR: style the report with another design.md theme
   --har <file>           NetLog only: also read a HAR exported from DevTools (script, type and cache detail)
-  --profile <file>       NetLog only: also read a DevTools Performance profile, .json or .json.gz (page code and paint)
-  --path <file>          NetLog only: also read the file written by tools/socketmap-path.sh or .ps1 (link, DNS, proxy, route, curl timing)
+  --diagram              HAR only: draw the older sequence diagram instead of the report
+  --profile <file>       NetLog or HAR: also read a DevTools Performance profile, .json or .json.gz (page code and paint)
+  --path <file>          NetLog or HAR: also read the file written by tools/socketmap-path.sh or .ps1 (link, DNS, proxy, route, curl timing)
   --sample               Generate an interactive demo diagram using rich synthetic data
   --open                 Automatically open the generated visual in your default browser
   -h, --help             Show this help message and exit
@@ -96,6 +99,19 @@ function isNetLogFile(filePath) {
   }
 }
 
+/** True when the first bytes look like a HAR (and not a NetLog). */
+function isHarFile(filePath) {
+  try {
+    const fd = openSync(filePath, "r");
+    const buf = Buffer.alloc(4096);
+    const bytesRead = readSync(fd, buf, 0, 4096, 0);
+    closeSync(fd);
+    return looksLikeHar(buf.toString("utf8", 0, bytesRead));
+  } catch {
+    return false;
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -115,6 +131,7 @@ async function main() {
   let page = null;
   let themePath = null;
   let harPath = null;
+  let diagram = false;
   let profilePath = null;
   let pathFile = null;
   let openAfter = false;
@@ -136,6 +153,8 @@ async function main() {
       themePath = args[++i];
     } else if (arg === "--har") {
       harPath = args[++i];
+    } else if (arg === "--diagram") {
+      diagram = true;
     } else if (arg === "--profile") {
       profilePath = args[++i];
     } else if (arg === "--path") {
@@ -166,9 +185,26 @@ async function main() {
 
     console.log(`\x1b[36m● [SocketMap]\x1b[0m Ingesting trace: ${resolvedInput}...`);
 
-    if (isNetLogFile(resolvedInput)) {
-      console.log("\x1b[35m● [Parser]\x1b[0m Detected Chromium NetLog format. Streaming events...");
-      const model = await parseNetLog(resolvedInput, { filter });
+    const netlogInput = isNetLogFile(resolvedInput);
+    const harInput = !netlogInput && !diagram && isHarFile(resolvedInput);
+    if (netlogInput || harInput) {
+      let model;
+      if (netlogInput) {
+        console.log("\x1b[35m● [Parser]\x1b[0m Detected Chromium NetLog format. Streaming events...");
+        model = await parseNetLog(resolvedInput, { filter });
+      } else {
+        if (harPath) {
+          console.error("\x1b[31m[Error]\x1b[0m --har adds a HAR to a NetLog, and this input is already a HAR. Give the NetLog as the main input, or drop --har.");
+          process.exit(1);
+        }
+        console.log("\x1b[35m● [Parser]\x1b[0m Detected a HAR. Streaming entries (bodies and cookies are never read; response headers are kept with credentials masked)...");
+        model = buildCaptureFromHar(await readHarEnrichment(resolvedInput, { keepHeaders: true }), { name: basename(resolvedInput) });
+        if (!model) {
+          console.error("\x1b[31m[Error]\x1b[0m That file does not look like a HAR. In DevTools, open the Network tab and choose Export HAR (sanitized).");
+          process.exit(1);
+        }
+        console.log(`\x1b[32m● [HAR]\x1b[0m ${model.requests.length} requests. A HAR does not record proxy decisions, certificates or browser diagnostics; the report shows those as not recorded.`);
+      }
       if (harPath) {
         const resolvedHar = resolve(harPath);
         if (!existsSync(resolvedHar)) {
@@ -221,7 +257,7 @@ async function main() {
       htmlOutput = renderReportHtml(model, analysis, theme ? { theme, source } : { source });
     } else {
       if (harPath || profilePath || pathFile) {
-        console.error(`\x1b[31m[Error]\x1b[0m ${harPath ? "--har" : profilePath ? "--profile" : "--path"} needs a Chromium NetLog as the main input. A HAR on its own opens as a diagram without it.`);
+        console.error(`\x1b[31m[Error]\x1b[0m ${harPath ? "--har" : profilePath ? "--profile" : "--path"} needs a Chromium NetLog (or, for --profile and --path, a HAR) as the main input. This input opens as a diagram, which does not take extra files.`);
         process.exit(1);
       }
       console.log("\x1b[35m● [Parser]\x1b[0m Ingesting generic/HAR/trace JSON...");

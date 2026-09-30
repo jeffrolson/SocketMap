@@ -519,6 +519,8 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   const enrichment = model.enrichment || null;
   const profile = model.profile || null;
   const pathData = model.path || null;
+  const fromHar = model.source?.kind === "har";
+  const harNote = (what) => `<section class="card"><p class="note">This report was built from a HAR. ${what} A HAR records what DevTools saw for each request; for browser-wide evidence, record a NetLog with chrome://net-export or edge://net-export.</p></section>`;
   const connections = new Map(model.connections.map(c => [c.id, c]));
   const { page } = analysis;
   const high = analysis.findings.filter(f => f.severity === "high").length;
@@ -802,7 +804,7 @@ ${themePreferenceScript()}
 <body>
 <nav class="sidebar" aria-label="Report sections">
   <div class="brand">${icon("logo", 20)}SocketMap</div>
-  ${NAV.map(([target, iconName, label]) => `<a href="#${target}" data-nav="${target}">${icon(iconName)}${esc(label)}</a>`).join("\n  ")}
+  ${NAV.filter(([target]) => !(fromHar && (target === "diagnostics" || target === "event-replay"))).map(([target, iconName, label]) => `<a href="#${target}" data-nav="${target}">${icon(iconName)}${esc(label)}</a>`).join("\n  ")}
   <div class="side-box">
     <p class="sub">This capture</p>
     <div><span>Page requests</span><strong>${page.requestCount}</strong></div>
@@ -851,6 +853,7 @@ ${themePreferenceScript()}
       ${renderSequence(view, page, analysis)}
     </div>
     <div class="view" id="view-environment" data-view="environment">
+      ${fromHar ? harNote("Browser version, operating system, proxy and DNS settings are not in it, so they show as not recorded.") : ""}
       ${renderEnvironment(env)}
       <section id="other" class="card">
         <h2>Other activity in this capture</h2>
@@ -862,8 +865,8 @@ ${themePreferenceScript()}
     </div>
     <div class="view" id="view-policy" data-view="policy">${renderPolicyView()}</div>
     <div class="view" id="view-coverage" data-view="coverage">${renderCoverage(buildCoverage(model))}</div>
-    <div class="view" id="view-diagnostics" data-view="diagnostics">${renderDiagnostics(model)}</div>
-    <div class="view" id="view-events" data-view="event-replay">${eventReplayMarkup()}</div>
+    <div class="view" id="view-diagnostics" data-view="diagnostics">${fromHar ? harNote("There are no browser diagnostics to show.") : ""}${renderDiagnostics(model)}</div>
+    <div class="view" id="view-events" data-view="event-replay">${fromHar ? harNote("There are no events to replay.") : ""}${eventReplayMarkup()}</div>
     <div class="view" id="view-ai" data-view="ai-summary">
       <section id="ai-summary" class="card">
         <h2>AI summary</h2>
@@ -877,7 +880,7 @@ ${themePreferenceScript()}
     </div>
   </main>
   <footer class="statusbar">
-    <span class="done-dot" aria-hidden="true"></span><strong>${model.stats.events.toLocaleString("en-US")} events read</strong>
+    <span class="done-dot" aria-hidden="true"></span><strong>${fromHar ? `${model.requests.length.toLocaleString("en-US")} requests read from a HAR` : `${model.stats.events.toLocaleString("en-US")} events read`}</strong>
     <span>${model.requests.length} requests in capture</span>
     <span>${page.requestCount} on this page</span>
     <span>${page.hostCount} hosts</span>

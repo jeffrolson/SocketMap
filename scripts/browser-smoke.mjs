@@ -150,6 +150,16 @@ async function main() {
     check(await waitFor(frame("d => !!d.querySelector('#path')"), "the network path panel", 15000), "the helper's file loads with the others and shows its panel");
     check(await evaluate(frame("d => !!d.querySelector('#profile') && !d.querySelector('#path-prompt')")), "all three optional files are shown together");
 
+    // 4. A HAR on its own opens the report; a profile can then be added to it
+    await send("Page.navigate", { url: pathToFileURL(viewer).href });
+    await waitFor("document.readyState === 'complete'", "the viewer to reload for the HAR-only check");
+    await setFiles("#file-input", [files.har]);
+    check(await waitFor(frame("d => !!d.querySelector('#view-waterfall') && /built from a HAR/.test(d.body.textContent)"), "the HAR-only report", 30000), "a HAR on its own opens the full report");
+    check(await evaluate(frame("d => !d.querySelector('[data-nav=diagnostics]') && !!d.querySelector('[data-nav=coverage]')")), "the HAR report hides the NetLog-only tabs and keeps Coverage");
+    check(await evaluate("document.getElementById('add-har').hidden === true"), "the viewer does not offer to add a HAR to a HAR");
+    await setFiles("#profile-input", [files.profile]);
+    check(await waitFor(frame("d => !!d.querySelector('#profile')"), "a profile added to the HAR report", 20000), "a profile can be added to a HAR-based report");
+
     check(errors.length === 0, `no uncaught page errors${errors.length ? `: ${errors[0]}` : ""}`);
     const outside = requests.filter(url => !/^(file|data|blob|about):/i.test(url));
     check(outside.length === 0, `no requests outside the local file${outside.length ? `: ${outside[0]}` : ""}`);

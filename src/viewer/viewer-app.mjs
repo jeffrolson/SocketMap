@@ -12,6 +12,7 @@ import { buildSamplePath } from "../demo/sample-path.mjs";
 import { buildSampleTrace } from "../demo/sample-trace.mjs";
 import { createHarReader } from "../parsers/har-stream.mjs";
 import { attachHar } from "../enrichment.mjs";
+import { buildCaptureFromHar } from "../har-capture.mjs";
 import { buildSampleHar } from "../demo/sample-har.mjs";
 import { buildPageLoadNetLog, toNetLogText } from "../demo/sample-capture.mjs";
 import { selectPageSite } from "../analysis.mjs";
@@ -63,8 +64,8 @@ async function readCapture(file, onProgress, constants = null) {
     ? readCapture(file, onProgress, model.diagnostics.constants) : model;
 }
 
-async function readHar(file, onProgress) {
-  const reader = createHarReader();
+async function readHar(file, onProgress, options = {}) {
+  const reader = createHarReader(options);
   const decoder = new TextDecoder();
   const stream = file.stream().getReader();
   let read = 0;
@@ -226,7 +227,7 @@ function init() {
     $("save-report").textContent = nextView === "comparison" ? "Save comparison" : "Save report";
     for (const name of ["comparison", "a", "b"]) $("view-" + name).setAttribute("aria-pressed", String(view === name));
     fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}${a.profile ? ` + profile ${a.profile.name}` : ""}${a.path ? ` + path ${a.path.name}` : ""}`;
-    $("add-har").hidden = nextView === "comparison" || nextView === "b";
+    $("add-har").hidden = nextView === "comparison" || nextView === "b" || a.model.source?.kind === "har";
     $("add-har").textContent = a.har ? "Replace HAR" : "Add a HAR";
     $("add-profile").hidden = $("add-har").hidden;
     $("add-path").hidden = $("add-har").hidden;
@@ -255,8 +256,38 @@ function init() {
   }
 
   // A HAR adds detail to the first capture. It is read here, matched, and never uploaded.
+  // A HAR on its own opens the same report, built from what the HAR recorded. Read here, never uploaded.
+  async function openHarCapture(file) {
+    setLoading(true);
+    error.hidden = true;
+    $("dismiss-error").hidden = true;
+    $("load-feedback").hidden = false;
+    progress.hidden = false;
+    try {
+      const name = redactCapturedText(file.name);
+      bar.style.width = "0%";
+      progressText.textContent = `Reading HAR: ${name}...`;
+      const har = await readHar(file, (read, total) => {
+        bar.style.width = `${Math.min(100, (read / Math.max(1, total)) * 100).toFixed(1)}%`;
+        progressText.textContent = `Reading HAR: ${name}, ${formatMb(read)} of ${formatMb(total)}`;
+      }, { keepHeaders: true });
+      const model = buildCaptureFromHar(har, { name });
+      if (!model) throw new Error("That file does not look like a HAR. In DevTools, open the Network tab and choose Export HAR (sanitized).");
+      progressText.textContent = "Building the report...";
+      await new Promise(resolve => setTimeout(resolve, 0));
+      show([{ model, source: { name, bytes: file.size }, site: selectPageSite(model), file: null }], "a");
+      $("load-feedback").hidden = true;
+      window.scrollTo(0, 0);
+    } catch (err) {
+      showError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function addHar(file) {
     if (!captures.length) throw new Error("A HAR adds detail to a NetLog. Open the NetLog first, then add the HAR.");
+    if (captures[0].model.source?.kind === "har") throw new Error("This report was built from a HAR. To add a HAR to a NetLog, open the NetLog first.");
     const name = redactCapturedText(file.name);
     bar.style.width = "0%";
     progressText.textContent = `Reading HAR: ${name}...`;
@@ -313,17 +344,20 @@ function init() {
       if (hars.length > 1 || traces.length > 1 || paths.length > 1) { showError("Add one HAR, one profile and one network path file at a time. Choose the files that were recorded with this NetLog."); return; }
       const logs = files.filter((_, i) => kinds[i] === "netlog");
       if (logs.length) await loadFiles(logs, { append: false, requireTwo });
+      let harIsMain = false;
+      if (!captures.length && !logs.length && hars.length) { await openHarCapture(hars[0]); harIsMain = captures.length > 0; }
       if (!captures.length) {
-        if (!logs.length) showError("A HAR, a profile or a network path file adds detail to a NetLog. Open the NetLog first (or drop the files together), then add them.");
+        if (!logs.length && !hars.length) showError("A profile or a network path file adds detail to a NetLog or a HAR. Open the capture first (or drop the files together), then add them.");
         return;
       }
       if (error.hidden === false) return;
+      if (harIsMain && !traces.length && !paths.length) return;
       setLoading(true);
       error.hidden = true;
       $("load-feedback").hidden = false;
       progress.hidden = false;
       try {
-        if (hars.length) await addHar(hars[0]);
+        if (hars.length && !harIsMain) await addHar(hars[0]);
         if (traces.length) await addProfile(traces[0]);
         if (paths.length) await addPath(paths[0]);
         $("load-feedback").hidden = true;
@@ -524,5 +558,5 @@ function init() {
   });
 }
 
-globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar, looksLikeTrace, createTraceReader, attachProfile, looksLikePath, readPathFile, attachPath };
+globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar, looksLikeTrace, createTraceReader, attachProfile, looksLikePath, readPathFile, attachPath, buildCaptureFromHar };
 if (typeof document !== "undefined") init();
