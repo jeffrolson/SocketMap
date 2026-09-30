@@ -66,7 +66,11 @@ async function main() {
 
   const port = 9300 + Math.floor(Math.random() * 500);
   const child = spawn(browserPath, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${path.join(work, "profile-dir")}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-gpu", "about:blank"], { stdio: "ignore" });
-  const cleanup = () => { try { child.kill(); } catch {} setTimeout(() => fs.rmSync(work, { recursive: true, force: true }), 500); };
+  // Wait for the browser to exit so its profile folder can be removed; leaving it would leak tens of MB per run.
+  const cleanup = async () => {
+    await new Promise(resolve => { child.once("exit", resolve); try { child.kill(); } catch { resolve(); } setTimeout(resolve, 5000); });
+    fs.rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  };
   try {
     let target = null;
     for (let i = 0; i < 60 && !target; i++) {
@@ -143,7 +147,7 @@ async function main() {
   } catch (error) {
     check(false, error.message);
   } finally {
-    cleanup();
+    await cleanup();
   }
   if (failures.length) { console.error(`\n${failures.length} check(s) failed`); process.exit(1); }
   console.log("\nbrowser smoke test passed");
