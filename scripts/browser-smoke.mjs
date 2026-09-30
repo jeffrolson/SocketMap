@@ -72,8 +72,15 @@ async function main() {
   fs.writeFileSync(files.lighthouse, JSON.stringify(buildSampleLighthouse(model)));
   fs.writeFileSync(files.cpu, JSON.stringify({ nodes: [{ id: 1, callFrame: { functionName: "(root)", url: "" }, children: [2] }, { id: 2, callFrame: { functionName: "work", url: "https://portal.example.com/app.js", lineNumber: 9 } }], startTime: 0, endTime: 5000, samples: [2, 2, 2], timeDeltas: [0, 1000, 1000] }));
 
-  const port = 9300 + Math.floor(Math.random() * 500);
-  const child = spawn(browserPath, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${path.join(work, "profile-dir")}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-gpu", "about:blank"], { stdio: "ignore" });
+  // A random debugging port can collide with something else on a busy runner, and a cold browser can be slow to start:
+  // try up to three times, each on a new port, before giving up.
+  let port = 0;
+  let child = null;
+  let target = null;
+  const launchBrowser = () => {
+    port = 9300 + Math.floor(Math.random() * 500);
+    child = spawn(browserPath, ["--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${path.join(work, "profile-dir")}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-gpu", "about:blank"], { stdio: "ignore" });
+  };
   // Wait for the browser to exit so its profile folder can be removed; leaving it would leak tens of MB per run.
   const cleanup = async () => {
     await new Promise(resolve => { child.once("exit", resolve); try { child.kill(); } catch { resolve(); } setTimeout(resolve, 5000); });
@@ -84,10 +91,13 @@ async function main() {
     console.log(`note: could not remove ${work}`);
   };
   try {
-    let target = null;
-    for (let i = 0; i < 60 && !target; i++) {
-      await sleep(250);
-      try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === "page"); } catch {}
+    for (let attempt = 0; attempt < 3 && !target; attempt++) {
+      if (attempt > 0) { try { child.kill(); } catch {} await sleep(1000); }
+      launchBrowser();
+      for (let i = 0; i < 120 && !target; i++) {
+        await sleep(250);
+        try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find(t => t.type === "page"); } catch {}
+      }
     }
     if (!target) throw new Error("the browser did not start");
     const ws = new WebSocket(target.webSocketDebuggerUrl);
