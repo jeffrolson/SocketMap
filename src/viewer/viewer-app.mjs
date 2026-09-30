@@ -151,6 +151,18 @@ function init() {
   let view = "a";
   let loading = false;
   let current = null;
+  // A new report is applied only after the previous document has loaded: assigning srcdoc again while a
+  // load is pending can leave the old document in place (seen on a slower machine).
+  let frameBusy = false;
+  let queuedHtml = null;
+  let frameTimer = null;
+  function setFrameHtml(html) {
+    if (frameBusy) { queuedHtml = html; return; }
+    frameBusy = true;
+    clearTimeout(frameTimer);
+    frameTimer = setTimeout(() => { frameBusy = false; if (queuedHtml !== null) { const next = queuedHtml; queuedHtml = null; setFrameHtml(next); } }, 20000);
+    frame.srcdoc = html;
+  }
 
   function currentTheme() {
     return document.documentElement.dataset.theme === "light" ? "light" : "dark";
@@ -219,7 +231,7 @@ function init() {
     pageContext.textContent = pages.map((page, i) => `${pages.length > 1 ? (i ? "B" : "A") : "Selected"}: ${page.url}`).join(" · ");
     pageContext.title = pageContext.textContent;
     frame.title = nextView === "comparison" ? "SocketMap capture comparison" : `SocketMap ${b ? nextView.toUpperCase() + " " : ""}report`;
-    frame.srcdoc = report.html;
+    setFrameHtml(report.html);
     start.hidden = true;
     result.hidden = false;
   }
@@ -407,6 +419,9 @@ function init() {
   for (const name of ["comparison", "a", "b"]) $("view-" + name).addEventListener("click", () => show(captures, name));
   $("swap-captures").addEventListener("click", () => show([captures[1], captures[0]], "comparison"));
   frame.addEventListener("load", () => {
+    clearTimeout(frameTimer);
+    frameBusy = false;
+    if (queuedHtml !== null) { const next = queuedHtml; queuedHtml = null; setFrameHtml(next); return; }
     sendThemeToReport();
     const reportDocument = frame.contentDocument;
     if (reportDocument) {
@@ -462,7 +477,8 @@ function init() {
     result.hidden = true;
     start.hidden = false;
     window.scrollTo(0, 0);
-    frame.srcdoc = "";
+    queuedHtml = null;
+    setFrameHtml("");
     input.value = "";
     captures = [];
     view = "a";
