@@ -3,6 +3,14 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-09-30
+### Added
+- **Timeline in the Waterfall.** A strip marks each failed or slow request on the page load's timeline (click a marker to jump to its row) and, with a Performance profile, the main thread's long tasks. Two handles set a time window that narrows the waterfall to the requests overlapping it; "Show everything" restores it.
+- **Save the sequence as an image.** PNG and SVG downloads of the sequence diagram, built inside the page from its own styles, with the same redacted content as the report. A real-browser test checks both files are produced.
+
+### Changed
+- **The viewer's toolbar is one row.** The page picker sits in the main row, and the five "Add ..." buttons (HAR, profile, network path, Lighthouse, CPU profile) are folded into one "Add files" menu. The comparison controls appear only for comparisons. The report keeps its own header.
+
 ## [0.16.0] - 2026-09-30
 ### Added
 - **Lighthouse report as an optional file.** Run Lighthouse with `--output=json` (or DevTools, Save as JSON) and drop it with the capture, click **Add Lighthouse**, or use `--lighthouse`. The Overview shows its performance score, the six core metrics coloured by Lighthouse's own score bands, what it says to look at with the addresses and sizes it names (unused JavaScript, cache lifetimes, render-blocking requests and so on), main-thread time by kind, and scripts by execution time. Requests it names that are also in the capture are marked in the waterfall's request details.

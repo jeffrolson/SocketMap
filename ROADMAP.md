@@ -25,8 +25,7 @@ Actively being built.
 ## Next (2 to 4 weeks)
 Queued, priority-ordered.
 
-- Merge the viewer's toolbar into the report header
-- From the design mockup: timeline slider with problem markers; export the sequence as an image
+- Nothing buildable is queued. What remains needs real machines, files or people: see Now and Later.
 
 ## Later (this quarter)
 Planned but not scheduled.
@@ -59,6 +58,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-30: Waterfall timeline with problem markers and a window filter, sequence PNG and SVG export, one-row viewer toolbar (0.17.0)
 - 2026-09-30: Lighthouse JSON and V8 CPU profile as optional files, labelled as lab and summary views (0.16.0)
 - 2026-09-30: A HAR on its own opens in the full report (viewer and CLI); the older diagram remains for generic JSON and --diagram (0.15.0)
 - 2026-09-30: Network path helper: Mac and Linux shell script, Windows PowerShell script, viewer and CLI support, Overview panel, Coverage rows (0.14.0)

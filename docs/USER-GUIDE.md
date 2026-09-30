@@ -170,6 +170,10 @@ Every request in the order it started. The colored bar shows where each request'
 
 The timing color key stays pinned below the report header while you scroll. Hover or focus a phase for its meaning. Click a row for timing, connection and certificate details, and the redacted headers. Hover an HTTP method such as **GET**, **POST**, or **OPTIONS** to learn what the browser is asking the server to do; protocols and statuses also have explanations.
 
+### Timeline (in the Waterfall)
+
+A strip above the waterfall marks each failed or slow request on the page load's timeline (click a marker to jump to its row) and, with a Performance profile, the main thread's long tasks. Move the **From** and **To** handles to show only the requests that overlap that window; **Show everything** restores the list. The window narrows the waterfall rows; the sequence diagram is unaffected.
+
 ### Sequence
 
 The page load drawn as a conversation. The left column is your browser; each other column is a server. Time runs top to bottom, and the number on the left is when each step started.
@@ -180,6 +184,8 @@ The page load drawn as a conversation. The left column is your browser; each oth
 - **Amber row:** slow.
 
 Hover a label above an arrow, such as **TCP + TLS handshake**, for a brief explanation of what the browser is attempting. Click a row or server heading for four detail tabs (Explained, Timing, Connection, Headers). Use **Hide details panel** in the panel itself or beside the Sequence heading to give the diagram the full width. **Show details panel** restores it; selecting a row also brings it back. On narrower screens the panel sits below the diagram.
+
+**Save the sequence as an image.** **Save as image** downloads the diagram as a PNG and **Save as SVG** as a vector file, ready for a ticket or a slide. The image is built inside the page from what is on screen, so it carries the same redacted content as the report and nothing is sent anywhere. If a browser will not draw the PNG, use the SVG.
 
 ### Filter
 
