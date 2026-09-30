@@ -31,12 +31,17 @@ jobs:
         run: |
           ./tools/socketmap-path.sh --no-public-ip --out path-ci.json github.com
           node scripts/check-helper-output.mjs path-ci.json --require-probe
+          ./tools/socketmap-path.sh --no-public-ip --no-route --out path-two.json github.com example.com
+          node scripts/check-helper-output.mjs path-two.json --require-hosts 2
       - name: Network path helper (Windows PowerShell)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
           .\tools\socketmap-path.ps1 -NoPublicIp -Out path-ci.json github.com
           node scripts/check-helper-output.mjs path-ci.json --require-probe
+          # Several hosts must all be measured (a positional-binding bug once swallowed the second one).
+          .\tools\socketmap-path.ps1 -NoPublicIp -NoRoute -Out path-two.json github.com example.com
+          node scripts/check-helper-output.mjs path-two.json --require-hosts 2
           .\tools\socketmap-path.ps1 -SelfTestTracert '  1    <1 ms    <1 ms    <1 ms  192.0.2.1','  2     *        *        *     Request timed out.','  3    12 ms    11 ms    13 ms  198.51.100.9','  4    45 ms     *       47 ms  203.0.113.7','Trace complete.' | Out-File -Encoding utf8 tracert-selftest.json
           node scripts/check-helper-output.mjs --tracert-selftest tracert-selftest.json
       - name: The viewer makes no remote requests

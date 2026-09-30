@@ -30,9 +30,9 @@ Skip the route trace to each host.
 .EXAMPLE
 .\socketmap-path.ps1 example.com login.example.com
 #>
-[CmdletBinding()]
+[CmdletBinding(PositionalBinding = $false)]
 param(
-  [Parameter(ValueFromRemainingArguments = $true)][string[]]$Hosts,
+  [Parameter(Position = 0, ValueFromRemainingArguments = $true)][string[]]$Hosts,
   [string]$Out = 'socketmap-path.json',
   [switch]$NoPublicIp,
   [switch]$NoProbe,

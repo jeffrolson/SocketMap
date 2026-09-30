@@ -45,7 +45,7 @@ jobs:
           GATEWAY="$(ip route show default | awk 'NR==1{print $3}')"
           export https_proxy="http://user:secret@proxy.corp.example.com:3128" http_proxy="http://proxy.corp.example.com:3128"
           ./tools/socketmap-path.sh --no-public-ip --out out/linux-path.json github.com "$GATEWAY"
-          node scripts/check-helper-output.mjs out/linux-path.json --require-probe
+          node scripts/check-helper-output.mjs out/linux-path.json --require-hosts 2
       - uses: actions/upload-artifact@v4
         with:
           name: linux-real-data
@@ -100,7 +100,7 @@ jobs:
           Set-ItemProperty -Path $conn -Name DefaultConnectionSettings -Value $blob -Type Binary
           $gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Sort-Object RouteMetric | Select-Object -First 1).NextHop
           .\tools\socketmap-path.ps1 -NoPublicIp -Out out\windows-path.json github.com $gateway
-          node scripts/check-helper-output.mjs out/windows-path.json --require-probe
+          node scripts/check-helper-output.mjs out/windows-path.json --require-hosts 2
       - uses: actions/upload-artifact@v4
         with:
           name: windows-real-data

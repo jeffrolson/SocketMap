@@ -33,6 +33,8 @@ const problems = [];
 if (!data.platform) problems.push("platform missing");
 if (!data.collectedAt) problems.push("collectedAt missing");
 if (!data.link.type && !data.notes.length) problems.push("no link type and no note explaining why");
+const needHosts = process.argv.includes("--require-hosts") ? Number(process.argv[process.argv.indexOf("--require-hosts") + 1]) : 0;
+if (needHosts && data.hosts.length !== needHosts) problems.push(`expected ${needHosts} hosts, got ${data.hosts.length}`);
 if (requireProbe) {
   const h = data.hosts[0];
   if (!h) problems.push("no host was measured");
