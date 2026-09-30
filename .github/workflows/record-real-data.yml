@@ -1,0 +1,79 @@
+name: Record real data
+
+# Manual only. Records genuine validation data on disposable GitHub runners: NetLog and Performance
+# trace pairs from real Chrome and Edge on Windows and Linux, and real chrome://policy exports with
+# managed (made-up, network-related) policies set on the runner. Nothing here touches a personal machine.
+# Download the artifacts with `gh run download`; they contain only public pages and made-up policies.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Record a Chrome NetLog and trace pair (unmanaged)
+        run: node scripts/record-real-data.mjs pair "$(which google-chrome)" out linux-chrome
+      - name: Set managed Chrome policies on this disposable runner
+        run: |
+          sudo mkdir -p /etc/opt/chrome/policies/managed /etc/opt/chrome/policies/recommended
+          sudo tee /etc/opt/chrome/policies/managed/socketmap-test.json > /dev/null <<'JSON'
+          {
+            "ProxyMode": "pac_script",
+            "ProxyPacUrl": "http://wpad.corp.example.com/proxy.pac",
+            "MaxConnectionsPerProxy": "many",
+            "DnsOverHttpsMode": "automatic",
+            "QuicAllowed": false,
+            "NetworkPredictionOptions": 2,
+            "HomepageLocation": "https://intranet.corp.example.com/",
+            "NotARealPolicy": true
+          }
+          JSON
+          sudo tee /etc/opt/chrome/policies/recommended/socketmap-test.json > /dev/null <<'JSON'
+          { "ShowHomeButton": true, "DefaultBrowserSettingEnabled": false }
+          JSON
+      - name: Export the managed Chrome policy page as JSON
+        run: node scripts/record-real-data.mjs policy "$(which google-chrome)" out/linux-chrome-policies.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-real-data
+          path: out
+          retention-days: 3
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Record a Chrome NetLog and trace pair (unmanaged)
+        run: node scripts/record-real-data.mjs pair "C:\Program Files\Google\Chrome\Application\chrome.exe" out windows-chrome
+      - name: Record an Edge NetLog and trace pair (unmanaged)
+        run: node scripts/record-real-data.mjs pair "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" out windows-edge
+      - name: Set managed policies on this disposable runner
+        shell: powershell
+        run: |
+          foreach ($key in @('HKLM:\SOFTWARE\Policies\Google\Chrome', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge')) {
+            New-Item -Path $key -Force | Out-Null
+            Set-ItemProperty -Path $key -Name ProxyMode -Value 'pac_script' -Type String
+            Set-ItemProperty -Path $key -Name ProxyPacUrl -Value 'http://wpad.corp.example.com/proxy.pac' -Type String
+            Set-ItemProperty -Path $key -Name MaxConnectionsPerProxy -Value 32 -Type DWord
+            Set-ItemProperty -Path $key -Name DnsOverHttpsMode -Value 'automatic' -Type String
+            Set-ItemProperty -Path $key -Name QuicAllowed -Value 0 -Type DWord
+            Set-ItemProperty -Path $key -Name NetworkPredictionOptions -Value 2 -Type DWord
+          }
+      - name: Export the managed Chrome policy page as JSON
+        run: node scripts/record-real-data.mjs policy "C:\Program Files\Google\Chrome\Application\chrome.exe" out/windows-chrome-policies.json
+      - name: Try the Edge policy page (its page has no Copy as JSON button, so this may fail)
+        continue-on-error: true
+        run: node scripts/record-real-data.mjs policy "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" out/windows-edge-policies.json edge://policy
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-real-data
+          path: out
+          retention-days: 3
