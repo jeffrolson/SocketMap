@@ -94,7 +94,7 @@ async function main() {
       const end = Date.now() + ms;
       while (Date.now() < end) { if (await evaluate(expression).catch(() => false)) return true; await sleep(200); }
       check(false, `timed out waiting for ${label}`);
-      const seen = await evaluate("(() => { const f = document.querySelector('iframe'); const d = f && f.contentDocument; return { viewer: document.body.innerText.replace(/\\s+/g, ' ').slice(0, 300), report: d ? d.body.innerText.replace(/\\s+/g, ' ').slice(0, 200) : null, hasProfile: d ? !!d.querySelector('#profile') : null }; })()").catch(() => null);
+      const seen = await evaluate("(() => { const f = document.querySelector('iframe'); const d = f && f.contentDocument; return { viewer: document.body.innerText.replace(/\\s+/g, ' ').slice(0, 300), report: d ? d.body.innerText.replace(/\\s+/g, ' ').slice(0, 200) : null, hasProfile: d ? !!d.querySelector('#profile') : null, frames: document.querySelectorAll('iframe').length, srcdocLen: f ? f.srcdoc.length : null, srcdocHasProfile: f ? f.srcdoc.includes('id=\\"profile\\"') : null, state: d ? d.readyState : null }; })()").catch(() => null);
       console.log(`      page said: ${JSON.stringify(seen)}${consoleLines.length ? ` | console: ${consoleLines.slice(-3).join(" || ")}` : ""}`);
       return false;
     };
