@@ -280,6 +280,19 @@ describe("real managed exports (only when recorded locally)", () => {
     assert.ok(notes.some(n => /^ProxyPacUrl: .*deprecated/.test(n)), "flagged by the browser, not listed as deprecated for Chrome in the catalog");
     assert.equal(result.rows.find(r => r.name === "ProxyMode")?.level, "mandatory");
   });
+  it("Windows Edge 153: an actual exported Edge file is recognized as Edge, with its managed policies and deprecations", { skip: !existsSync("captures/real-managed-windows-edge.json") }, () => {
+    const raw = readFileSync("captures/real-managed-windows-edge.json", "utf8").replace(/^\uFEFF/, "");
+    const norm = engine.normalize(JSON.parse(raw));
+    assert.equal(norm.ok, true);
+    assert.equal(norm.meta.browser, "edge");
+    assert.equal(norm.meta.application, "Microsoft Edge");
+    assert.match(norm.meta.version, /^153\./);
+    const result = engine.evaluate(norm, {}, POLICY_CATALOG, CATALOG_REVIEWED);
+    assert.equal(result.browser, "edge");
+    assert.equal(result.counts.set, 5);
+    assert.ok(result.rows.some(r => r.name === "MaxConnectionsPerProxy" && r.value === "32"));
+    assert.ok(result.deprecated.some(d => d.name === "ProxyMode") && result.deprecated.some(d => d.name === "ProxyPacUrl"), "both are deprecated for Edge in the catalog");
+  });
   it("Windows Chrome: names the conflicting user-level values it overrides", { skip: !existsSync("captures/real-managed-windows-chrome.json") }, () => {
     const norm = engine.normalize(load("captures/real-managed-windows-chrome.json"));
     assert.equal(norm.ok, true);
