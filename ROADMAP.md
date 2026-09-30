@@ -30,7 +30,7 @@ Queued, priority-ordered.
 ## Later (this quarter)
 Planned but not scheduled.
 
-- Policy tab follow-ups: an actual exported Edge file (Edge's page has no Copy as JSON button and its export needs a native save dialog); managed Chrome exports with `ignored`, `info`, `future` and `superseded` flags (`error`, `warning`, `deprecated` and `conflicts` are confirmed on real managed Chrome); grow the
+- Policy tab follow-ups: managed exports with `ignored`, `info`, `future` and `superseded` flags (`error`, `warning`, `deprecated` and `conflicts` are confirmed on real managed Chrome, and an actual Edge export has been read); grow the
   catalog only from vendor pages, keep the review date current, run `npm run
   check:policy-links` before each release (added 2026-09-29)
 - Performance profile follow-ups: alignment is validated on real same-session pairs (macOS Chrome
@@ -56,6 +56,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-30: An actual exported Edge policy file captured on a Windows runner and validated (0.17.4)
 - 2026-09-30: Helper 1.1: proxy credential leak, two-host bug and failed-probe reporting found and fixed on real runners (0.17.3)
 - 2026-09-30: Windows, Linux and managed-policy data recorded on disposable CI runners and validated; conflict notes name what they override (0.17.2)
 - 2026-09-30: Edge and A/B comparison validated on real recordings; comparison no longer colours changes under 10 ms (0.17.1)

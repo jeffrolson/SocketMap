@@ -3,6 +3,10 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.4] - 2026-09-30
+### Validated
+- **An actual exported Edge policy file.** Edge's Export to JSON opens a native save dialog that headless mode cannot complete, so the `record-real-data` workflow now has a job that opens a visible Edge on a disposable Windows runner with managed policies set in the registry, clicks Export through the debugging protocol, and completes the dialog with keystrokes. The file it produced has the top-level keys `chromeMetadata`, `policyValues` and `status`, `application` "Microsoft Edge", and the same per-policy fields as Chrome (`level`, `scope`, `source`, `value`, `deprecated`). The Policy tab reads it as Edge with no changes; a test now covers it.
+
 ## [0.17.3] - 2026-09-30
 ### Fixed
 - **Network path helper 1.1** (found by running the scripts on real Windows and Linux CI runners):
