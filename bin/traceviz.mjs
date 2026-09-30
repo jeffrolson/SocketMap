@@ -16,6 +16,7 @@ import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 import { readHarEnrichment, readTraceProfile } from "../src/parsers/generic-parser.mjs";
 import { attachHar } from "../src/enrichment.mjs";
 import { attachProfile } from "../src/profile.mjs";
+import { readPathFile, attachPath } from "../src/path.mjs";
 import { parseGenericTrace } from "../src/parsers/generic-parser.mjs";
 import { normalizeTrace } from "../src/normalizer.mjs";
 import { renderStandaloneHtml } from "../src/renderer/template.html.mjs";
@@ -41,6 +42,7 @@ Transform network traces into interactive, self-contained sequence diagrams.
   --theme <DESIGN.md>    NetLog only: style the report with another design.md theme
   --har <file>           NetLog only: also read a HAR exported from DevTools (script, type and cache detail)
   --profile <file>       NetLog only: also read a DevTools Performance profile, .json or .json.gz (page code and paint)
+  --path <file>          NetLog only: also read the file written by tools/socketmap-path.sh or .ps1 (link, DNS, proxy, route, curl timing)
   --sample               Generate an interactive demo diagram using rich synthetic data
   --open                 Automatically open the generated visual in your default browser
   -h, --help             Show this help message and exit
@@ -114,6 +116,7 @@ async function main() {
   let themePath = null;
   let harPath = null;
   let profilePath = null;
+  let pathFile = null;
   let openAfter = false;
   let useSample = false;
 
@@ -135,6 +138,8 @@ async function main() {
       harPath = args[++i];
     } else if (arg === "--profile") {
       profilePath = args[++i];
+    } else if (arg === "--path") {
+      pathFile = args[++i];
     } else if (!arg.startsWith("-")) {
       inputFile = arg;
     }
@@ -192,6 +197,21 @@ async function main() {
         }
         console.log(`\x1b[32m● [Profile]\x1b[0m ${profile.alignment.aligned ? `Placed on the network timeline using ${profile.alignment.matched} shared requests.` : "No request appears in both files, so the profile is shown but not placed on the timeline."}`);
       }
+      if (pathFile) {
+        const resolvedPath = resolve(pathFile);
+        if (!existsSync(resolvedPath)) {
+          console.error(`\x1b[31m[Error]\x1b[0m Network path file not found: ${resolvedPath}`);
+          process.exit(1);
+        }
+        let helper = { recognized: false };
+        try { helper = readPathFile(JSON.parse(readFileSync(resolvedPath, "utf8"))); } catch { /* reported below */ }
+        const attached = helper.recognized ? attachPath(model, helper.data) : null;
+        if (!attached) {
+          console.error("\x1b[31m[Error]\x1b[0m That file does not look like the output of the SocketMap network path helper (tools/socketmap-path.sh or tools/socketmap-path.ps1).");
+          process.exit(1);
+        }
+        console.log(`\x1b[32m● [Path]\x1b[0m ${attached.compare.length} host${attached.compare.length === 1 ? "" : "s"} measured with curl, ${attached.routes.length} route${attached.routes.length === 1 ? "" : "s"}, recorded ${attached.source.gapMinutes == null ? "at an unknown time relative to the capture" : `${Math.abs(attached.source.gapMinutes)} minutes ${attached.source.gapMinutes >= 0 ? "after" : "before"} the capture started`}.`);
+      }
       const analysis = analyzeCapture(model, { site: page });
       const p = analysis.page;
       console.log(`\x1b[32m● [Analysis]\x1b[0m Page ${p.site}: ${p.requestCount} requests, ${p.hostCount} hosts, ${analysis.findings.length} findings (${model.requests.length} requests in capture).`);
@@ -200,8 +220,8 @@ async function main() {
       const source = { name: basename(resolvedInput), bytes: statSync(resolvedInput).size };
       htmlOutput = renderReportHtml(model, analysis, theme ? { theme, source } : { source });
     } else {
-      if (harPath || profilePath) {
-        console.error(`\x1b[31m[Error]\x1b[0m ${harPath ? "--har" : "--profile"} needs a Chromium NetLog as the main input. A HAR on its own opens as a diagram without it.`);
+      if (harPath || profilePath || pathFile) {
+        console.error(`\x1b[31m[Error]\x1b[0m ${harPath ? "--har" : profilePath ? "--profile" : "--path"} needs a Chromium NetLog as the main input. A HAR on its own opens as a diagram without it.`);
         process.exit(1);
       }
       console.log("\x1b[35m● [Parser]\x1b[0m Ingesting generic/HAR/trace JSON...");

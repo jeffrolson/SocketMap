@@ -14,6 +14,7 @@ import { buildCoverage, coverageText } from "./coverage.mjs";
 import { buildServerInsights, inspectResponse, serverInsightsText } from "./server-insights.mjs";
 import { harEvidenceText } from "./enrichment.mjs";
 import { profileEvidenceText } from "./profile.mjs";
+import { pathEvidenceText } from "./path.mjs";
 
 const RANK = { best: 0, better: 1, good: 2, poor: 3 };
 const TIMING_KEYS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
@@ -509,6 +510,10 @@ export function buildAiSummary(model, analysis, { source } = {}) {
   }
   if (model.profile) {
     lines.push(profileEvidenceText(model.profile));
+    lines.push("");
+  }
+  if (model.path) {
+    lines.push(pathEvidenceText(model.path));
     lines.push("");
   }
   lines.push(coverageText(buildCoverage(model)));

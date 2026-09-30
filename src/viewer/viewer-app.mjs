@@ -4,9 +4,11 @@
  * the file is read locally and never sent anywhere.
  */
 
-import { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, looksLikeTrace } from "./viewer-core.mjs";
+import { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, looksLikeTrace, looksLikePath } from "./viewer-core.mjs";
 import { createTraceReader } from "../parsers/trace-stream.mjs";
 import { attachProfile } from "../profile.mjs";
+import { readPathFile, attachPath } from "../path.mjs";
+import { buildSamplePath } from "../demo/sample-path.mjs";
 import { buildSampleTrace } from "../demo/sample-trace.mjs";
 import { createHarReader } from "../parsers/har-stream.mjs";
 import { attachHar } from "../enrichment.mjs";
@@ -18,6 +20,7 @@ import { redactCapturedText } from "../redact.mjs";
 const SAMPLE_NAME = "sample-capture.json (synthetic example)";
 const SAMPLE_HAR_NAME = "sample-network.har (synthetic example)";
 const SAMPLE_PROFILE_NAME = "sample-profile.json (synthetic example)";
+const SAMPLE_PATH_NAME = "sample-path.json (synthetic example)";
 
 const YIELD_EVERY_BYTES = 8 * 1024 * 1024;
 
@@ -96,7 +99,7 @@ async function isGzip(file) {
 async function kindOf(file) {
   if (await isGzip(file)) return "trace";
   const head = await file.slice(0, 4096).text();
-  return looksLikeHar(head) ? "har" : looksLikeTrace(head) ? "trace" : "netlog";
+  return looksLikePath(head) ? "path" : looksLikeHar(head) ? "har" : looksLikeTrace(head) ? "trace" : "netlog";
 }
 
 async function readTrace(file, onProgress) {
@@ -137,6 +140,7 @@ function init() {
   const secondInput = $("second-input");
   const harInput = $("har-input");
   const profileInput = $("profile-input");
+  const pathInput = $("path-input");
   const progress = $("progress");
   const bar = $("progress-bar");
   const progressText = $("progress-text");
@@ -221,10 +225,12 @@ function init() {
     $("add-comparison").textContent = b ? "Replace B capture" : "Compare with another capture";
     $("save-report").textContent = nextView === "comparison" ? "Save comparison" : "Save report";
     for (const name of ["comparison", "a", "b"]) $("view-" + name).setAttribute("aria-pressed", String(view === name));
-    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}${a.profile ? ` + profile ${a.profile.name}` : ""}`;
+    fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}${a.profile ? ` + profile ${a.profile.name}` : ""}${a.path ? ` + path ${a.path.name}` : ""}`;
     $("add-har").hidden = nextView === "comparison" || nextView === "b";
     $("add-har").textContent = a.har ? "Replace HAR" : "Add a HAR";
     $("add-profile").hidden = $("add-har").hidden;
+    $("add-path").hidden = $("add-har").hidden;
+    $("add-path").textContent = a.path ? "Replace network path" : "Add network path";
     $("add-profile").textContent = a.profile ? "Replace profile" : "Add a profile";
     fileName.title = fileName.textContent;
     const pages = report.comparison ? [report.comparison.a.page, report.comparison.b.page] : [report.analysis.page];
@@ -239,7 +245,7 @@ function init() {
   function setLoading(value) {
     loading = value;
     document.body.setAttribute("aria-busy", String(value));
-    for (const element of [input, compareInput, secondInput, harInput, profileInput]) element.disabled = value;
+    for (const element of [input, compareInput, secondInput, harInput, profileInput, pathInput]) element.disabled = value;
     drop.setAttribute("aria-disabled", String(value));
     drop.classList.remove("is-over");
     for (const id of ["compare-files", "add-comparison", "add-har", "add-profile", "open-another", "save-report", "swap-captures", "page-select", "page-select-b", "view-comparison", "view-a", "view-b"]) $(id).disabled = value;
@@ -282,17 +288,33 @@ function init() {
     show(next, view === "comparison" ? "a" : view);
   }
 
+  // The network path helper's file is small JSON, read whole, checked against an allowlist, never uploaded.
+  async function addPath(file) {
+    if (!captures.length) throw new Error("The network path adds detail to a NetLog. Open the NetLog first, then add the path file.");
+    if (file.size > 2 * 1048576) throw new Error("That file is too large to be the network path helper's output.");
+    const name = redactCapturedText(file.name);
+    let parsed = null;
+    try { parsed = JSON.parse(await file.text()); } catch { /* reported below */ }
+    const read = readPathFile(parsed);
+    const model = captures[0].model;
+    delete model.path;
+    if (!read.recognized || !attachPath(model, read.data)) throw new Error("That file does not look like the output of the SocketMap network path helper. Run tools/socketmap-path.sh (Mac or Linux) or tools/socketmap-path.ps1 (Windows) and choose the socketmap-path.json it writes.");
+    const next = captures.map((capture, i) => i === 0 ? { ...capture, path: { name, bytes: file.size } } : capture);
+    show(next, view === "comparison" ? "a" : view);
+  }
+
   async function loadFiles(files, { append = false, requireTwo = false } = {}) {
     if (loading || !files.length) return;
     const kinds = await Promise.all(files.map(kindOf));
     const hars = files.filter((_, i) => kinds[i] === "har");
     const traces = files.filter((_, i) => kinds[i] === "trace");
-    if (hars.length || traces.length) {
-      if (hars.length > 1 || traces.length > 1) { showError("Add one HAR and one profile at a time. Choose the files that were recorded with this NetLog."); return; }
+    const paths = files.filter((_, i) => kinds[i] === "path");
+    if (hars.length || traces.length || paths.length) {
+      if (hars.length > 1 || traces.length > 1 || paths.length > 1) { showError("Add one HAR, one profile and one network path file at a time. Choose the files that were recorded with this NetLog."); return; }
       const logs = files.filter((_, i) => kinds[i] === "netlog");
       if (logs.length) await loadFiles(logs, { append: false, requireTwo });
       if (!captures.length) {
-        if (!logs.length) showError("A HAR or a profile adds detail to a NetLog. Open the NetLog first (or drop the files together), then add them.");
+        if (!logs.length) showError("A HAR, a profile or a network path file adds detail to a NetLog. Open the NetLog first (or drop the files together), then add them.");
         return;
       }
       if (error.hidden === false) return;
@@ -303,6 +325,7 @@ function init() {
       try {
         if (hars.length) await addHar(hars[0]);
         if (traces.length) await addProfile(traces[0]);
+        if (paths.length) await addPath(paths[0]);
         $("load-feedback").hidden = true;
       } catch (err) {
         showError(err.message || String(err));
@@ -359,7 +382,8 @@ function init() {
     const traceReader = createTraceReader();
     traceReader.write(JSON.stringify(buildSampleTrace(model)));
     const profileAttached = attachProfile(model, traceReader.finish());
-    if (harAttached || profileAttached) show(captures.map((capture, i) => i === 0 ? { ...capture, ...(harAttached ? { har: { name: SAMPLE_HAR_NAME, bytes: 0 } } : {}), ...(profileAttached ? { profile: { name: SAMPLE_PROFILE_NAME, bytes: 0 } } : {}), site: selectPageSite(model) } : capture));
+    const pathAttached = attachPath(model, readPathFile(buildSamplePath(model)).data);
+    if (harAttached || profileAttached || pathAttached) show(captures.map((capture, i) => i === 0 ? { ...capture, ...(harAttached ? { har: { name: SAMPLE_HAR_NAME, bytes: 0 } } : {}), ...(profileAttached ? { profile: { name: SAMPLE_PROFILE_NAME, bytes: 0 } } : {}), ...(pathAttached ? { path: { name: SAMPLE_PATH_NAME, bytes: 0 } } : {}), site: selectPageSite(model) } : capture));
   }
 
   function selectedFiles(element, options) {
@@ -390,7 +414,18 @@ function init() {
     }
     loadFiles(files);
   });
+  pathInput.addEventListener("change", async () => {
+    const files = Array.from(pathInput.files).slice(0, 1);
+    pathInput.value = "";
+    if (!files.length) return;
+    if (!looksLikePath(await files[0].slice(0, 4096).text())) {
+      showError("That file does not look like the output of the SocketMap network path helper. Run tools/socketmap-path.sh (Mac or Linux) or tools/socketmap-path.ps1 (Windows) and choose the socketmap-path.json it writes.");
+      return;
+    }
+    loadFiles(files);
+  });
   $("add-har").addEventListener("click", () => harInput.click());
+  $("add-path").addEventListener("click", () => pathInput.click());
   $("add-profile").addEventListener("click", () => profileInput.click());
   $("compare-files").addEventListener("click", () => compareInput.click());
   $("add-comparison").addEventListener("click", () => secondInput.click());
@@ -489,5 +524,5 @@ function init() {
   });
 }
 
-globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar, looksLikeTrace, createTraceReader, attachProfile };
+globalThis.SocketMap = { createCaptureReader, buildReport, buildComparison, checkCaptureStart, looksLikeHar, createHarReader, attachHar, looksLikeTrace, createTraceReader, attachProfile, looksLikePath, readPathFile, attachPath };
 if (typeof document !== "undefined") init();

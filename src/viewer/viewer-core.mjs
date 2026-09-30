@@ -50,6 +50,11 @@ export function looksLikeHar(head) {
   return text.includes('"log"') && (text.includes('"entries"') || text.includes('"creator"') || text.includes('"pages"'));
 }
 
+/** True when the first bytes look like a file written by the SocketMap network path helper. */
+export function looksLikePath(head) {
+  return /"kind"\s*:\s*"socketmap-path"/.test(String(head || ""));
+}
+
 /** True when the first bytes look like a Chrome trace (a DevTools Performance profile). */
 export function looksLikeTrace(head) {
   const text = String(head || "");

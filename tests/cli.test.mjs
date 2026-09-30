@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { buildPageLoadNetLog, toNetLogText } from "../src/demo/sample-capture.mjs";
 import { buildSampleHar } from "../src/demo/sample-har.mjs";
 import { buildSampleTrace } from "../src/demo/sample-trace.mjs";
+import { buildSamplePath } from "../src/demo/sample-path.mjs";
 import { gzipSync } from "node:zlib";
 import { parseNetLog } from "../src/parsers/netlog-parser.mjs";
 
@@ -22,11 +23,12 @@ const tempHar = resolve(__dirname, "temp-enrich.har");
 const tempTrace = resolve(__dirname, "temp-trace.json");
 const tempTraceGz = resolve(__dirname, "temp-trace.json.gz");
 const testOutEnriched = resolve(__dirname, "temp-enriched.html");
+const tempPath = resolve(__dirname, "temp-path.json");
 
 describe("CLI Integration Tests", () => {
   after(() => {
     // Clean up temporary test files
-    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog, tempHar, testOutEnriched, tempTrace, tempTraceGz]) {
+    for (const f of [testOutSample, testOutNetLog, testOutHar, fixtureNetLog, tempHar, testOutEnriched, tempTrace, tempTraceGz, tempPath]) {
       if (existsSync(f)) {
         try { unlinkSync(f); } catch {}
       }
@@ -100,6 +102,33 @@ describe("CLI Integration Tests", () => {
     execFileSync(process.execPath, [cliPath, fixtureNetLog, "--har", tempHar, "--profile", tempTrace, "-o", testOutEnriched], { encoding: "utf8" });
     const content = readFileSync(testOutEnriched, "utf8");
     assert.ok(content.includes('id="enrichment"') && content.includes('id="profile"'));
+  });
+
+  it("adds the network path helper's file with --path", async () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    const model = await parseNetLog(fixtureNetLog);
+    writeFileSync(tempPath, JSON.stringify(buildSamplePath(model)));
+    const out = execFileSync(process.execPath, [cliPath, fixtureNetLog, "--path", tempPath, "-o", testOutEnriched], { encoding: "utf8" });
+    assert.match(out, /\[Path\].*measured with curl/);
+    const content = readFileSync(testOutEnriched, "utf8");
+    assert.ok(content.includes('id="path"') && content.includes("The path from this computer"));
+    assert.ok(!content.includes('id="path-prompt"'), "the how-to card is replaced by the data");
+    assert.ok(content.includes("NETWORK PATH"), "the AI summary carries it");
+  });
+
+  it("shows how to collect the path when no helper file is given", () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    execFileSync(process.execPath, [cliPath, fixtureNetLog, "-o", testOutEnriched], { encoding: "utf8" });
+    const content = readFileSync(testOutEnriched, "utf8");
+    assert.ok(content.includes('id="path-prompt"') && content.includes("./socketmap-path.sh portal.example.com") && content.includes("socketmap-path.ps1"));
+  });
+
+  it("explains --path problems instead of failing quietly", () => {
+    writeFileSync(fixtureNetLog, toNetLogText(buildPageLoadNetLog()));
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--path", "/no/such/path.json", "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /Network path file not found/);
+    writeFileSync(tempPath, '{"hello":1}');
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureNetLog, "--path", tempPath, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /does not look like the output of the SocketMap network path helper/);
+    assert.throws(() => execFileSync(process.execPath, [cliPath, fixtureHar, "--path", tempPath, "-o", testOutEnriched], { encoding: "utf8", stdio: "pipe" }), /needs a Chromium NetLog/);
   });
 
   it("explains --profile problems instead of failing quietly", () => {

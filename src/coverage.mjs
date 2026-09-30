@@ -78,6 +78,7 @@ export function buildCoverage(model) {
   const ended = count(requests, r => r.endRecorded === true);
   const enrichment = model?.enrichment || null;
   const profile = model?.profile || null;
+  const helper = model?.path || null;
   const profileRows = profile ? profile.perRequest : null;
   const harRows = enrichment ? enrichment.perRequest : null;
   const cacheKnown = count(requests, r => typeof r.fromCache === "boolean" || (harRows ? harRows.has(r.id) : false));
@@ -160,8 +161,15 @@ export function buildCoverage(model) {
       blurb: "Everything between this computer and the server.",
       items: [
         never("packets", "Packet loss and retransmissions", "Socket timing does not show whether packets were lost or resent on the wire."),
-        never("hops", "Per-hop delay, VPN, and proxy internals", "The browser sees the proxy's answer, not the route or what happens inside the tunnel."),
-        never("local-link", "Wi-Fi, network card, and operating system quality", "Local link problems show up only as slower timings, without a cause."),
+        helper?.routes.length
+          ? item("hops", "Per-hop delay, VPN, and proxy internals", "partial", `From the helper: the route and delay to each router for ${share(helper.routes.length, helper.routes.length, helper.routes.length === 1 ? "host" : "hosts")}, one probe per hop. What happens inside a VPN or proxy is still not visible.`, { short: `${helper.routes.length} route${helper.routes.length === 1 ? "" : "s"}` })
+          : never("hops", "Per-hop delay, VPN, and proxy internals", "The browser sees the proxy's answer, not the route or what happens inside the tunnel."),
+        helper?.link.type
+          ? item("local-link", "Wi-Fi, network card, and operating system quality", "partial", `From the helper: ${helper.link.type === "wifi" ? `Wi-Fi signal ${helper.link.wifi.rssiDbm == null ? "not available" : `${helper.link.wifi.rssiDbm} dBm`}` : "link type and address"}, measured when the helper ran, not during the capture. Retransmits and driver quality are still not visible.`, { short: helper.link.type === "wifi" ? (helper.link.wifi.rssiDbm == null ? "Wi-Fi" : `${helper.link.wifi.rssiDbm} dBm`) : helper.link.type })
+          : never("local-link", "Wi-Fi, network card, and operating system quality", "Local link problems show up only as slower timings, without a cause."),
+        helper?.compare.length
+          ? item("outside-timing", "Timing measured outside the browser (curl)", "partial", `From the helper: DNS, connect, TLS and first-byte time measured directly with curl for ${share(helper.compare.length, helper.compare.length, helper.compare.length === 1 ? "host" : "hosts")}, without the browser or its proxy, to compare with the browser's own numbers.`, { short: `${helper.compare.length} host${helper.compare.length === 1 ? "" : "s"}` })
+          : never("outside-timing", "Timing measured outside the browser (curl)", "A NetLog is the browser's own view. A direct connection from the same computer shows whether the network or the browser's path is slow."),
         item("security-agent", "Security software and TLS inspection", withCert ? "partial" : "never",
           withCert ? `Inference only: the certificate issuer is recorded for ${share(withCert, connections.length, "connections")}. What a security agent does is not.` : "Nothing in this file identifies certificate issuers, and a security agent's own activity is never recorded.")
       ]
@@ -200,7 +208,7 @@ export function buildCoverage(model) {
     if (shorts[entry.id]) entry.short = shorts[entry.id];
   }
   const comparison = buildComparison(stages);
-  comparison.loaded = ["netlog", ...(enrichment ? ["har"] : []), ...(profile ? ["profile"] : [])];
+  comparison.loaded = ["netlog", ...(enrichment ? ["har"] : []), ...(profile ? ["profile"] : []), ...(helper?.routes.length ? ["route"] : [])];
   return { stages, summary, next: nextSteps(stages), comparison, har: enrichment ? { entries: enrichment.source.entryCount, matched: enrichment.alignment.matched, method: enrichment.alignment.method } : null, profile: profile ? { longTasks: profile.mainThread.longTaskCount, aligned: profile.alignment.aligned } : null };
 }
 

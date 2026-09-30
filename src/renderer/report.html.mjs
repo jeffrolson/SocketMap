@@ -20,6 +20,8 @@ import { renderCoverage, coverageCss } from "./coverage.mjs";
 import { buildServerInsights } from "../server-insights.mjs";
 import { renderEnrichmentPanel, renderRequestSource, renderMilestones, enrichmentCss, typeClass } from "./enrichment.mjs";
 import { renderProfilePanel, renderMainThreadBand, renderProfileSource, profileCss } from "./profile.mjs";
+import { renderPathPanel, renderPathPrompt, pathCss } from "./path.mjs";
+import { hostsToMeasure } from "../path.mjs";
 import { renderPolicyView, policyScript, policyCss } from "./policy.mjs";
 import { buildPolicyEvidence } from "../policy/engine.mjs";
 import { renderServerInsights, renderServerDetail, renderServerMark, serverInsightsCss } from "./server-insights.mjs";
@@ -516,6 +518,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   const serverInsights = buildServerInsights(analysis.pageRequests);
   const enrichment = model.enrichment || null;
   const profile = model.profile || null;
+  const pathData = model.path || null;
   const connections = new Map(model.connections.map(c => [c.id, c]));
   const { page } = analysis;
   const high = analysis.findings.filter(f => f.severity === "high").length;
@@ -546,6 +549,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   ${policyCss()}
   ${enrichmentCss()}
   ${profileCss()}
+  ${pathCss()}
   .ms-swatch { background: transparent; border-left: 1px dashed var(--secondary); height: 12px; width: 0; }
   .srv-swatch { background: var(--text); height: 3px; align-self: center; }
   .event-replay { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -837,6 +841,7 @@ ${themePreferenceScript()}
       ${renderServerInsights(serverInsights)}
       ${renderEnrichmentPanel(enrichment, analysis.pageRequests)}
       ${renderProfilePanel(profile, analysis.pageRequests)}
+      ${pathData ? renderPathPanel(pathData) : renderPathPrompt(hostsToMeasure(analysis))}
       ${renderHosts(analysis.hosts)}
     </div>
     <div class="view" id="view-waterfall" data-view="waterfall">
