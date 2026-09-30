@@ -20,7 +20,7 @@ if it exports a structured file; screenshot-or-copy pages get, at most, a guided
 Actively being built.
 
 - Try SocketMap on Windows and with colleagues; collect what confuses people.
-- Two-capture comparison (shipped in 0.7.0): validate with real user workflows.
+- Two-capture comparison (shipped in 0.7.0): validated on a real fast and slow-network pair; still to validate with real user workflows.
 
 ## Next (2 to 4 weeks)
 Queued, priority-ordered.
@@ -30,14 +30,12 @@ Queued, priority-ordered.
 ## Later (this quarter)
 Planned but not scheduled.
 
-- Policy tab follow-ups: confirm against an Edge export (Edge's keys are inferred; a managed Chrome 134 export
-  and an unmanaged Chrome 153 export are confirmed, and the two use different top-level
-  keys, so Edge may differ too); grow the
+- Policy tab follow-ups: an actual exported Edge file and a managed Chrome/Edge export with the per-policy flags (Edge 154's export keys are confirmed from its binary; the flags come from Chromium's source and one real Chrome 134 managed cutout); grow the
   catalog only from vendor pages, keep the review date current, run `npm run
   check:policy-links` before each release (added 2026-09-29)
-- Performance profile follow-ups: alignment is validated on one real same-session pair
-  (macOS Chrome, 34 of 37 requests matched); still to try a Windows and an Edge pair and a
-  trace recorded in a different run from the NetLog (added 2026-09-29)
+- Performance profile follow-ups: alignment is validated on real same-session pairs
+  (macOS Chrome and macOS Edge, 34 of 37 requests matched each); still to try a Windows pair
+  and a trace recorded in a different run from the NetLog (added 2026-09-29)
 - Network path helper follow-ups: run on real Windows machines and on Linux desktops (CI covers the runners, not real Wi-Fi or corporate proxies); TCP-based route probes; a 'run it for me' one-liner; per-hop loss with several probes (added 2026-09-30)
 
 ## Parking lot
@@ -58,6 +56,7 @@ Ideas, deferred features, nice-to-haves. No commitment.
 ## Recently shipped
 Last 3 to 5 items for context. Older history lives in `CHANGELOG.md`.
 
+- 2026-09-30: Edge and A/B comparison validated on real recordings; comparison no longer colours changes under 10 ms (0.17.1)
 - 2026-09-30: Waterfall timeline with problem markers and a window filter, sequence PNG and SVG export, one-row viewer toolbar (0.17.0)
 - 2026-09-30: Lighthouse JSON and V8 CPU profile as optional files, labelled as lab and summary views (0.16.0)
 - 2026-09-30: A HAR on its own opens in the full report (viewer and CLI); the older diagram remains for generic JSON and --diagram (0.15.0)

@@ -3,6 +3,15 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.1] - 2026-09-30
+### Validated
+- **Microsoft Edge, on real recordings.** Edge 154 (run from Microsoft's signed package in a temporary folder, then removed) recorded a NetLog and a Performance trace of one page load: 34 of 37 trace requests matched NetLog requests, 33 within 50 ms, and the request-based offset agrees with the shared browser clock to within 1 ms. The NetLog identifies the browser as "Microsoft Edge 154", so profile alignment now has a real macOS Chrome pair and a real macOS Edge pair. Windows is still only CI-verified.
+- **Edge's policy export keys.** Edge 154's own binary contains `chromeMetadata`, `policyGroups` and `policyIds`, and contains neither `policyValues` nor `edgeMetadata`, so Edge writes the same layout as Chrome 134 and earlier. The reader already accepts it; a test now covers that shape. (Edge's `edge://policy` export goes through a native save dialog, so an actual exported file was not captured here.)
+- **A/B comparison on real captures.** The same page loaded twice with Chrome's own NetLog, the second with an emulated slow network: the comparison showed the observed span rising from 532 ms to 4.08 s and median request duration from 15 to 408 ms while median server wait stayed flat (14 vs 12 ms), which is what a network slowdown should look like.
+
+### Fixed
+- The comparison labelled a 2 ms change in a timing "faster" in green. Differences under 10 ms are now shown as "about the same".
+
 ## [0.17.0] - 2026-09-30
 ### Added
 - **Timeline in the Waterfall.** A strip marks each failed or slow request on the page load's timeline (click a marker to jump to its row) and, with a Performance profile, the main thread's long tasks. Two handles set a time window that narrows the waterfall to the requests overlapping it; "Show everything" restores it.
