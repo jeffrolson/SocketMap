@@ -80,10 +80,12 @@ async function main() {
     const pending = new Map();
     const requests = [];
     const errors = [];
+    const consoleLines = [];
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
       if (message.id && pending.has(message.id)) { const { resolve, reject } = pending.get(message.id); pending.delete(message.id); message.error ? reject(new Error(message.error.message)) : resolve(message.result); }
       else if (message.method === "Network.requestWillBeSent") requests.push(message.params.request.url);
+      else if (message.method === "Runtime.consoleAPICalled" && /error|warning/.test(message.params.type)) consoleLines.push(`${message.params.type}: ${(message.params.args || []).map(a => a.value ?? a.description ?? "").join(" ").slice(0, 200)}`);
       else if (message.method === "Runtime.exceptionThrown") errors.push(message.params.exceptionDetails?.exception?.description || message.params.exceptionDetails?.text);
     };
     const send = (method, params = {}) => new Promise((resolve, reject) => { const id = nextId++; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params })); });
@@ -92,6 +94,8 @@ async function main() {
       const end = Date.now() + ms;
       while (Date.now() < end) { if (await evaluate(expression).catch(() => false)) return true; await sleep(200); }
       check(false, `timed out waiting for ${label}`);
+      const seen = await evaluate("(() => { const f = document.querySelector('iframe'); const d = f && f.contentDocument; return { viewer: document.body.innerText.replace(/\\s+/g, ' ').slice(0, 300), report: d ? d.body.innerText.replace(/\\s+/g, ' ').slice(0, 200) : null, hasProfile: d ? !!d.querySelector('#profile') : null }; })()").catch(() => null);
+      console.log(`      page said: ${JSON.stringify(seen)}${consoleLines.length ? ` | console: ${consoleLines.slice(-3).join(" || ")}` : ""}`);
       return false;
     };
     const setFiles = async (selector, list) => {
