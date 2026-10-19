@@ -34,7 +34,7 @@ SocketMap reads a **NetLog**: Chrome's and Edge's own detailed record of network
 2. Load the page or run the action while the NetLog is logging.
 3. In the Network tab, choose **Export HAR (sanitized)** (the download arrow) and save the file.
 
-Drop it with the NetLog, or click **Add a HAR** once the report opens. From the command line, add `--har network.har`. SocketMap reads the HAR as a stream and never reads response bodies, headers or cookies. It is never uploaded.
+Drop it with the NetLog, or choose **Files → Add files → Add a HAR** once the report opens. From the command line, add `--har network.har`. SocketMap reads the HAR as a stream and never retains response bodies or request cookies. A HAR opened on its own retains response headers with credentials removed. It is never uploaded.
 
 **Optional: record a Performance profile at the same time.** A profile adds what neither a NetLog nor a HAR can show: what the page's own code and rendering were doing, so a slow load can be split into waiting on the network and working on the computer.
 
@@ -42,15 +42,15 @@ Drop it with the NetLog, or click **Add a HAR** once the report opens. From the 
 2. With the NetLog logging, click **Record and reload** and wait for the recording to stop.
 3. Choose **Save profile** (the download arrow). It saves a `.json` file, or `.json.gz` if compressed.
 
-Drop it with the NetLog, or click **Add a profile** once the report opens. From the command line, add `--profile trace.json.gz`. Record it during the same page load as the NetLog: SocketMap lines the two up from the requests both recorded, so at least one request must appear in both. SocketMap keeps only the page's main thread and never keeps screenshots or source text. It is never uploaded.
+Drop it with the NetLog, or choose **Files → Add files → Add a profile** once the report opens. From the command line, add `--profile trace.json.gz`. Record it during the same page load as the NetLog. SocketMap places it only when the files provide enough alignment evidence; otherwise it keeps the profile separate from the network timeline. SocketMap keeps only the page's main thread and never keeps screenshots or source text. It is never uploaded.
 
-**Optional: record the path from this computer.** A browser cannot see its own Wi-Fi signal, the DNS servers and proxy settings the computer uses, or the route to the server. A small helper script records them, and also times each host with curl so you can compare the browser's numbers with a direct connection.
+**Optional: record the path from this computer.** A browser cannot see its own Wi-Fi signal, the DNS servers and proxy settings the computer uses, or the route to the server. A small helper script records them, and also times each host with curl so you can compare the browser's numbers with a separate probe. The presence of proxy environment settings does not establish which route that probe used.
 
-1. Open your report. The Overview shows a card with the exact command for this capture, listing its slowest hosts, and links to save the two scripts. (Or take them from the release page.)
-2. On the computer that made the capture, as close in time as you can, run it: `./socketmap-path.sh host1 host2` on a Mac or Linux, or `.\socketmap-path.ps1 host1 host2` in Windows PowerShell. It takes up to a minute (the route trace is the slow part), needs no admin rights, changes nothing, and writes `socketmap-path.json`.
+1. Open your report. The Overview shows a **Copy Mac/Linux command** or **Copy Windows command** button with the hosts from the capture. Paste it into a terminal on the computer that made the capture. It writes `socketmap-path.json` in your home folder. You can also review or download the scripts from the report.
+2. Run the helper as close in time as you can to the capture. It reads settings, optionally looks up a public IP address, runs a plain `GET /` probe for each listed host, and traces the route. It needs no administrator rights and does not change settings.
 3. Click **Add network path** and choose that file, or drop it with the NetLog. From the command line, add `--path socketmap-path.json`.
 
-The script makes two kinds of request and nothing else: an optional public-address lookup (`api.ipify.org`, turned off with `--no-public-ip` or `-NoPublicIp`) and a plain `GET /` to each host you list. The file records the computer's name, its addresses, the Wi-Fi network name when the operating system provides it, and the public address, so read it before sharing. It is a snapshot from when the script ran, so the report shows how far apart the two were and says when the network may have changed in between. On Windows the Wi-Fi signal is converted from the percentage Windows reports and is an estimate.
+The helper can make an optional public-address lookup (`api.ipify.org`, turned off with `--no-public-ip` or `-NoPublicIp`) and a plain `GET /` probe to each host you list. It records the computer name, addresses, Wi-Fi network name when the operating system provides it, and public address, so read the file before sharing. It is a snapshot from when the helper ran, so the report shows the gap from the capture and warns that the network may have changed in between. On Windows the Wi-Fi signal is converted from the percentage Windows reports and is an estimate. Route replies are sampled; a router that does not reply may be rate-limiting or ignoring probes rather than losing traffic.
 
 **Optional: a Lighthouse report.** Lighthouse loads the page itself in a controlled lab run and scores it. Run `npx lighthouse https://your.site --output=json --output-path=report.json`, or in DevTools open Lighthouse and choose Save as JSON. Click **Add Lighthouse**, drop it with the capture, or use `--lighthouse report.json`. It is a different load of the page, usually with simulated slow-network and slow-CPU settings, so its numbers are estimates: the report labels them as a separate lab load and never sets them against the capture's own timings. Its value is what a clean run would flag (unused JavaScript, cache lifetimes, render-blocking requests) and, when a URL it names is in your capture, a note on that request in the waterfall.
 
@@ -62,6 +62,8 @@ The script makes two kinds of request and nothing else: an optional public-addre
 
 **No install: the viewer.** Download `socketmap-viewer.html` from the repository's Releases page (or get it from whoever shared SocketMap with you) and double-click it. It opens in Chrome or Edge. Drop the capture file on the page, or click the drop area to choose it. The report appears in a few seconds, even for large captures, and the file never leaves your computer.
 
+![The viewer's start page](images/viewer-start.png)
+
 Not sure what to expect? Click **Try the sample capture** on the viewer's start page: it opens a report built from a made-up capture that shows TLS inspection, a proxy, a refused call to a local agent, and a slow server.
 
 **Command line.** If you have Node.js installed:
@@ -69,11 +71,13 @@ Not sure what to expect? Click **Try the sample capture** on the viewer's start 
 - Windows (PowerShell): `node bin\traceviz.mjs "$env:USERPROFILE\Downloads\chrome-net-export-log.json" -o report.html --open`
 - macOS: `node bin/traceviz.mjs ~/Downloads/chrome-net-export-log.json -o report.html --open`
 
-**The page SocketMap picks.** A capture often contains other tabs and background traffic. SocketMap analyzes the site you loaded (the one with a full page load and the most requests). Use the **Page / site** menu at the top to switch sites. It groups websites separately from browser and extension activity, shows request counts, and displays the selected page URL beside the menu. These are groups of requests by site, not a list of every visited URL. The CLI equivalent is `--page https://site.example.com`. Other activity is also listed under **Environment**.
+**The page SocketMap picks.** A capture often contains other tabs and background traffic. SocketMap analyzes the site you loaded (the one with a full page load and the most requests). Use the **Page / site** menu at the top to switch sites. It groups websites separately from browser and extension activity and shows request counts; **Files** shows the selected page URL. These are groups of requests by site, not a list of every visited URL. The CLI equivalent is `--page https://site.example.com`. Other activity is also listed under **Environment**.
 
 **Choose an appearance.** Use **Light theme** or **Dark theme** in the viewer or report. The choice is remembered when browser storage is available; the initial appearance follows your system preference. A saved report includes the selected theme and still lets its reader switch.
 
 ### Compare two captures
+
+![SocketMap comparison: side-by-side performance diffs](images/report-compare.png)
 
 The comparison also shows browser-wide snapshot changes and source-family activity. Source IDs belong to individual captures and are never paired across files. Snapshot differences are evidence of changed recorded state, not proof of a root cause.
 
@@ -89,13 +93,15 @@ The comparison shows:
 
 Requests pair by method and redacted URL, preserving query parameters and ignoring URL fragments. Repeated requests pair in capture order. Missing methods or URLs remain unpaired; redaction and repeated requests can make matches ambiguous. A missing request is not automatically an improvement or a regression. Incomplete request durations are shown as not recorded.
 
-Click **Save comparison** while the Comparison view is selected to create one self-contained HTML file. It includes both sides of the selected comparison, search, filters, themes, and the text summary, and opens offline without the original files. The viewer can read two capture models in memory, but streams each input separately and does not retain the raw event lists. Saved comparisons are reports, not capture inputs; choose the original NetLog files when starting a new comparison.
+Click **Save** while the Comparison view is selected to create one self-contained HTML file. It includes both sides of the selected comparison, search, filters, themes, and the text summary, and opens offline without the original files. The viewer can read two capture models in memory, but streams each input separately and does not retain the raw event lists. Saved comparisons are reports, not capture inputs; choose the original NetLog files when starting a new comparison.
 
 ## 3. Read the report
 
-The report is one HTML file with six tabs down the left side (across the top on small screens).
+The report is one HTML file with views down the left side (across the top on small screens): Overview, Waterfall, Sequence, Environment, Policy, Coverage, Diagnostics, Events, AI summary, and Learn. A view that needs an optional input explains what to add when that input is absent.
 
 ### Overview
+
+![Overview dashboard](images/report-overview.png)
 
 - **Top numbers:** time from the first request to the last response, number of requests and servers, data transferred, and findings.
 - **Findings:** the problems SocketMap detected, most serious first. Each one has the evidence from the capture and **who to involve**. See [section 4](#4-what-each-finding-means).
@@ -117,9 +123,9 @@ The report is one HTML file with six tabs down the left side (across the top on 
 
 Only shown when you add a Performance profile. It reports how busy the page's main thread was until load, the long tasks (over 50 ms) and the time beyond that threshold, first and largest contentful paint, DOMContentLoaded, load and layout shift, where main-thread time went (scripting, layout and style, paint, parsing), scripts ranked by main-thread time (nested calls are counted once), and the longest tasks with the scripts inside them and how many requests were in flight.
 
-On the waterfall, the **Main thread (profile)** row shows how busy the page was across the timeline, with long tasks outlined, and dashed lines mark first and largest contentful paint, DOMContentLoaded and load. This is what turns an unexplained quiet stretch in the waterfall into "the page was working": if the network is idle while the main thread is busy, the wait is on the computer.
+On the waterfall, the **Main thread (profile)** row shows how busy the page was across the timeline, with long tasks outlined, and dashed lines mark first and largest contentful paint, DOMContentLoaded and load. When it is aligned, it can make a quiet network stretch easier to investigate. It does not establish why the page was delayed.
 
-Read it as evidence, not proof: a script started by another script can be attributed to the wrong file, and responsiveness (INP) needs a real interaction and is not in a load profile. The finding **The page's own code kept the main thread busy** is worded as consistent with, not a diagnosis. If no request appears in both files the profile is shown but not placed on the timeline, and the panel says so.
+Read it as evidence, not proof: a script started by another script can be attributed to the wrong file, and responsiveness (INP) needs a real interaction and is not in a load profile. The finding **The page's own code kept the main thread busy** is worded as consistent with, not a diagnosis. A profile is placed only when its shared requests agree with the capture clock, or when its navigation is inside the capture window on Chrome's shared clock. Clock-only placement never attaches a profile detail to an individual request; the panel explains when no placement is justified.
 
 ### What Lighthouse measured, and where JavaScript CPU time went
 
@@ -127,7 +133,9 @@ Only shown when you add the files. Lighthouse's panel shows its performance scor
 
 ### The path from this computer (with the network path helper)
 
-Only shown when you add the helper's file; without it the Overview shows how to collect it. It has four tiles (this computer's link and Wi-Fi signal, its DNS servers marked private or public, its proxy and PAC settings, its public address), "what stands out" observations with their limits stated (a weak signal, a proxy, a delay jump in the route, a browser much slower than curl on the same computer), a table putting the browser's DNS, connect, TLS and server-wait numbers next to curl's for each host, and the route to each host with the delay at each hop. Curl does not use the system proxy, so a gap between the two points at the browser's own path, not at a cause. Routers often ignore route probes, so a silent hop does not mean loss.
+Only shown when you add the helper's file; without it the Overview shows how to collect it. It has four tiles (this computer's link and Wi-Fi signal, its DNS servers marked private or public, its proxy and PAC settings, its public address), "what stands out" observations with their limits stated, a table putting the browser's DNS, connect, TLS and server-wait numbers next to curl's for each host, and the route to each host with response counts and timing range where recorded. The helper records whether proxy environment variables were present; bypass settings and other curl configuration can still change the path used. System proxy settings are shown separately. A gap is an observation to test, not a cause. Routers often ignore or rate-limit route probes, so a missing reply does not mean loss.
+
+On macOS and Linux, the helper uses TCP probes to port 443 when the installed traceroute advertises support, otherwise UDP. It defaults to three probes per hop; `--route-probes` accepts one through five. Native Windows tracing uses three ICMP probes per hop and explicitly reports that TCP tracing is unavailable. A value such as `<1 ms` is an upper bound, not an exact duration. Route command failures are shown as incomplete evidence.
 
 ### What the page is made of (with a HAR)
 
@@ -153,6 +161,8 @@ Read these as the server's account, not a measurement: phases can overlap (so th
 
 ### Waterfall
 
+![Interactive request waterfall and timeline scrubber](images/report-waterfall.png)
+
 Every request in the order it started. The colored bar shows where each request's time went:
 
 | Phase | In plain words |
@@ -176,6 +186,8 @@ A strip above the waterfall marks each failed or slow request on the page load's
 
 ### Sequence
 
+![Protocol-aware interactive sequence diagram](images/report-sequence.png)
+
 The page load drawn as a conversation. The left column is your browser; each other column is a server. Time runs top to bottom, and the number on the left is when each step started.
 
 - **Solid arrow:** the browser asks a server for something and gets an answer. The tags under it show the protocol (H2, H3), the result (200 means OK), the server wait, and the size.
@@ -183,13 +195,13 @@ The page load drawn as a conversation. The left column is your browser; each oth
 - **Red row:** a failure, or a connection whose certificate points to TLS inspection.
 - **Amber row:** slow.
 
-Hover a label above an arrow, such as **TCP + TLS handshake**, for a brief explanation of what the browser is attempting. Click a row or server heading for four detail tabs (Explained, Timing, Connection, Headers). Use **Hide details panel** in the panel itself or beside the Sequence heading to give the diagram the full width. **Show details panel** restores it; selecting a row also brings it back. On narrower screens the panel sits below the diagram.
+Hover a label above an arrow, such as **TCP + TLS handshake**, for a brief explanation of what the browser is attempting. Click a row or server heading for four detail tabs (Explained, Timing, Connection, Headers). Use **Hide details panel** in the panel itself or in **Controls** to give the diagram the full width. **Show details panel** restores it; selecting a row also brings it back. On narrower screens the panel sits below the diagram.
 
 **Save the sequence as an image.** **Save as image** downloads the diagram as a PNG and **Save as SVG** as a vector file, ready for a ticket or a slide. The image is built inside the page from what is on screen, so it carries the same redacted content as the report and nothing is sent anywhere. If a browser will not draw the PNG, use the SVG.
 
 ### Filter
 
-On the Waterfall and Sequence tabs, the bar under the header narrows both views:
+Open **Filter** beside the Waterfall color key or **Controls** in Sequence to narrow both views. Saved reports keep these controls in their section header:
 
 - **Search** by host, address, status code, or protocol (for example `sharepoint`, `404`, `h3`).
 - **Problems:** failed requests and TLS inspection.
@@ -203,6 +215,8 @@ Recorded browser version, channel and build, operating system, local addresses, 
 
 ### Coverage
 
+![Telemetry coverage map](images/report-coverage.png)
+
 A map of the request path (page code, browser, network stack, network path, server) that shows what this capture recorded at each stage. Every row has one of four labels, shown as text and an icon:
 
 - **Recorded:** the capture has the data.
@@ -210,9 +224,9 @@ A map of the request path (page code, browser, network stack, network path, serv
 - **Not in this file:** a NetLog can record it, but this file has none. Recapturing may fix it.
 - **Never in a NetLog:** it needs another tool, such as JavaScript time, packet loss, or what the server did.
 
-**Which tool sees what** compares NetLog, HAR export, Performance profile, Lighthouse, packet capture, route trace and server logs across the questions above. The first column is measured from your capture. The other columns describe what each tool can show in general, so you can pick the next tool to collect; SocketMap does not read them yet, and the table says so. Tick **Show only what this capture is missing** to hide the questions your capture already answers. Below the table, **If you see this, add that** maps common symptoms to the tool that answers them.
+**Which tool sees what** compares NetLog, HAR export, Performance profile, Lighthouse, packet capture, route trace and server logs across the questions above. The first column is measured from your capture. SocketMap can read optional HAR, Performance profile, Lighthouse, CPU profile, and network-path helper files locally. Packet captures and server logs remain separate evidence. Tick **Show only what this capture is missing** to hide the questions your capture already answers. Below the table, **If you see this, add that** maps common symptoms to the tool that answers them.
 
-The counts come from your capture; the "never" rows are facts about the NetLog format. Not recorded does not mean it was fine. **Worth capturing next** lists other data to collect separately (a Chrome Performance profile, a request ID for the server team, a HAR, Lighthouse, a packet capture, a route trace, or a second capture to compare). SocketMap does not read those yet. The same summary is included in the AI summary.
+The counts come from your capture; the "never" rows are facts about the NetLog format. Not recorded does not mean it was fine. **Worth capturing next** lists useful follow-up evidence. The report can read the optional files named above; packet capture and server evidence must be used alongside it. The same summary is included in the AI summary.
 
 ### Policy
 
@@ -280,12 +294,12 @@ You will see these as `http/1.1`, `h2`, and `h3` (or H2 and H3 in the Sequence v
 | Rating | Best | Better | Good |
 | Watch for | Firewalls blocking UDP 443 force a fallback to HTTP/2 | One lost packet stalls every request on the connection | Queueing on busy pages; often forced by proxies |
 
-The browser uses the newest version both sides support. Seeing HTTP/1.1 or H2 where H3 is expected usually means something on the network path does not support the newer version.
+The browser negotiates a version based on browser and server support, configuration, and the network path. Seeing HTTP/1.1 or H2 alone does not establish why H3 was not used; inspect a recorded failed QUIC attempt before investigating fallback.
 
 ## 6. Share the report
 
 - The report is one HTML file. Email it, attach it to a ticket, or put it on SharePoint. It opens offline in any modern browser.
-- In the viewer, **Save report** downloads it; from the command line it is the file you named with `-o`.
+- In the viewer, **Save** downloads it; from the command line it is the file you named with `-o`.
 - **Removed:** passwords, cookies, authorization headers, and tokens, including tokens in URLs.
 - **Kept:** IP addresses, host names, full URLs (including document names), and certificate details. The network team needs these. Treat the report as internal troubleshooting data.
 - Share the report, not the raw capture.
@@ -313,3 +327,7 @@ The report's **Learn** tab links to all of these.
 | Windows: `winget` is not available | Install Node.js LTS from nodejs.org, and use GitHub's **Code > Download ZIP** instead of Git. |
 | A value says "Not recorded" | The capture did not contain it, often because the connection was opened before logging started. Capture again from a fresh tab. |
 | No machine name, public IP, or traceroute | A NetLog does not contain them. A capture helper for these is on the roadmap. |
+
+## Compact controls
+
+The viewer keeps the report section picker, selected page, and **Save** in one header. Open **Files** for the loaded filenames and selected page URLs, the second page selector and comparison views, optional imports under **Add files**, theme selection, and **Open another capture**. Saved reports use their own header with a section picker on phones. Explanations are in closed **About this page** disclosures. The Waterfall color key remains visible while scrolling.

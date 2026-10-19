@@ -3,6 +3,7 @@
 import { formatBytes, formatDuration } from "../normalizer.mjs";
 import { themeCss, themeModeCss, themePreferenceScript } from "../theme.mjs";
 import { DEFAULT_THEME } from "./theme.generated.mjs";
+import { renderPageHeader, PAGE_HEADER_CSS } from "./page-header.mjs";
 
 const PHASES = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const PHASE_LABELS = { redirect: "Redirect", queue: "Queue", proxy: "Proxy", dns: "DNS", connect: "Connect", tls: "TLS", stalled: "Stalled", send: "Send", wait: "Server wait", download: "Download" };
@@ -149,26 +150,24 @@ function diagnosticComparison(diagnostics) {
 }
 
 /** Renders a self-contained comparison report. Captured values are HTML-escaped. */
-export function renderComparisonHtml(comparison, { theme = DEFAULT_THEME } = {}) {
+export function renderComparisonHtml(comparison, { theme = DEFAULT_THEME, embedded = false } = {}) {
   const pairs = Array.isArray(comparison?.pairs) ? comparison.pairs : [];
   const environment = Array.isArray(comparison?.environment) ? comparison.environment : [];
   const warnings = Array.isArray(comparison?.warnings) ? comparison.warnings : [];
   const identityWarnings = warnings.filter(warning => /\b(site|url|page)\b/i.test(warning));
   const observed = comparison.metrics.find(metric => metric.key === "observed-span");
   const summary = comparisonSummary(comparison);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SocketMap capture comparison</title><style>
-  :root { ${themeCss(theme)} } ${themeModeCss(theme, DEFAULT_THEME)}
+  return `<!doctype html><html lang="en" data-embedded="${embedded ? "true" : "false"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SocketMap capture comparison</title><style>
+  :root { ${themeCss(theme)} } ${themeModeCss(theme, DEFAULT_THEME)} ${PAGE_HEADER_CSS}
+  html[data-embedded="true"] .page-header { display:none }
   *{box-sizing:border-box}
    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font-sans)}
    button,input{font:inherit}
    button{color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;cursor:pointer}
    button:hover,button.is-on{border-color:var(--secondary);background:var(--surface-3)}
    button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--secondary);outline-offset:2px}
-  .wrap{max-width:1160px;margin:auto;padding:20px}
-  .top{display:flex;gap:12px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(8px);z-index:3}
-  .brand{font-weight:700;font-size:18px}
+  .wrap{max-width:1160px;margin:auto;padding:8px 12px 20px}
   .eyebrow{font:600 11px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--secondary)}
-  h1{font-size:clamp(24px,4vw,34px);line-height:1.15;margin:14px 0 8px}
   h2{font-size:17px;margin:4px 0;overflow-wrap:anywhere}
   .note,.coverage,.url,small{color:var(--text-muted)}
   .sources,.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
@@ -216,23 +215,23 @@ export function renderComparisonHtml(comparison, { theme = DEFAULT_THEME } = {})
   .env-changed td{background:color-mix(in srgb,var(--warning) 13%,transparent)}
   .diag-totals{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.diag-totals span{background:var(--canvas);padding:6px 8px;border-radius:var(--radius-sm);font-size:12px}.diag-totals b{font-family:var(--font-mono)}.diag-bar{display:inline-block;width:88px;height:8px;margin-right:6px;background:var(--canvas);border-radius:99px;overflow:hidden}.diag-bar i{display:block;height:100%;background:var(--primary)}.snapshot-differences{display:grid;gap:8px}.snapshot-differences details{padding:8px;background:var(--canvas);border-radius:var(--radius-sm)}.snapshot-differences summary{cursor:pointer;color:var(--primary)}.snapshot-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.snapshot-grid h4{margin:8px 0 3px}.snapshot-grid pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;font:11px/1.4 var(--font-mono)}
   .warning{border-left:3px solid var(--warning);padding:8px 10px;background:var(--surface-2);margin:8px 0}
+  .about-page{margin-top:14px}.about-page summary{cursor:pointer;color:var(--primary);font-weight:600}.about-page p{margin:6px 0;color:var(--text-muted)}
   .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   textarea{display:block;width:100%;min-height:220px;margin-top:10px;background:var(--canvas);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font:12px/1.45 var(--font-mono)}
   .hidden{display:none!important}
-  @media(max-width:700px){.wrap{padding:14px}
+  @media(max-width:700px){.wrap{padding:6px 10px 14px}
   .sources,.metrics,.phase-grid{grid-template-columns:1fr}
   .snapshot-grid{grid-template-columns:1fr}
   .metrics{gap:8px}
-  .top{position:static}
   .run{grid-template-columns:76px 1fr 62px}
   .filters input{min-width:100%}
   .env-grid table{min-width:560px}
   }
   
-  </style>${themePreferenceScript()}</head><body><header class="top"><div class="wrap"><span class="brand">SocketMap comparison</span></div><div class="wrap"><button type="button" data-theme-toggle>Theme</button></div></header><main class="wrap">
-  <span class="eyebrow">Two capture comparison</span><h1>What changed between the baseline and comparison?</h1><p class="note">A bar shows each request's recorded duration on the same row scale. A shorter recorded request is faster; request additions and removals are not automatically regressions. A page-level observed span is shown only when every selected request recorded an end.</p>
-  <section class="sources">${sourceCard("A", comparison.a, observed?.a)}${sourceCard("B", comparison.b, observed?.b)}</section>${identityWarnings.map(warning => `<p class="warning">${esc(warning)}</p>`).join("")}
-  <section class="metrics">${comparison.metrics.map(metric).join("")}</section>
+  </style>${themePreferenceScript()}</head><body>${renderPageHeader({ title: "Compare captures", subtitle: "Recorded evidence, side by side", status: `${pairs.length} request pairs`, controls: '<button type="button" data-theme-toggle>Theme</button>', className: "comparison-header" })}<main class="wrap">
+  <section class="metrics">${comparison.metrics.map(metric).join("")}</section>${identityWarnings.map(warning => `<p class="warning">${esc(warning)}</p>`).join("")}
+  <section class="sources">${sourceCard("A", comparison.a, observed?.a)}${sourceCard("B", comparison.b, observed?.b)}</section>
+  <details class="about-page"><summary>About this page</summary><p>A bar shows each request's recorded duration on the same row scale. A shorter recorded request is faster; request additions and removals are not automatically regressions. A page-level observed span is shown only when every selected request recorded an end.</p></details>
   <section class="panel"><h2>Matched request evidence</h2><p class="note">Requests are paired by method, redacted URL, and occurrence order. Repeated requests and redacted values make this a useful heuristic, not proof of the same server-side action.</p><div class="filters"><button class="is-on" data-filter="all">All (${pairs.length})</button><button data-filter="changed">Changed (${comparison.counts.changed})</button><button data-filter="only-a">Only A (${comparison.counts.onlyA})</button><button data-filter="only-b">Only B (${comparison.counts.onlyB})</button><input id="search" type="search" placeholder="Filter method, URL, or outcome" aria-label="Filter requests"><span id="shown" class="note"></span></div><div class="pair-list">${pairs.map(pairRow).join("")}</div>${pairs.length > INITIAL_PAIRS ? `<button id="show-all" type="button">Show ${pairs.length - INITIAL_PAIRS} more paired requests</button>` : ""}</section>
   <section class="panel"><h2>Environment differences</h2><p class="note">These are browser-recorded settings. A difference can explain a changed path, but does not prove it caused the timing change.</p><div class="env-grid"><table><thead><tr><th>Setting</th><th>A baseline</th><th>B comparison</th></tr></thead><tbody>${environment.map(row => `<tr class="${row.changed ? "env-changed" : ""}"><th>${esc(row.label)}</th><td>${esc(row.a ?? "Not recorded")}</td><td>${esc(row.b ?? "Not recorded")}</td></tr>`).join("") || "<tr><td colspan=\"3\">No environment fields were recorded.</td></tr>"}</tbody></table></div></section>
   ${diagnosticComparison(comparison.diagnostics)}

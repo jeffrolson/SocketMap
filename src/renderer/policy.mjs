@@ -29,13 +29,14 @@ export function policyCss() {
 }
 
 /** The tab's shell: how to export, the upload area, and a preview of what is checked. */
-export function renderPolicyView() {
+export function renderPolicyView({ compact = false } = {}) {
   const areas = [...new Set(POLICY_CATALOG.map(policy => policy.area))];
-  return `<section class="card pol" id="policy"><header><h2>Browser policy</h2>
-<p class="note">Optional. Load a policy export from the browser to see which policies shape the network path, which ones the vendor has retired, and what is worth considering given this capture. Guidance covers network and page-load behavior only, not security hardening.</p></header>
-<ol class="pol-how"><li>In Chrome open <code>chrome://policy</code>, or in Edge <code>edge://policy</code>.</li><li>Choose <b>Export to JSON</b> and save the file.</li><li>Drop it below, or choose it. It is read here and nowhere else.</li></ol>
+  const lead = "Optional. Load a policy export from the browser to see which policies shape the network path, which ones the vendor has retired, and what is worth considering given this capture. Guidance covers network and page-load behavior only, not security hardening.";
+  const steps = '<ol class="pol-how"><li>In Chrome open <code>chrome://policy</code>, or in Edge <code>edge://policy</code>.</li><li>Choose <b>Export to JSON</b> and save the file.</li><li>Drop it below, or choose it. It is read here and nowhere else.</li></ol>';
+  return `<section class="card pol" id="policy">${compact ? "" : `<header><h2>Browser policy</h2><p class="note">${lead}</p></header>${steps}`}
 <div class="pol-drop" id="policy-drop"><input type="file" id="policy-file" accept=".json,application/json" aria-label="Choose a policy export file"><strong>Drop a policy export here</strong><span>or click to choose the file</span></div>
 <div class="pol-actions"><button type="button" id="policy-sample">Try a sample export</button><span class="pol-note">The sample is made up. Nothing is uploaded, and the file is not saved into this report. Reload the page to clear it.</span></div>
+${compact ? `<details class="about-page"><summary>About this page</summary><p>${lead}</p>${steps}</details>` : ""}
 <div id="policy-results" aria-live="polite"><div class="pol-callout">Nothing loaded yet. After you add an export you will see the policies set, any the vendor has deprecated, cross-checks against this capture, and evidence-backed suggestions, each labeled <b>Documented</b> (from the vendor's page) or <b>SocketMap guidance</b> (our judgment).</div>
 <p class="pol-note">Policies SocketMap checks, by area:</p>${areas.map(area => `<div class="pol-checks" aria-label="${esc(area)}"><b class="pol-note">${esc(area)}</b>${POLICY_CATALOG.filter(policy => policy.area === area).map(policy => `<span>${esc(policy.name)}</span>`).join("")}</div>`).join("")}
 <p class="pol-note">Catalog reviewed ${esc(CATALOG_REVIEWED)} against the <a href="${esc(CHROME_POLICY_LIST)}" target="_blank" rel="noopener noreferrer">Chrome Enterprise policy list</a> and the <a href="${esc(EDGE_POLICY_LIST)}" target="_blank" rel="noopener noreferrer">Microsoft Edge policy documentation</a>.</p></div>

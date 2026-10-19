@@ -56,6 +56,7 @@ async function main() {
     netlog: path.join(work, "capture.json"),
     har: path.join(work, "trace.har"),
     profile: path.join(work, "profile.json"),
+    unrelatedProfile: path.join(work, "unrelated-profile.json"),
     policy: path.join(work, "policies.json"),
     path: path.join(work, "socketmap-path.json"),
     lighthouse: path.join(work, "lighthouse.json"),
@@ -64,6 +65,9 @@ async function main() {
   fs.writeFileSync(files.netlog, netlogText);
   fs.writeFileSync(files.har, JSON.stringify(buildSampleHar(model)));
   fs.writeFileSync(files.profile, JSON.stringify(buildSampleTrace(model)));
+  const unrelatedProfile = buildSampleTrace(model);
+  for (const event of unrelatedProfile.traceEvents) if (event.ph !== "M" && Number.isFinite(event.ts)) event.ts += 3600 * 1000000;
+  fs.writeFileSync(files.unrelatedProfile, JSON.stringify(unrelatedProfile));
   const { buildSamplePolicyExport } = await import("../src/demo/sample-policy.mjs");
   fs.writeFileSync(files.policy, JSON.stringify(buildSamplePolicyExport()));
   const { buildSamplePath } = await import("../src/demo/sample-path.mjs");
@@ -115,7 +119,11 @@ async function main() {
       else if (message.method === "Runtime.exceptionThrown") errors.push(message.params.exceptionDetails?.exception?.description || message.params.exceptionDetails?.text);
     };
     const send = (method, params = {}) => new Promise((resolve, reject) => { const id = nextId++; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params })); });
-    const evaluate = async (expression) => (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;
+    const evaluate = async (expression) => {
+      const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+      if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+      return result.result.value;
+    };
     const waitFor = async (expression, label, ms = 20000) => {
       const end = Date.now() + ms;
       while (Date.now() < end) { if (await evaluate(expression).catch(() => false)) return true; await sleep(200); }
@@ -159,20 +167,38 @@ async function main() {
     check(narrowed && /Showing \d+ of \d+ requests/.test(narrowed.t) && narrowed.shown < narrowed.total && narrowed.after === "" && narrowed.all === narrowed.total, "moving the timeline window narrows the waterfall and Show everything restores it");
 
     // Sequence export: the SVG and PNG buttons produce real files
-    const exported = await evaluate(frame("d => new Promise(resolve => { const w = d.defaultView; const saved = []; const orig = w.HTMLAnchorElement.prototype.click; w.HTMLAnchorElement.prototype.click = function () { if (this.download) { const name = this.download; fetch(this.href).then(r => r.blob()).then(b => { saved.push({ name, size: b.size, type: b.type }); }); return; } return orig.call(this); }; d.getElementById('seq-save-svg').click(); d.getElementById('seq-save-png').click(); setTimeout(() => { w.HTMLAnchorElement.prototype.click = orig; resolve(saved); }, 6000); })"));
+    const exported = await evaluate(frame("d => new Promise(resolve => { const w = d.defaultView; const saved = []; const orig = w.HTMLAnchorElement.prototype.click; w.HTMLAnchorElement.prototype.click = function () { if (this.download) { const name = this.download; fetch(this.href).then(r => r.blob()).then(async b => { saved.push({ name, size: b.size, type: b.type, text: name.endsWith('.svg') ? await b.text() : '' }); }); return; } return orig.call(this); }; d.getElementById('sequence-controls').open = true; d.getElementById('seq-save-svg').click(); d.getElementById('seq-save-png').click(); setTimeout(() => { w.HTMLAnchorElement.prototype.click = orig; resolve(saved); }, 6000); })"));
     check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".svg") && f.size > 8000 && /svg/.test(f.type)), "the sequence exports as an SVG file");
+    check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".svg") && />Time</.test(f.text) && !/Save as image|Hide details panel/.test(f.text)), "the sequence image contains the time column and omits open controls");
     check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".png") && f.size > 4000 && /png/.test(f.type)), "the sequence exports as a PNG file");
 
     // 2. Policy sample inside the report
     await evaluate(frame("d => { const b = [...d.querySelectorAll('button')].find(x => /sample export/i.test(x.textContent)); if (b) b.click(); return !!b; }"));
     check(await waitFor(frame("d => /Policies set/i.test((d.getElementById('policy') || d.body).innerText)"), "the policy sample", 8000), "policy sample renders results");
 
+    // Embedded launch commands copy the exact text, including when file:// denies clipboard access.
+    await send("Page.navigate", { url: pathToFileURL(viewer).href });
+    await waitFor("document.readyState === 'complete'", "the viewer to reload");
+    await setFiles("#file-input", [files.netlog]);
+    await waitFor(frame("d => !!d.getElementById('path-launch-sh')"), "the embedded helper commands");
+    const copied = await evaluate(frame("async d => { let text; Object.defineProperty(d.defaultView.navigator, 'clipboard', { configurable: true, value: { writeText: value => { text = value; return Promise.resolve(); } } }); d.querySelector('[data-copy-from=path-launch-sh]').click(); await Promise.resolve(); return text === d.getElementById('path-launch-sh').value && text.includes('base64 -d | bash -s'); }"));
+    check(copied, "helper copy button copies the embedded offline command");
+    const selected = await evaluate(frame("async d => { Object.defineProperty(d.defaultView.navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('test clipboard denial')) } }); const button = d.querySelector('[data-copy-from=path-launch-ps]'); button.click(); await new Promise(resolve => setTimeout(resolve, 50)); const text = d.getElementById('path-launch-ps'); return { open: text.closest('details').open, start: text.selectionStart, end: text.selectionEnd, length: text.value.length, label: button.textContent, visible: text.getClientRects().length }; }"));
+    check(selected && selected.open && selected.start === 0 && selected.end === selected.length && selected.label.includes("Selected"), `blocked clipboard reveals and selects the full helper command for manual copying${selected ? ` (${JSON.stringify(selected)})` : ""}`);
+
+    await setFiles("#profile-input", [files.unrelatedProfile]);
+    await waitFor(frame("d => !!d.getElementById('profile')"), "the unrelated profile summary");
+    check(await evaluate(frame("d => !d.querySelector('.wf-mainrow') && /matching URLs disagree with the capture clock/i.test(d.getElementById('profile').innerText)")), "a different recording stays separate despite matching URLs");
+
     // 3. Real file inputs: NetLog, then HAR and profile
     await send("Page.navigate", { url: pathToFileURL(viewer).href });
     await waitFor("document.readyState === 'complete'", "the viewer to reload");
     await setFiles("#file-input", [files.netlog, files.har, files.profile, files.path]);
     check(await waitFor(frame("d => !!d.querySelector('#profile')"), "the NetLog with its HAR and profile", 30000), "NetLog plus HAR plus profile load together through the file input");
-    check(await evaluate("document.body.innerText.includes('capture.json')"), "the toolbar names the loaded file");
+    await evaluate("document.getElementById('viewer-menu').open = true");
+    check(await evaluate("document.body.innerText.includes('capture.json')"), "the Files menu names the loaded file");
+    check(await evaluate("document.getElementById('open-another').getBoundingClientRect().height > 0"), "the Files menu exposes the capture controls");
+    await evaluate("document.getElementById('viewer-menu').open = false");
     check(await waitFor(frame("d => !!d.querySelector('#path')"), "the network path panel", 15000), "the helper's file loads with the others and shows its panel");
     check(await evaluate(frame("d => !!d.querySelector('#profile') && !d.querySelector('#path-prompt')")), "all three optional files are shown together");
     await setFiles("#lighthouse-input", [files.lighthouse]);
@@ -186,6 +212,7 @@ async function main() {
     await setFiles("#file-input", [files.har]);
     check(await waitFor(frame("d => !!d.querySelector('#view-waterfall') && /built from a HAR/.test(d.body.textContent)"), "the HAR-only report", 30000), "a HAR on its own opens the full report");
     check(await evaluate(frame("d => !d.querySelector('[data-nav=diagnostics]') && !!d.querySelector('[data-nav=coverage]')")), "the HAR report hides the NetLog-only tabs and keeps Coverage");
+    check(await evaluate(frame("d => [...d.querySelectorAll('[data-section-select]')].every(select => [...select.options].some(option => option.value === 'coverage') && ![...select.options].some(option => ['diagnostics', 'event-replay'].includes(option.value)))")), "the saved HAR report section picker offers only available sections");
     check(await evaluate("document.getElementById('add-har').hidden === true"), "the viewer does not offer to add a HAR to a HAR");
     await setFiles("#profile-input", [files.profile]);
     check(await waitFor(frame("d => !!d.querySelector('#profile')"), "a profile added to the HAR report", 20000), "a profile can be added to a HAR-based report");

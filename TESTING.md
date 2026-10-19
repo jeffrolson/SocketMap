@@ -10,8 +10,13 @@ npm test
 # Single test file
 node --test tests/netlog-parser.test.mjs
 
-# Full verification (tests + design-token freshness)
+# Full verification (tests + theme and embedded-helper freshness)
 npm run verify
+
+# Release browser checks (Node.js 22+, Chrome or Edge)
+npm run build:viewer
+npm run test:browser
+npm run test:layout
 ```
 
 ## Test patterns
@@ -23,6 +28,13 @@ npm run verify
 - All unit and integration tests pass
 - The generated theme matches `DESIGN.md` (`node scripts/generate-theme.mjs --check`)
 - CLI generates valid, self-contained HTML without remote dependencies
+- The embedded helpers match the scripts in `tools/`
+- Browser smoke confirms file imports, interaction, and offline behavior
+- Layout acceptance confirms first data within 220px at 1440×900 and 260px at 390×844, visible items, one combined header within 64px/56px respectively, accessible section navigation and controls, and no page-wide horizontal overflow
+
+Set `LAYOUT_SMOKE_OUTPUT` to a local JSON path to retain geometry results; set `LAYOUT_SMOKE_SCREENSHOTS` to a local directory for screenshots. These outputs contain synthetic sample data. The layout check fails if the browser or required Node runtime is unavailable.
+
+On a non-Windows machine, optional PowerShell tests require `SOCKETMAP_POWERSHELL` pointing to a trusted `pwsh` executable. A PowerShell 7 run on macOS verifies script logic; it does not prove Windows PowerShell 5.1 or physical network behavior. Device acceptance is tracked in `docs/FIELD-VALIDATION.md`.
 
 ## Writing tests
 - Use built-in `node:test` and `node:assert/strict`.

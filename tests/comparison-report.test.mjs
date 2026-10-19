@@ -54,6 +54,17 @@ describe("comparison report", () => {
     scripts.forEach(script => assert.doesNotThrow(() => new vm.Script(script[1])));
   });
 
+  it("puts capture evidence ahead of explanatory copy", () => {
+    const html = renderComparisonHtml(comparison);
+    const header = html.indexOf('<h1 class="page-title">Compare captures</h1>');
+    const metrics = html.indexOf('<section class="metrics">');
+    const sources = html.indexOf('<section class="sources">');
+    const about = html.indexOf('<details class="about-page">');
+    assert.ok(header >= 0 && metrics > header && sources > metrics && about > sources, "metric evidence follows the compact header before context and explanation");
+    assert.ok(html.includes("height: 64px; min-height: 64px"));
+    assert.ok(html.includes("height: 56px; min-height: 56px"));
+  });
+
   it("keeps incomplete spans unknown and gives AI handoff concrete changed evidence", () => {
     const incomplete = structuredClone(comparison);
     incomplete.metrics[0].a = null;

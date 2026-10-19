@@ -15,8 +15,9 @@ export function buildSamplePath(model) {
     proxy: { http: null, https: null, autoConfigUrl: "http://wpad.corp.example.com/proxy.pac", autoConfigEnabled: true, autoDetect: true, bypass: ["*.corp.example.com"] },
     publicIp: "203.0.113.25", publicIpSource: "api.ipify.org",
     hosts: hosts.map((host, i) => ({ host, dnsMs: 18 + i * 6, connectMs: 22 + i * 9, tlsMs: 31 + i * 5, firstByteMs: 64 + i * 40, httpVersion: "2", remoteIp: `203.0.113.${60 + i}`, status: 200, error: null })),
-    routes: hosts.slice(0, 2).map((host, i) => ({ host, method: "udp", hops: [
-      { n: 1, ip: "192.0.2.1", rttMs: 3.2 }, { n: 2, ip: "198.51.100.1", rttMs: 9.8 }, { n: 3, ip: null, rttMs: null }, { n: 4, ip: "198.51.100.9", rttMs: 14.1 }, { n: 5, ip: "203.0.113.1", rttMs: 96.5 }, { n: 6, ip: `203.0.113.${60 + i}`, rttMs: 98.2 }
+    routeCapabilities: { tcp: { available: true, tool: "traceroute", reason: null } },
+    routes: hosts.slice(0, 2).map((host, i) => ({ host, method: "tcp", destinationPort: 443, attempts: 3, hops: [
+      { n: 1, ip: "192.0.2.1", responses: 3, noResponses: 0, minMs: 2.8, medianMs: 3.2, maxMs: 3.7, rttMs: 3.2 }, { n: 2, ip: "198.51.100.1", responses: 3, noResponses: 0, minMs: 8.9, medianMs: 9.8, maxMs: 11.3, rttMs: 9.8 }, { n: 3, ip: null, responses: 0, noResponses: 3, minMs: null, medianMs: null, maxMs: null, rttMs: null }, { n: 4, ip: "198.51.100.9", responses: 2, noResponses: 1, minMs: 13.4, medianMs: 14.1, maxMs: 14.8, rttMs: 14.1 }, { n: 5, ip: "203.0.113.1", responses: 3, noResponses: 0, minMs: 93.2, medianMs: 96.5, maxMs: 99.4, rttMs: 96.5 }, { n: 6, ip: `203.0.113.${60 + i}`, responses: 3, noResponses: 0, minMs: 97.7, medianMs: 98.2, maxMs: 100.1, rttMs: 98.2 }
     ] })),
     notes: ["This is a made-up sample. Nothing was measured."]
   };

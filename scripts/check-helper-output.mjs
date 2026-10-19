@@ -11,10 +11,9 @@ if (process.argv[2] === "--tracert-selftest") {
   // Checks the PowerShell tracert parser (run with -SelfTestTracert on Windows) against the expected hops.
   const raw = fs.readFileSync(process.argv[3], "utf8").replace(/^\uFEFF/, "");
   const hops = [].concat(JSON.parse(raw));
-  const expected = [[1, "192.0.2.1", 1], [3, "198.51.100.9", 12], [4, "203.0.113.7", 45], [2, null, null]];
   const sorted = hops.slice().sort((a, b) => a.n - b.n);
-  const want = [[1, "192.0.2.1", 1], [2, null, null], [3, "198.51.100.9", 12], [4, "203.0.113.7", 45]];
-  const ok = sorted.length === want.length && sorted.every((h, i) => h.n === want[i][0] && h.ip === want[i][1] && h.rttMs === want[i][2]);
+  const want = [[1, "192.0.2.1", 1, 1, 1, 1, 3, 0], [2, null, null, null, null, null, 0, 3], [3, "198.51.100.9", 11, 12, 13, 12, 3, 0], [4, "203.0.113.7", 45, 46, 47, 46, 2, 1]];
+  const ok = sorted.length === want.length && sorted.every((h, i) => h.n === want[i][0] && h.ip === want[i][1] && h.minMs === want[i][2] && h.medianMs === want[i][3] && h.maxMs === want[i][4] && h.rttMs === want[i][5] && h.responses === want[i][6] && h.noResponses === want[i][7]) && sorted[0].minUpperBound === true && sorted[0].medianUpperBound === true && sorted[0].maxUpperBound === true;
   console.log(JSON.stringify(sorted));
   if (!ok) { console.error("tracert parser output differs from the expected hops"); process.exit(1); }
   console.log("tracert parser ok");
@@ -40,6 +39,14 @@ if (requireProbe) {
   if (!h) problems.push("no host was measured");
   else if (h.dnsMs == null || h.connectMs == null) problems.push(`host ${h.host} has no curl DNS or connect time${h.error ? ` (${h.error})` : ""}`);
 }
-console.log(JSON.stringify({ platform: data.platform, os: data.os, link: data.link.type, wifi: data.link.wifi.rssiDbm != null, dnsServers: data.dns.servers.length, proxyPac: Boolean(data.proxy.autoConfigUrl), hosts: data.hosts.map(h => ({ host: h.host, dnsMs: h.dnsMs, connectMs: h.connectMs, status: h.status })), routes: data.routes.map(r => ({ host: r.host, method: r.method, hops: r.hops.length, answered: r.hops.filter(x => x.ip).length })), notes: data.notes }, null, 1));
+for (const route of data.routes) {
+  if (!route.method) problems.push(`route ${route.host} has no probe method`);
+  if (!route.attempts) problems.push(`route ${route.host} has no bounded probe count`);
+  for (const hop of route.hops) {
+    if (hop.responses != null && hop.noResponses != null && route.attempts != null && hop.responses + hop.noResponses > route.attempts) problems.push(`route ${route.host} hop ${hop.n} has more replies than attempts`);
+    if (hop.medianMs != null && (hop.minMs == null || hop.maxMs == null || hop.minMs > hop.medianMs || hop.medianMs > hop.maxMs)) problems.push(`route ${route.host} hop ${hop.n} has invalid timing summary`);
+  }
+}
+console.log(JSON.stringify({ platform: data.platform, os: data.os, link: data.link.type, wifi: data.link.wifi.rssiDbm != null, dnsServers: data.dns.servers.length, tcpRoute: data.routeCapabilities.tcp, proxyPac: Boolean(data.proxy.autoConfigUrl), hosts: data.hosts.map(h => ({ host: h.host, dnsMs: h.dnsMs, connectMs: h.connectMs, status: h.status })), routes: data.routes.map(r => ({ host: r.host, method: r.method, attempts: r.attempts, hops: r.hops.length, answered: r.hops.filter(x => x.responses > 0 || x.ip).length })), notes: data.notes }, null, 1));
 if (problems.length) { console.error(`Problems: ${problems.join("; ")}`); process.exit(1); }
 console.log("helper output ok");

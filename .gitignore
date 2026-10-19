@@ -2,6 +2,7 @@ node_modules/
 .DS_Store
 *.html
 temp-*
+dist/
 
 # Real captures stay local: they contain real IPs, hostnames and URLs
 captures/

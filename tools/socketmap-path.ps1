@@ -37,11 +37,12 @@ param(
   [switch]$NoPublicIp,
   [switch]$NoProbe,
   [switch]$NoRoute,
-  [string[]]$SelfTestTracert
+  [string[]]$SelfTestTracert,
+  [string]$SelfTestRedaction
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
-$Version = '1.1'
+$Version = '1.2'
 $notes = New-Object System.Collections.ArrayList
 function Add-Note([string]$text) { [void]$notes.Add($text) }
 
@@ -54,26 +55,47 @@ foreach ($h in @($Hosts)) {
 if ($clean.Count -gt 12) { $clean = $clean[0..11] }
 
 # Removes credentials from a proxy address, both as scheme://user:pass@host and as a bare user:pass@host.
+function Redact-SecretQuery([string]$value) {
+  if (-not $value) { return $value }
+  return [regex]::Replace($value, '([?&#;])([^=&#;]+)=([^&#;]*)', {
+    param($m)
+    try { $name = [Uri]::UnescapeDataString($m.Groups[2].Value).ToLowerInvariant() } catch { $name = $m.Groups[2].Value.ToLowerInvariant() }
+    if ($name -match 'token|session|secret|passw(or)?d|passwd|pwd|csrf|xsrf|assertion|credential|authorization|cookie|signature|api[-_]?key|access[-_]?key|^(tempauth|samlrequest|samlresponse)$|(^|[_-])(auth|code|key|sig)([_-]|$)') { return $m.Groups[1].Value + $m.Groups[2].Value + '=[REDACTED]' }
+    return $m.Value
+  })
+}
 function Strip-UserInfo([string]$value) {
-  if ($value) { return (($value -replace '(://)[^/@\s]*@', '$1') -replace '(^|[;,=\s])[^/@\s:;=]+:[^/@\s;]*@', '$1') }
+  if ($value) {
+    $clean = ($value -replace '(://)[^/@\s]*@', '$1') -replace '(^|[;,=\s])[^/@\s:;=]+:[^/@\s;]*@', '$1'
+    return Redact-SecretQuery $clean
+  }
   return $null
 }
 
-# One line of tracert output to a hop: number, address (if any) and the median of the answered probes in ms.
-function Parse-TracertHop([string]$l) {
+if ($SelfTestRedaction) { Write-Output (Strip-UserInfo $SelfTestRedaction); exit 0 }
+
+# One line of tracert output to a hop: number, address (if any) and a bounded timing summary.
+function Parse-TracertHop([string]$l, [int]$Attempts = 3) {
   if ($l -match '^\s*(\d+)\s+(.*)$') {
     $n = [int]$Matches[1]; $rest = $Matches[2]
     $ip = $null; if ($rest -match '([0-9]{1,3}(\.[0-9]{1,3}){3}|[0-9a-fA-F]*:[0-9a-fA-F:]+)\s*$') { $ip = $Matches[1] }
-    $rtts = @([regex]::Matches($rest, '(<?\d+)\s*ms') | ForEach-Object { [double]($_.Groups[1].Value -replace '<', '') })
-    $rtt = $null; if ($rtts.Count -gt 0) { $rtt = ($rtts | Sort-Object)[[int][math]::Floor(($rtts.Count - 1) / 2)] }
-    return [ordered]@{ n = $n; ip = $ip; rttMs = $rtt }
+    $rtts = @([regex]::Matches($rest, '(<?\d+)\s*ms') | ForEach-Object { [pscustomobject]@{ value = [double]($_.Groups[1].Value -replace '<', ''); upperBound = $_.Groups[1].Value.StartsWith('<') } })
+    $rtt = $null; $min = $null; $max = $null; $minUpperBound = $null; $medianUpperBound = $null; $maxUpperBound = $null
+    if ($rtts.Count -gt 0) {
+      $sorted = @($rtts | Sort-Object value)
+      $min = $sorted[0].value; $minUpperBound = $sorted[0].upperBound
+      $max = $sorted[$sorted.Count - 1].value; $maxUpperBound = $sorted[$sorted.Count - 1].upperBound
+      if ($sorted.Count % 2) { $middle = $sorted[[int][math]::Floor($sorted.Count / 2)]; $rtt = $middle.value; $medianUpperBound = $middle.upperBound }
+      else { $lower = $sorted[$sorted.Count / 2 - 1]; $upper = $sorted[$sorted.Count / 2]; $rtt = ($lower.value + $upper.value) / 2; $medianUpperBound = [bool]($lower.upperBound -or $upper.upperBound) }
+    }
+    return [ordered]@{ n = $n; ip = $ip; responses = $rtts.Count; noResponses = [math]::Max(0, $Attempts - $rtts.Count); minMs = $min; medianMs = $rtt; maxMs = $max; minUpperBound = $minUpperBound; medianUpperBound = $medianUpperBound; maxUpperBound = $maxUpperBound; rttMs = $rtt }
   }
   return $null
 }
 
 # Test hook: parse the given lines as tracert output and print the hops, so CI can check the parser on Windows.
 if ($SelfTestTracert) {
-  $parsed = @(); foreach ($l in $SelfTestTracert) { $h = Parse-TracertHop $l; if ($h) { $parsed += $h } }
+  $parsed = @(); foreach ($l in $SelfTestTracert) { $h = Parse-TracertHop $l 3; if ($h) { $parsed += $h } }
   ConvertTo-Json -InputObject @($parsed) -Depth 4
   exit 0
 }
@@ -191,13 +213,19 @@ if (-not $NoProbe -and $clean.Count -gt 0) {
 }
 
 # ---- route (tracert) ----------------------------------------------------------------------
+# Native Windows tracert only uses ICMP. We intentionally do not invoke an arbitrary third-party
+# TCP route utility just because one happens to be installed: its syntax and consent model vary.
+$routeCapabilities = [ordered]@{ tcp = [ordered]@{ available = $false; tool = $null; reason = 'Native Windows tracert uses ICMP probes. SocketMap does not automatically run third-party TCP route-tracing tools.' } }
 $routes = @()
 if (-not $NoRoute -and $clean.Count -gt 0) {
   foreach ($h in $clean) {
     $hops = @()
-    $lines = tracert -d -h 20 -w 1000 $h 2>$null
-    foreach ($l in $lines) { $hop = Parse-TracertHop $l; if ($hop) { $hops += $hop } }
-    $routes += [ordered]@{ host = $h; method = 'icmp'; hops = $hops }
+    $lines = @(tracert -d -h 20 -w 1000 $h 2>$null)
+    $routeError = if ($LASTEXITCODE -ne 0) { 'tracert did not complete for this host' } else { $null }
+    foreach ($l in $lines) { $hop = Parse-TracertHop $l 3; if ($hop) { $hops += $hop } }
+    # Windows tracert always emits three ICMP attempts per hop. Keep that recorded fact rather
+    # than exposing a configurable value that the native command cannot honor.
+    $routes += [ordered]@{ host = $h; method = 'icmp'; attempts = 3; error = $routeError; hops = $hops }
   }
 }
 
@@ -212,7 +240,7 @@ $result = [ordered]@{
   proxy = $proxy
   probeUsesProxy = [bool]($env:https_proxy -or $env:HTTPS_PROXY -or $env:all_proxy -or $env:ALL_PROXY)
   publicIp = $publicIp; publicIpSource = $(if ($publicIp) { 'api.ipify.org' } else { $null })
-  hosts = @($probes); routes = @($routes); notes = @($notes)
+  hosts = @($probes); routeCapabilities = $routeCapabilities; routes = @($routes); notes = @($notes)
 }
 $json = ConvertTo-Json -InputObject $result -Depth 8
 $path = if ([IO.Path]::IsPathRooted($Out)) { $Out } else { Join-Path (Get-Location).Path $Out }

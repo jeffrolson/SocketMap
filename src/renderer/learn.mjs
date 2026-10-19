@@ -103,10 +103,10 @@ function esc(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export function renderLearn() {
+export function renderLearn({ compact = false } = {}) {
   return `
     <section id="learn" class="card">
-      <h2>Learn and next steps</h2>
+      ${compact ? "" : "<h2>Learn and next steps</h2>"}
       <h3 class="sub">What to do next</h3>
       <ol class="steps">${NEXT_STEPS.map(s => `<li>${esc(s)}</li>`).join("")}</ol>
       <div class="learn-grid">

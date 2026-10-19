@@ -56,8 +56,77 @@ describe("joining a profile to a NetLog", () => {
     const m = { requests: [{ id: 1, method: "GET", url: "https://a.example.com/log", start: 100 }, { id: 2, method: "GET", url: "https://a.example.com/log", start: 5000 }], environment: {} };
     const s = { recognized: true, eventCount: 1, integrity: {}, environment: {}, page: { url: "https://a.example.com/", navTsMs: 1000, spanMs: 10 }, metrics: {}, mainThread: { longTasks: [], bins: [], binMs: 20 }, scripts: [], requests: [{ tsMs: 1000, url: "https://a.example.com/log", method: "GET" }, { tsMs: 5900, url: "https://a.example.com/log", method: "GET" }] };
     const out = joinProfile(m, s);
-    assert.equal(out.alignment.matched, 2);
-    assert.ok(out.perRequest.has(1) && out.perRequest.has(2));
+    assert.equal(out.alignment.aligned, false);
+    assert.equal(out.alignment.reason, "capture clock range is not recorded");
+    assert.equal(out.perRequest.size, 0);
+  });
+
+  it("refuses a profile recorded an hour later even when every URL matches", () => {
+    const shifted = structuredClone(summary);
+    const hourMs = 60 * 60 * 1000;
+    shifted.page.navTsMs += hourMs;
+    for (const request of shifted.requests) request.tsMs += hourMs;
+    const out = joinProfile(model, shifted);
+    assert.equal(out.alignment.aligned, false);
+    assert.equal(out.alignment.reason, "matching URLs disagree with the capture clock");
+    assert.equal(out.alignment.offsetMs, null);
+    assert.equal(out.page.startAt, null);
+    assert.equal(out.perRequest.size, 0, "a refused alignment cannot leak profile fields into requests");
+    assert.match(profileEvidenceText(out), /matching URLs disagree with the capture clock/i);
+  });
+
+  it("does not infer a match from one shared URL or missing request times", () => {
+    const weak = structuredClone(summary);
+    weak.requests = [weak.requests[0]];
+    const out = joinProfile(model, weak);
+    assert.equal(out.alignment.aligned, true, "the independently observed shared clock may still place the profile band");
+    assert.equal(out.alignment.method, "clock");
+    assert.equal(out.perRequest.size, 0);
+    const noTime = structuredClone(summary);
+    noTime.requests = noTime.requests.map(request => ({ ...request, tsMs: null }));
+    const noTimeOut = joinProfile({ ...model, requests: model.requests.map(request => ({ ...request, start: null })) }, noTime);
+    assert.equal(noTimeOut.alignment.aligned, true, "the page's independently recorded clock still supports the timeline band");
+    assert.equal(noTimeOut.alignment.method, "clock");
+    assert.equal(noTimeOut.perRequest.size, 0);
+  });
+
+  it("does not attach redacted duplicate signed URLs to individual requests", () => {
+    const trace = structuredClone(summary);
+    const first = trace.requests[0];
+    trace.requests = [
+      { ...first, url: "https://portal.example.com/resource?token=trace-one" },
+      { ...first, tsMs: first.tsMs + 20, url: "https://portal.example.com/resource?token=trace-two" }
+    ];
+    const m = {
+      ...model,
+      requests: [
+        { ...model.requests[0], id: 901, url: "https://portal.example.com/resource?token=net-one", start: 0 },
+        { ...model.requests[0], id: 902, url: "https://portal.example.com/resource?token=net-two", start: 20 }
+      ]
+    };
+    const out = joinProfile(m, trace);
+    assert.equal(out.alignment.aligned, true, "the separately recorded page clock can place the band");
+    assert.equal(out.alignment.method, "clock");
+    assert.equal(out.perRequest.size, 0, "redaction makes the URL match ambiguous");
+  });
+
+  it("refuses contradictory request times instead of falling back to clock placement", () => {
+    const contradictory = structuredClone(summary);
+    for (const request of contradictory.requests) request.tsMs += 5000;
+    const out = joinProfile(model, contradictory);
+    assert.equal(out.alignment.aligned, false);
+    assert.equal(out.alignment.method, null);
+    assert.equal(out.alignment.reason, "matching URLs disagree with the capture clock");
+    assert.equal(out.perRequest.size, 0);
+  });
+
+  it("reports missing capture timing as missing evidence, including the AI handoff", () => {
+    const out = joinProfile({ ...model, diagnostics: {} }, summary);
+    assert.equal(out.alignment.aligned, false);
+    assert.equal(out.alignment.reason, "capture clock range is not recorded");
+    assert.equal(out.perRequest.size, 0);
+    assert.match(profileEvidenceText(out), /capture clock range is not recorded/i);
+    assert.doesNotMatch(profileEvidenceText(out), /outside the capture window/i);
   });
 
   it("does not place anything when no request is shared, and says so", () => {
@@ -91,8 +160,7 @@ describe("joining a profile to a NetLog", () => {
       assert.equal(joinProfile(mk(nav - 500, nav + 6000, "https://elsewhere.example.net/"), summary).alignment.aligned, false);
     });
     it("prefers shared requests over the clock", () => {
-      const withShared = { ...model, diagnostics: { firstTime: 0, lastTime: 1e12 } };
-      assert.equal(joinProfile(withShared, summary).alignment.method, "requests");
+      assert.equal(joinProfile(model, summary).alignment.method, "requests");
     });
   });
 

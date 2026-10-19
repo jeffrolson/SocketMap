@@ -52,7 +52,7 @@ describe("coverage view", () => {
     assert.ok(report.includes('data-nav="coverage"'));
     assert.ok(report.includes('id="view-coverage"'));
     assert.ok(report.includes("Worth capturing next"));
-    assert.ok(report.includes("What this capture could and could not see"));
+    assert.ok(report.includes("Capture coverage"));
   });
 });
 
