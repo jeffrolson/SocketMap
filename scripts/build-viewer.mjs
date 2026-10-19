@@ -168,6 +168,7 @@ export function buildViewerHtml({ theme } = {}) {
   #result { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
   .toolbar { flex-shrink: 0; }
   .toolbar .page-controls { flex: 1; justify-content: flex-end; }
+  .section-picker { min-width: 0; max-width: 150px; margin-right: auto; }
   .page-picker { display: flex; gap: 6px; align-items: center; min-width: 0; max-width: 380px; flex: 1; }
   .page-picker span { color: var(--text-muted); white-space: nowrap; font-size: 12px; }
   .page-picker select { min-width: 0; width: 100%; text-overflow: ellipsis; }
@@ -192,7 +193,8 @@ export function buildViewerHtml({ theme } = {}) {
     .drop span { font-size: 12px; }
     .toolbar .page-picker > span { display: none; }
     .toolbar .page-controls { gap: 5px; }
-    .toolbar .page-heading { flex-shrink: 0; }
+    .toolbar .page-heading { display: none; }
+    .section-picker { width: 108px; flex-shrink: 0; }
     .toolbar button, .toolbar select, .viewer-menu > summary { padding: 8px; font-size: 12px; }
     #save-report { max-width: 66px; overflow: hidden; white-space: nowrap; }
   }
@@ -242,6 +244,7 @@ ${themePreferenceScript()}
 </div>
 <div id="result" hidden>
   ${renderPageHeader({ title: "SocketMap", className: "toolbar", controls: `
+    <select id="section-select" class="section-picker" aria-label="Report section"><option value="overview">Overview</option></select>
     <label class="page-picker"><span id="page-label">Page / site</span><select id="page-select" aria-label="Page or site to analyze"></select></label>
     <details class="viewer-menu" id="viewer-menu"><summary>Files</summary><div class="viewer-panel">
       <span class="file" id="file-name"></span>

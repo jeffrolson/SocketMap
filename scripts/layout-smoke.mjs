@@ -158,23 +158,24 @@ async function main() {
       await evaluate("document.querySelector('[data-theme-toggle]').click()");
 
       await evaluate("document.querySelector('[data-open-sample]').click()");
-      await waitFor(frame("doc => doc.querySelectorAll('[data-nav]').length >= 5 && doc.querySelector('.view.is-active')"), "sample report");
+      await waitFor("document.querySelectorAll('#section-select option').length >= 5", "report section picker");
+      await waitFor(frame("doc => doc.querySelector('.view.is-active')"), "sample report");
       const themeStates = await evaluate("(() => { const button = document.querySelector('[data-theme-toggle]'); const states = []; button?.click(); states.push(document.documentElement.dataset.theme); button?.click(); states.push(document.documentElement.dataset.theme); return states; })()");
       const lightTheme = themeStates.includes("light");
       const darkTheme = themeStates.includes("dark");
-      const tabs = await evaluate(frame("doc => [...doc.querySelectorAll('[data-nav]')].map(item => item.getAttribute('data-nav')).filter(Boolean)"));
+      const tabs = await evaluate("[...document.querySelectorAll('#section-select option')].map(item => item.value).filter(value => value && value !== 'comparison')");
       const reports = {};
       for (const tab of tabs) {
+        await evaluate(`(() => { const select = document.getElementById('section-select'); select.value = ${JSON.stringify(tab)}; select.dispatchEvent(new Event('change', { bubbles: true })); return select.value; })()`);
+        await waitFor(frame(`doc => doc.querySelector('.view.is-active')?.dataset.view === ${JSON.stringify(tab)}`), `${tab} view`);
         const targets = selectors[tab] || [`#view-${tab}`, `[data-view=${JSON.stringify(tab)}]`];
         const serialized = JSON.stringify(targets);
         reports[tab] = await evaluate(frame(`(doc, frame) => {
           const pick = ${serialized};
           const isVisible = el => { const style = doc.defaultView.getComputedStyle(el); const r = el.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && r.height > 0; };
-          const nav = doc.querySelector('[data-nav=' + JSON.stringify(${JSON.stringify(tab)}) + ']');
-          if (!nav) return { error: 'missing navigation item' };
-          nav.click();
-          doc.defaultView.scrollTo(0, 0);
           const selected = doc.querySelector('.view.is-active');
+          if (!selected || selected.dataset.view !== ${JSON.stringify(tab)}) return { error: 'section picker did not select this view' };
+          doc.defaultView.scrollTo(0, 0);
           let element = null, selector = null;
           for (const candidate of pick) { const found = [...doc.querySelectorAll(candidate)].find(isVisible); if (found) { element = found; selector = candidate; break; } }
           const topbar = doc.querySelector('.topbar');
@@ -186,6 +187,9 @@ async function main() {
           const reportHeaderHeight = topbar ? Math.round(topbar.getBoundingClientRect().height) : 0;
           const pageHeader = selected && selected.querySelector('.page-header');
           const pageHeaderHeight = pageHeader ? Math.round(pageHeader.getBoundingClientRect().height) : 0;
+          const reportNav = doc.querySelector('.sidebar');
+          const reportNavRect = reportNav && reportNav.getBoundingClientRect();
+          const reportNavHeight = reportNavRect && reportNavRect.width >= doc.defaultView.innerWidth * 0.8 ? Math.round(reportNavRect.height) : 0;
           const requestRow = ${JSON.stringify(tab)} === 'waterfall' ? [...doc.querySelectorAll('.wf-row')].find(isVisible) : null;
           const requestRect = requestRow && requestRow.getBoundingClientRect();
           const offenders = [...doc.querySelectorAll('*')].filter(node => {
@@ -194,7 +198,7 @@ async function main() {
           }).slice(0, 12).map(node => ({ tag: node.tagName, id: node.id || null, className: String(node.className || '').slice(0, 120), right: Math.round(node.getBoundingClientRect().right) }));
           return {
             selector,
-            header: topbar ? { shellHeight, reportHeight: reportHeaderHeight, pageHeight: pageHeaderHeight, combinedHeight: Math.round(iframeRect.top) + reportHeaderHeight + pageHeaderHeight, top: 0 } : null,
+            header: topbar ? { shellHeight, reportHeight: reportHeaderHeight, pageHeight: pageHeaderHeight, reportNavHeight, combinedHeight: Math.round(iframeRect.top) + reportHeaderHeight + pageHeaderHeight + reportNavHeight, top: 0 } : null,
             primary: elementRect ? { top: Math.round(iframeRect.top + elementRect.top), bottom: Math.round(iframeRect.top + elementRect.bottom), height: Math.round(elementRect.height) } : null,
             visibleItems: visible,
             firstRequestRow: requestRect ? { top: Math.round(iframeRect.top + requestRect.top), height: Math.round(requestRect.height), visibleRows: [...doc.querySelectorAll('.wf-row')].filter(node => { const r = node.getBoundingClientRect(); return isVisible(node) && r.top >= 0 && r.top < doc.defaultView.innerHeight; }).length } : null,
@@ -211,10 +215,17 @@ async function main() {
             summary.click();
             const panel = details.querySelector('.page-action-panel');
             const r = panel && panel.getBoundingClientRect();
+            const trigger = summary.getBoundingClientRect();
             const visible = selector => [...doc.querySelectorAll(selector)].some(node => node.getClientRects().length > 0);
-            return { open: details.open, bounds: r && { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), viewportWidth: doc.defaultView.innerWidth, viewportHeight: doc.defaultView.innerHeight }, controlsVisible: ${JSON.stringify(tab)} === 'waterfall' ? visible('.page-action-panel .search input') && visible('.page-action-panel .filter-chips button') : visible('#seq-save-png') && visible('#seq-save-svg') && visible('#toggle-details') };
+            const overlapsTrigger = r && trigger.left < r.right && trigger.right > r.left && trigger.top < r.bottom && trigger.bottom > r.top;
+            return { open: details.open, bounds: r && { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom), viewportWidth: doc.defaultView.innerWidth, viewportHeight: doc.defaultView.innerHeight }, triggerVisible: trigger.width > 0 && trigger.height > 0, triggerOutsidePanel: !overlapsTrigger, controlsVisible: ${JSON.stringify(tab)} === 'waterfall' ? visible('.page-action-panel .search input') && visible('.page-action-panel .filter-chips button') : visible('#seq-save-png') && visible('#seq-save-svg') && visible('#toggle-details') };
           }`));
           if (tab === "sequence") await screenshot(`${viewport.name}-sequence-controls`);
+          reports[tab].controls.closed = await evaluate(frame(`doc => {
+            const details = doc.getElementById(${JSON.stringify(`${tab}-controls`)});
+            details?.querySelector('summary')?.click();
+            return !details?.open;
+          }`));
         }
         if (tab === "waterfall") {
           reports[tab].stickyLegend = await evaluate(frame(`async doc => {
@@ -233,31 +244,103 @@ async function main() {
         }
         if (tab === "waterfall") await screenshot(`${viewport.name}-${tab}`);
       }
-      await evaluate(frame("doc => { doc.querySelector('[data-nav=overview]').click(); return true; }"));
+      const reportNavigationChanged = await evaluate(frame(`doc => {
+        const link = doc.querySelector('[data-nav="environment"]');
+        if (!link) return false;
+        link.click();
+        return true;
+      }`));
+      if (reportNavigationChanged) await waitFor("document.getElementById('section-select')?.value === 'environment'", "viewer section picker to sync with report navigation");
+      await evaluate("(() => { const select = document.getElementById('section-select'); select.value = 'overview'; select.dispatchEvent(new Event('change', { bubbles: true })); return select.value; })()");
+      await waitFor(frame("doc => doc.querySelector('.view.is-active')?.dataset.view === 'overview'"), "overview view");
       await sleep(100);
       await screenshot(`${viewport.name}-overview`);
-      const savedReport = await evaluate("document.querySelector('#report-frame').srcdoc");
+      const savedReport = await evaluate("new Promise(resolve => { const original = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download && this.href) { fetch(this.href).then(response => response.text()).then(text => { HTMLAnchorElement.prototype.click = original; resolve(text); }); return; } return original.call(this); }; document.getElementById('save-report').click(); })");
       const savedPath = path.join(work, `${viewport.name}-saved-report.html`);
       fs.writeFileSync(savedPath, savedReport);
       await send("Page.navigate", { url: pathToFileURL(savedPath).href });
       await waitFor("document.readyState === 'complete' && !!document.querySelector('.kpis .kpi')", "saved standalone report");
-      const saved = await evaluate("(() => { const el = document.querySelector('.kpis .kpi'), r = el.getBoundingClientRect(), header = document.querySelector('.page-header'); return { primaryTop: Math.round(r.top), headerHeight: Math.round(header?.getBoundingClientRect().height || 0), overflow: document.documentElement.scrollWidth > innerWidth }; })()");
+      const savedOverview = await evaluate(`(() => {
+        const active = document.querySelector('.view.is-active');
+        const primary = active?.querySelector('.kpis .kpi');
+        const header = active?.querySelector('.page-header');
+        return {
+          primaryTop: Math.round(primary?.getBoundingClientRect().top || 0),
+          headerHeight: Math.round(header?.getBoundingClientRect().height || 0),
+          overflow: document.documentElement.scrollWidth > innerWidth
+        };
+      })()`);
+      await screenshot(`${viewport.name}-saved-report-overview`);
+      const saved = await evaluate(`(() => {
+        const isPhone = innerWidth <= 600;
+        const measurements = [];
+        const routes = isPhone
+          ? [...document.querySelectorAll('.view.is-active [data-section-select] option')].map(option => option.value).filter(Boolean)
+          : [...document.querySelectorAll('.sidebar [data-nav]')].map(link => link.dataset.nav).filter(Boolean);
+        const route = value => {
+          window.scrollTo(0, 0);
+          if (isPhone) {
+            const picker = document.querySelector('.view.is-active [data-section-select]');
+            if (!picker) return { selected: false, usable: false };
+            const box = picker.getBoundingClientRect();
+            const usable = box.width > 0 && box.height > 0 && box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight;
+            picker.value = value;
+            picker.dispatchEvent(new Event('change', { bubbles: true }));
+            return { selected: true, usable };
+          }
+          const link = document.querySelector('.sidebar [data-nav="' + value + '"]');
+          if (!link) return { selected: false, usable: false };
+          link.click();
+          return { selected: true, usable: true };
+        };
+        const allSectionsWork = routes.length >= 5 && routes.every(value => {
+          const control = route(value);
+          window.scrollTo(0, 0);
+          const active = document.querySelector('.view.is-active');
+          const header = active?.querySelector('.page-header');
+          const primary = active?.querySelector('.kpis .kpi, #timeline, .seq-row, #environment .kv, #policy .pol-drop, #coverage .cov-tile, #diagnostics .diag-card, #event-replay .event-replay-tools, #summary-text, #learn .steps li');
+          measurements.push({
+            view: value,
+            active: active?.dataset.view === value,
+            controlVisible: control.usable,
+            headerHeight: Math.round(header?.getBoundingClientRect().height || 0),
+            primaryTop: Math.round(primary?.getBoundingClientRect().top || 0),
+            overflow: document.documentElement.scrollWidth > innerWidth
+          });
+          return control.selected && active?.dataset.view === value;
+        });
+        route('sequence');
+        return {
+          routes,
+          allSectionsWork,
+          navigation: document.querySelector('.view.is-active')?.dataset.view === 'sequence',
+          maxHeaderHeight: Math.max(0, ...measurements.map(item => item.headerHeight)),
+          maxPrimaryTop: Math.max(0, ...measurements.map(item => item.primaryTop)),
+          overflow: measurements.some(item => item.overflow),
+          menuInBounds: !isPhone || measurements.every(item => item.controlVisible),
+          views: measurements
+        };
+      })()`);
+      saved.overview = savedOverview;
+      saved.primaryTop = saved.maxPrimaryTop;
+      saved.headerHeight = saved.maxHeaderHeight;
+      await screenshot(`${viewport.name}-saved-report-sequence`);
       await send("Page.navigate", { url: pathToFileURL(viewer).href });
       await waitFor("document.readyState === 'complete'", "viewer to reload for comparison");
       const { root: documentRoot } = await send("DOM.getDocument", { depth: 1 });
       const { nodeId } = await send("DOM.querySelector", { nodeId: documentRoot.nodeId, selector: "#compare-input" });
       await send("DOM.setFileInputFiles", { files: comparisonFiles, nodeId });
       await waitFor(frame("doc => doc.querySelector('.metrics .metric')"), "viewer comparison");
-      const comparison = await evaluate(frame("(doc, frame) => { const el = doc.querySelector('.metrics .metric'), r = el.getBoundingClientRect(), h = doc.querySelector('.page-header'); return { primaryTop: Math.round(frame.getBoundingClientRect().top + r.top), headerHeight: Math.round(h?.getBoundingClientRect().height || 0), overflow: doc.documentElement.scrollWidth > doc.defaultView.innerWidth }; }"));
+      const comparison = await evaluate(frame("(doc, frame) => { const el = doc.querySelector('.metrics .metric'), r = el.getBoundingClientRect(), h = doc.querySelector('.page-header'), frameRect = frame.getBoundingClientRect(); return { primaryTop: Math.round(frameRect.top + r.top), headerHeight: Math.round(frameRect.top + (h?.getBoundingClientRect().height || 0)), overflow: doc.documentElement.scrollWidth > doc.defaultView.innerWidth }; }"));
       await screenshot(`${viewport.name}-comparison`);
-      const savedComparisonHtml = await evaluate("document.querySelector('#report-frame').srcdoc");
+      const savedComparisonHtml = await evaluate("new Promise(resolve => { const original = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download && this.href) { fetch(this.href).then(response => response.text()).then(text => { HTMLAnchorElement.prototype.click = original; resolve(text); }); return; } return original.call(this); }; document.getElementById('save-report').click(); })");
       const savedComparisonPath = path.join(work, `${viewport.name}-saved-comparison.html`);
       fs.writeFileSync(savedComparisonPath, savedComparisonHtml);
       await send("Page.navigate", { url: pathToFileURL(savedComparisonPath).href });
       await waitFor("document.readyState === 'complete' && !!document.querySelector('.metrics .metric')", "saved standalone comparison");
       const savedComparison = await evaluate("(() => { const el = document.querySelector('.metrics .metric'), r = el.getBoundingClientRect(), h = document.querySelector('.page-header'); return { primaryTop: Math.round(r.top), headerHeight: Math.round(h?.getBoundingClientRect().height || 0), overflow: document.documentElement.scrollWidth > innerWidth }; })()");
       await screenshot(`${viewport.name}-saved-comparison`);
-      measurements.viewports[viewport.name] = { limits: { dataTop: viewport.dataLimit, headerHeight: viewport.headerLimit }, themes: { startsDark, startsLight, lightTheme, darkTheme }, start, reports, savedReport: saved, comparison, savedComparison };
+      measurements.viewports[viewport.name] = { limits: { dataTop: viewport.dataLimit, headerHeight: viewport.headerLimit }, themes: { startsDark, startsLight, lightTheme, darkTheme }, start, reports, reportNavigationChanged, savedReport: saved, comparison, savedComparison };
     }
 
     const failures = [];
@@ -269,25 +352,28 @@ async function main() {
         else if (item.visibleItems < 1) failures.push(`${viewport.name} ${name}: no primary data item is visible in the first screen`);
         if (!item.header) failures.push(`${viewport.name} ${name}: header missing`);
         else if (name === "start" && item.header.height > result.limits.headerHeight) failures.push(`${viewport.name} start: header is ${item.header.height}px (limit ${result.limits.headerHeight}px)`);
-        else if (name !== "start") for (const [part, height] of Object.entries(item.header).filter(([part]) => /Height$/.test(part) && part !== "combinedHeight")) if (height > result.limits.headerHeight) failures.push(`${viewport.name} ${name}: ${part} is ${height}px (limit ${result.limits.headerHeight}px)`);
+        else if (name !== "start") for (const [part, height] of Object.entries(item.header).filter(([part]) => /Height$/.test(part))) if (height > result.limits.headerHeight) failures.push(`${viewport.name} ${name}: ${part} is ${height}px (limit ${result.limits.headerHeight}px)`);
         if (item.horizontalOverflow) failures.push(`${viewport.name} ${name}: horizontal overflow`);
         if (item.controls) {
           const bounds = item.controls.bounds;
           if (!item.controls.open || !item.controls.controlsVisible) failures.push(`${viewport.name} ${name}: controls panel did not expose its actions`);
+          if (!item.controls.triggerVisible || !item.controls.triggerOutsidePanel || !item.controls.closed) failures.push(`${viewport.name} ${name}: controls trigger is obscured or cannot close its panel`);
           if (!bounds || bounds.left < 0 || bounds.top < 0 || bounds.right > bounds.viewportWidth || bounds.bottom > bounds.viewportHeight) failures.push(`${viewport.name} ${name}: controls panel escapes the viewport`);
         }
         if (item.stickyLegend) {
           const sticky = item.stickyLegend;
-          const minimumTop = viewport.mobile ? 56 : 0;
-          if (!sticky.maxScroll || sticky.keyTop < minimumTop || sticky.keyTop > minimumTop + 2 || sticky.keyBottom <= minimumTop) failures.push(`${viewport.name} waterfall: timing key is not pinned below navigation while scrolling`);
+          const minimumTop = 0;
+          if (!sticky.maxScroll || sticky.keyTop < minimumTop || sticky.keyTop > minimumTop + 2 || sticky.keyBottom <= minimumTop) failures.push(`${viewport.name} waterfall: timing key is not pinned at the top while scrolling`);
         }
       }
       if (!result.themes.startsDark || !result.themes.startsLight || !result.themes.lightTheme || !result.themes.darkTheme) failures.push(`${viewport.name}: light and dark theme defaults and switches must both work`);
+      if (!result.reportNavigationChanged) failures.push(`${viewport.name}: report navigation did not synchronize the viewer section picker`);
       for (const [name, item] of Object.entries({ savedReport: result.savedReport, comparison: result.comparison, savedComparison: result.savedComparison })) {
         if (item.primaryTop > result.limits.dataTop) failures.push(`${viewport.name} ${name}: primary data starts at ${item.primaryTop}px (limit ${result.limits.dataTop}px)`);
         if (item.headerHeight > result.limits.headerHeight) failures.push(`${viewport.name} ${name}: header is ${item.headerHeight}px (limit ${result.limits.headerHeight}px)`);
         if (item.overflow) failures.push(`${viewport.name} ${name}: horizontal overflow`);
       }
+      if (viewport.mobile && (!result.savedReport.routes.includes('waterfall') || !result.savedReport.routes.includes('sequence') || !result.savedReport.allSectionsWork || !result.savedReport.menuInBounds || !result.savedReport.navigation)) failures.push(`${viewport.name} saved report: standalone Sections menu is not usable for every report view`);
     }
     measurements.failures = failures;
     const rendered = JSON.stringify(measurements, null, 2);

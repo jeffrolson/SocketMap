@@ -527,7 +527,8 @@ const NAV = [
 ];
 
 function pageHeader(options) {
-  const controls = `${options.controls || ""}<button type="button" data-theme-toggle aria-label="Switch color theme">Theme</button>`;
+  const sections = `<label class="section-picker"><select data-section-select aria-label="Report section">${NAV.map(([target, , label]) => `<option value="${target}">${esc(label)}</option>`).join("")}</select></label>`;
+  const controls = `${options.controls || ""}${sections}<button type="button" data-theme-toggle aria-label="Switch color theme">Theme</button>`;
   return renderPageHeader({ ...options, controls });
 }
 
@@ -537,7 +538,7 @@ function pageHeader(options) {
  * @param {{ theme?: object, source?: { name?: string, bytes?: number } }} options
  *   theme: design tokens (defaults to DESIGN.md); source: the capture file, for the header
  */
-export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, source = null } = {}) {
+export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, source = null, embedded = false } = {}) {
   const serverInsights = buildServerInsights(analysis.pageRequests);
   const enrichment = model.enrichment || null;
   const profile = model.profile || null;
@@ -556,7 +557,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   const env = model.environment;
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-embedded="${embedded ? "true" : "false"}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -613,6 +614,8 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .sidebar a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius); color: var(--text-muted); text-decoration: none; }
   .sidebar a:hover { background: var(--surface-mid); color: var(--text); }
   .sidebar a.is-active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .section-picker { display: none; align-items: center; }
+  .section-picker select { max-width: 108px; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 6px; color: var(--text); background: var(--surface); font: inherit; }
   .side-box { margin-top: auto; background: var(--canvas); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
   .side-box .sub { margin: 0 0 6px; }
   .side-box div { display: flex; justify-content: space-between; gap: 8px; }
@@ -772,6 +775,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .lane { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--border); }
   .seq-t { position: absolute; left: 0; width: calc(var(--tcol) - 10px); top: 21px; text-align: right; font: 10.5px var(--font-mono); color: var(--text-faint); }
   .seq-t.head { position: static; align-self: center; width: auto; padding-right: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  html[data-embedded="true"] .seq-t.head { padding-right: 0; }
   .seq-row { position: relative; height: 60px; cursor: pointer; border-radius: var(--radius-sm); outline: none; }
   .seq-row:hover { background: color-mix(in srgb, var(--secondary) 6%, transparent); }
   .seq-row:focus-visible, .seq-row.is-selected { background: color-mix(in srgb, var(--secondary) 12%, transparent); box-shadow: inset 0 0 0 1px var(--secondary); }
@@ -851,20 +855,19 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
     .inspector { position: static; width: auto; max-height: none; }
   }
   @media (max-width: 900px) {
-    .sidebar { position: sticky; inset: 0 auto auto 0; width: 100%; height: 56px; flex-direction: row; flex-wrap: nowrap; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 6px 8px; z-index: 35; }
-    .brand { padding: 4px 6px; flex: none; }
-    .sidebar a { flex: none; padding: 7px 8px; }
-    .side-box { display: none; }
+    .sidebar { display: none; }
     .app { margin-left: 0; }
+    .section-picker { display: inline-flex; }
     .detail-grid, .glossary { grid-template-columns: 1fr; }
     .wf-row > summary, .wf-axis { grid-template-columns: 1fr 60px 70px; }
     .wf-proto, .wf-track { display: none; }
-    .wf-key { top: 56px; }
+    .wf-key { top: 0; }
   }
   @media (max-width: 600px) {
     .top-row .crumbs .brand-mini, .top-row .crumbs .sep, .top-row .badge, .top-row .pill.is-plain, .top-row .pill:not(.is-bad) { display: none; }
     .top-row .crumbs .file { max-width: 120px; }
     .top-row { gap: 6px; }
+    .page-header .page-status { display: none; }
     .page-action-panel { position: fixed; top: 118px; right: 10px; left: 10px; width: auto; }
     .page-action-panel .seq-export button, .page-action-panel #toggle-details { padding: 4px 6px; font-size: 11px; }
     .filterbar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
@@ -872,6 +875,10 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
     .filter-chips { flex-wrap: nowrap; }
     .filter-chips button { white-space: nowrap; }
   }
+  html[data-embedded="true"] .page-header { display: none; }
+  html[data-embedded="true"] .seq-head { backdrop-filter: none; }
+  html[data-embedded="true"] #sequence-controls .page-action-panel { position: fixed; top: 80px; right: 10px; left: calc(var(--sidebar-w) + 10px); width: auto; }
+  @media (max-width: 900px) { html[data-embedded="true"] #sequence-controls .page-action-panel { left: auto; right: 10px; width: calc(100vw - 20px); max-width: calc(100vw - 20px); box-sizing: border-box; } }
 </style>
 ${themePreferenceScript()}
 </head>
@@ -944,8 +951,9 @@ ${themePreferenceScript()}
     <div class="view" id="view-diagnostics" data-view="diagnostics">${pageHeader({ title: "Browser diagnostics", subtitle: "Capture-wide NetLog evidence", status: `${model.stats?.events ?? "Not recorded"} events` })}${fromHar ? harNote("There are no browser diagnostics to show.") : ""}${renderDiagnostics(model, { compact: true })}</div>
     <div class="view" id="view-events" data-view="event-replay">${pageHeader({ title: "Event replay", subtitle: "Search the original capture locally" })}${fromHar ? harNote("There are no events to replay.") : ""}${eventReplayMarkup({ compact: true })}</div>
     <div class="view" id="view-ai" data-view="ai-summary">
-      ${pageHeader({ title: "AI summary", subtitle: "Evidence for an approved assistant", controls: '<button type="button" id="copy-summary" class="primary">Copy summary</button><button type="button" id="save-summary">Save summary (.txt)</button><span id="copy-status" class="muted" role="status"></span>' })}
+      ${pageHeader({ title: "AI summary", subtitle: "Evidence for an approved assistant" })}
       <section id="ai-summary" class="card">
+        <div class="tools ai-tools"><button type="button" id="copy-summary" class="primary">Copy summary</button><button type="button" id="save-summary">Save summary (.txt)</button><span id="copy-status" class="muted" role="status"></span></div>
         <details class="about-page"><summary>About this page</summary><p>A detailed handoff with capture context, environment, findings, request evidence, and questions to investigate. It retains internal addresses and URLs, so share it only with an assistant approved for that data.</p></details>
         <textarea id="summary-text" aria-label="Detailed AI evidence summary" readonly>${esc(summary)}</textarea>
       </section>
@@ -970,6 +978,22 @@ ${themePreferenceScript()}
 (function () {
   document.documentElement.classList.add("js");
   var topbar = document.querySelector(".topbar");
+  document.querySelectorAll("[data-section-select] option").forEach(function (option) {
+    if (!document.querySelector('[data-nav="' + option.value + '"]')) option.remove();
+  });
+  var embedded = document.documentElement.dataset.embedded === "true";
+  if (embedded) {
+    var waterfallControls = document.getElementById("waterfall-controls");
+    var waterfallKey = document.querySelector("#waterfall .wf-key");
+    if (waterfallControls && waterfallKey) waterfallKey.appendChild(waterfallControls);
+    var sequenceControls = document.getElementById("sequence-controls");
+    var sequenceTimeHead = document.querySelector("#sequence .seq-head .seq-t.head");
+    if (sequenceControls && sequenceTimeHead) {
+      sequenceTimeHead.textContent = "";
+      sequenceTimeHead.setAttribute("aria-label", "Time column");
+      sequenceTimeHead.appendChild(sequenceControls);
+    }
+  }
   function setTopbarHeight() { document.documentElement.style.setProperty("--topbar-h", topbar.offsetHeight + "px"); }
   if (typeof ResizeObserver !== "undefined") new ResizeObserver(setTopbarHeight).observe(topbar);
 
@@ -983,7 +1007,9 @@ ${themePreferenceScript()}
     if (!view) { view = document.getElementById("overview"); target = null; }
     views.forEach(function (v) { v.classList.toggle("is-active", v === view); });
     var name = view.getAttribute("data-view");
+    window.dispatchEvent(new CustomEvent("socketmap:viewchange", { detail: { view: name } }));
     document.querySelectorAll("[data-nav]").forEach(function (a) { a.classList.toggle("is-active", a.getAttribute("data-nav") === name); });
+    document.querySelectorAll("[data-section-select]").forEach(function (select) { select.value = name; });
     var needsFilter = name === "waterfall" || name === "sequence";
     if (needsFilter) {
       var panel = view.querySelector(".page-action-panel");
@@ -1002,6 +1028,10 @@ ${themePreferenceScript()}
   }
   window.addEventListener("hashchange", function () { route(); });
   window.addEventListener("socketmap:open-events", function () { route("view-events"); });
+  document.addEventListener("change", function (ev) {
+    var select = ev.target.closest && ev.target.closest("[data-section-select]");
+    if (select) route(select.value);
+  });
   // In-page links switch views directly. Inside the viewer the report is an embedded
   // document whose "#" links would otherwise resolve against the viewer's address.
   document.addEventListener("click", function (ev) {
@@ -1055,6 +1085,7 @@ ${themePreferenceScript()}
     if (!png || !svgButton) return;
     var PROPS = ["display", "position", "top", "right", "bottom", "left", "width", "height", "min-width", "max-width", "min-height", "max-height", "margin", "padding", "border-top", "border-right", "border-bottom", "border-left", "border-radius", "background-color", "background-image", "color", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "text-align", "text-transform", "text-decoration", "white-space", "overflow", "text-overflow", "box-sizing", "grid-template-columns", "grid-template-rows", "grid-column", "grid-row", "gap", "flex", "flex-direction", "flex-wrap", "align-items", "justify-content", "opacity", "transform", "z-index", "vertical-align", "box-shadow", "fill", "stroke", "stroke-width"];
     function cloneStyled(el) {
+      if (el.nodeType === 1 && el.id === "sequence-controls") return document.createTextNode("Time");
       var copy = el.cloneNode(false);
       if (el.nodeType !== 1) return copy;
       var cs = getComputedStyle(el);

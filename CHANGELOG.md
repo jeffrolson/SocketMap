@@ -15,6 +15,7 @@ Release candidate; publication and physical-device acceptance are separate.
 - High-resolution 2x Retina visual documentation assets and headless Chrome screenshot pipeline (`scripts/generate-framed-images.mjs`) featuring macOS dark chrome frames, ambient illumination, and end-to-end views for hero presentation, workflow guide, viewer start, comparison diffs, findings overview, request waterfall, sequence diagram, and coverage telemetry.
 
 ### Changed
+- Embedded reports share the viewer's single header and section picker. Saved reports retain their own header, with a section picker on phones.
 - Network-path collection can now be copied as a reviewable offline terminal command from the report. The helper records its route method or TCP-route unavailability, repeated reply/no-reply counts, and min/median/max hop timing. The report treats route silence as inconclusive.
 - Performance-profile placement now requires capture-clock agreement in addition to shared-request evidence. A profile that cannot establish that alignment stays separate from the request timeline.
 - Coverage and user guidance now identify which optional local files SocketMap reads and reserve packet captures and server logs for external evidence.
@@ -25,7 +26,7 @@ Release candidate; publication and physical-device acceptance are separate.
 - Copying an embedded helper command has a manual selection fallback when clipboard access is unavailable.
 
 ### Validated
-- Local verification, offline browser checks, and real-capture redaction checks are recorded in `docs/validation/2026-10-02-autonomous-delivery.md`. Physical-device and colleague checks remain in `docs/FIELD-VALIDATION.md`.
+- Local verification, offline browser checks, and real-capture redaction checks are recorded in `docs/validation/2026-10-18-release-candidate.md` and the earlier `docs/validation/2026-10-02-autonomous-delivery.md`. Physical-device and colleague checks remain in `docs/FIELD-VALIDATION.md`.
 
 ## [0.17.4] - 2026-09-30
 ### Validated

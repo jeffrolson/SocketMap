@@ -6,7 +6,7 @@ Candidate: **0.18.0-rc.1**. These results cover the local candidate; public rele
 
 - `npm run verify`: 422 tests passed, no failures or skips; generated theme and embedded helpers current. PowerShell checks used the official portable macOS PowerShell 7.6.7 runtime, verified against the release SHA-256 before extraction. This is script-logic proof, not physical Windows acceptance.
 - `npm run test:browser`: file imports, optional enrichments, image exports, helper-command copy/fallback, and profile refusal passed. No uncaught page errors or nonlocal resource requests.
-- `npm run test:layout`: both required viewports, all report tabs, light/dark system defaults and theme switching, saved standalone reports, two-file viewer comparisons, and saved comparisons passed. Filter/Controls panels remain within the viewport. After scrolling an expanded Waterfall, the timing key pins at 0px on desktop and 56px below phone navigation, relative to the report frame.
+- `npm run test:layout`: both required viewports, all report tabs, light/dark system defaults and theme switching, saved standalone reports, two-file viewer comparisons, and saved comparisons passed. Filter/Controls panels remain within the viewport. After scrolling an expanded Waterfall, the timing key pins at 0px in the report frame at both sizes, below the viewer toolbar. The combined header, accessible section navigation, and actual saved HTML are checked.
 - `npm run audit:redaction -- captures`: eighteen supported local capture files audited, zero leaks reported. Helper/policy readers and serialization canaries have separate tests.
 - `npm run check:policy-links`: every catalog link resolved.
 - Existing genuine capture/profile pairs: five matching pairs accepted, all twenty cross-pairs rejected. This rechecks stored recordings; it is not a new physical-device capture.
@@ -14,26 +14,26 @@ Candidate: **0.18.0-rc.1**. These results cover the local candidate; public rele
 
 ## First-screen measurements
 
-Coordinates include the viewer toolbar and report iframe. Desktop is 1440×900; phone is 390×844. Header components measure 64px and 56px respectively. Primary data stays within 220px on desktop and 260px on phone.
+Coordinates include the viewer toolbar and report iframe. Desktop is 1440×900; phone is 390×844. The combined above-data header measures 64px and 56px respectively, with no second report heading or phone navigation row. Primary data stays within 220px on desktop and 260px on phone.
 
 | View | Desktop first data (px) | Visible items | Phone first data (px) | Visible items |
 |---|---:|---:|---:|---:|
 | File selection | 124 | 1 | 114 | 1 |
-| Overview | 146 | 5 | 186 | 5 |
-| Waterfall timeline | 171 | 1 | 211 | 1 |
-| Sequence steps | 211 | 9 | 251 | 9 |
-| Environment | 201 | 3 | 241 | 2 |
-| Policy file selection | 159 | 1 | 199 | 1 |
-| Coverage | 146 | 5 | 186 | 5 |
-| Diagnostics | 146 | 4 | 186 | 4 |
-| Event replay controls | 183 | 1 | 223 | 1 |
-| AI summary | 178 | 1 | 218 | 1 |
-| Learn | 207 | 5 | 247 | 5 |
-| Viewer comparison | 150 | See metric tiles | 132 | See metric tiles |
-| Saved report, Overview | 82 | See overview tiles | 130 | See overview tiles |
+| Overview | 72 | 5 | 64 | 5 |
+| Waterfall timeline | 97 | 1 | 89 | 1 |
+| Sequence steps | 137 | 9 | 129 | 9 |
+| Environment | 127 | 3 | 119 | 3 |
+| Policy file selection | 85 | 1 | 77 | 1 |
+| Coverage | 72 | 5 | 64 | 5 |
+| Diagnostics | 72 | 4 | 64 | 4 |
+| Event replay controls | 109 | 1 | 101 | 1 |
+| AI summary | 140 | 1 | 132 | 1 |
+| Learn | 133 | 5 | 125 | 5 |
+| Viewer comparison | 86 | See metric tiles | 76 | See metric tiles |
+| Saved report, Overview | 150 | See metric tiles | 142 | See metric tiles |
 | Saved comparison | 86 | See metric tiles | 76 | See metric tiles |
 
-The Waterfall's first data is its interactive timeline. Its first request row starts at 483px on desktop and 681px on phone, with five request rows visible at both sizes in this synthetic capture. Counts describe this fixture, not a guarantee for every capture. Sequence contents and the phone section navigation intentionally scroll within their own containers; the page itself has no horizontal overflow.
+The Waterfall's first data is its interactive timeline. Its first request row starts at 441px on desktop and 591px on phone, with 5 request rows visible at both sizes in this synthetic capture. Counts describe this fixture, not a guarantee for every capture. Sequence contents intentionally scroll within their own container; the page itself has no horizontal overflow.
 
 ## Release preparation
 

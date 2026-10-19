@@ -167,8 +167,9 @@ async function main() {
     check(narrowed && /Showing \d+ of \d+ requests/.test(narrowed.t) && narrowed.shown < narrowed.total && narrowed.after === "" && narrowed.all === narrowed.total, "moving the timeline window narrows the waterfall and Show everything restores it");
 
     // Sequence export: the SVG and PNG buttons produce real files
-    const exported = await evaluate(frame("d => new Promise(resolve => { const w = d.defaultView; const saved = []; const orig = w.HTMLAnchorElement.prototype.click; w.HTMLAnchorElement.prototype.click = function () { if (this.download) { const name = this.download; fetch(this.href).then(r => r.blob()).then(b => { saved.push({ name, size: b.size, type: b.type }); }); return; } return orig.call(this); }; d.getElementById('seq-save-svg').click(); d.getElementById('seq-save-png').click(); setTimeout(() => { w.HTMLAnchorElement.prototype.click = orig; resolve(saved); }, 6000); })"));
+    const exported = await evaluate(frame("d => new Promise(resolve => { const w = d.defaultView; const saved = []; const orig = w.HTMLAnchorElement.prototype.click; w.HTMLAnchorElement.prototype.click = function () { if (this.download) { const name = this.download; fetch(this.href).then(r => r.blob()).then(async b => { saved.push({ name, size: b.size, type: b.type, text: name.endsWith('.svg') ? await b.text() : '' }); }); return; } return orig.call(this); }; d.getElementById('sequence-controls').open = true; d.getElementById('seq-save-svg').click(); d.getElementById('seq-save-png').click(); setTimeout(() => { w.HTMLAnchorElement.prototype.click = orig; resolve(saved); }, 6000); })"));
     check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".svg") && f.size > 8000 && /svg/.test(f.type)), "the sequence exports as an SVG file");
+    check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".svg") && />Time</.test(f.text) && !/Save as image|Hide details panel/.test(f.text)), "the sequence image contains the time column and omits open controls");
     check(Array.isArray(exported) && exported.some(f => f.name.endsWith(".png") && f.size > 4000 && /png/.test(f.type)), "the sequence exports as a PNG file");
 
     // 2. Policy sample inside the report
@@ -211,6 +212,7 @@ async function main() {
     await setFiles("#file-input", [files.har]);
     check(await waitFor(frame("d => !!d.querySelector('#view-waterfall') && /built from a HAR/.test(d.body.textContent)"), "the HAR-only report", 30000), "a HAR on its own opens the full report");
     check(await evaluate(frame("d => !d.querySelector('[data-nav=diagnostics]') && !!d.querySelector('[data-nav=coverage]')")), "the HAR report hides the NetLog-only tabs and keeps Coverage");
+    check(await evaluate(frame("d => [...d.querySelectorAll('[data-section-select]')].every(select => [...select.options].some(option => option.value === 'coverage') && ![...select.options].some(option => ['diagnostics', 'event-replay'].includes(option.value)))")), "the saved HAR report section picker offers only available sections");
     check(await evaluate("document.getElementById('add-har').hidden === true"), "the viewer does not offer to add a HAR to a HAR");
     await setFiles("#profile-input", [files.profile]);
     check(await waitFor(frame("d => !!d.querySelector('#profile')"), "a profile added to the HAR report", 20000), "a profile can be added to a HAR-based report");

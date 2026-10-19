@@ -150,15 +150,16 @@ function diagnosticComparison(diagnostics) {
 }
 
 /** Renders a self-contained comparison report. Captured values are HTML-escaped. */
-export function renderComparisonHtml(comparison, { theme = DEFAULT_THEME } = {}) {
+export function renderComparisonHtml(comparison, { theme = DEFAULT_THEME, embedded = false } = {}) {
   const pairs = Array.isArray(comparison?.pairs) ? comparison.pairs : [];
   const environment = Array.isArray(comparison?.environment) ? comparison.environment : [];
   const warnings = Array.isArray(comparison?.warnings) ? comparison.warnings : [];
   const identityWarnings = warnings.filter(warning => /\b(site|url|page)\b/i.test(warning));
   const observed = comparison.metrics.find(metric => metric.key === "observed-span");
   const summary = comparisonSummary(comparison);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SocketMap capture comparison</title><style>
+  return `<!doctype html><html lang="en" data-embedded="${embedded ? "true" : "false"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SocketMap capture comparison</title><style>
   :root { ${themeCss(theme)} } ${themeModeCss(theme, DEFAULT_THEME)} ${PAGE_HEADER_CSS}
+  html[data-embedded="true"] .page-header { display:none }
   *{box-sizing:border-box}
    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font-sans)}
    button,input{font:inherit}

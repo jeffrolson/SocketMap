@@ -71,7 +71,7 @@ Not sure what to expect? Click **Try the sample capture** on the viewer's start 
 - Windows (PowerShell): `node bin\traceviz.mjs "$env:USERPROFILE\Downloads\chrome-net-export-log.json" -o report.html --open`
 - macOS: `node bin/traceviz.mjs ~/Downloads/chrome-net-export-log.json -o report.html --open`
 
-**The page SocketMap picks.** A capture often contains other tabs and background traffic. SocketMap analyzes the site you loaded (the one with a full page load and the most requests). Use the **Page / site** menu at the top to switch sites. It groups websites separately from browser and extension activity, shows request counts, and displays the selected page URL beside the menu. These are groups of requests by site, not a list of every visited URL. The CLI equivalent is `--page https://site.example.com`. Other activity is also listed under **Environment**.
+**The page SocketMap picks.** A capture often contains other tabs and background traffic. SocketMap analyzes the site you loaded (the one with a full page load and the most requests). Use the **Page / site** menu at the top to switch sites. It groups websites separately from browser and extension activity and shows request counts; **Files** shows the selected page URL. These are groups of requests by site, not a list of every visited URL. The CLI equivalent is `--page https://site.example.com`. Other activity is also listed under **Environment**.
 
 **Choose an appearance.** Use **Light theme** or **Dark theme** in the viewer or report. The choice is remembered when browser storage is available; the initial appearance follows your system preference. A saved report includes the selected theme and still lets its reader switch.
 
@@ -195,13 +195,13 @@ The page load drawn as a conversation. The left column is your browser; each oth
 - **Red row:** a failure, or a connection whose certificate points to TLS inspection.
 - **Amber row:** slow.
 
-Hover a label above an arrow, such as **TCP + TLS handshake**, for a brief explanation of what the browser is attempting. Click a row or server heading for four detail tabs (Explained, Timing, Connection, Headers). Use **Hide details panel** in the panel itself or beside the Sequence heading to give the diagram the full width. **Show details panel** restores it; selecting a row also brings it back. On narrower screens the panel sits below the diagram.
+Hover a label above an arrow, such as **TCP + TLS handshake**, for a brief explanation of what the browser is attempting. Click a row or server heading for four detail tabs (Explained, Timing, Connection, Headers). Use **Hide details panel** in the panel itself or in **Controls** to give the diagram the full width. **Show details panel** restores it; selecting a row also brings it back. On narrower screens the panel sits below the diagram.
 
 **Save the sequence as an image.** **Save as image** downloads the diagram as a PNG and **Save as SVG** as a vector file, ready for a ticket or a slide. The image is built inside the page from what is on screen, so it carries the same redacted content as the report and nothing is sent anywhere. If a browser will not draw the PNG, use the SVG.
 
 ### Filter
 
-On the Waterfall and Sequence tabs, the bar under the header narrows both views:
+Open **Filter** beside the Waterfall color key or **Controls** in Sequence to narrow both views. Saved reports keep these controls in their section header:
 
 - **Search** by host, address, status code, or protocol (for example `sharepoint`, `404`, `h3`).
 - **Problems:** failed requests and TLS inspection.
@@ -330,4 +330,4 @@ The report's **Learn** tab links to all of these.
 
 ## Compact controls
 
-The viewer keeps the selected page and **Save** in its header. Open **Files** for the loaded filenames, the second page selector and comparison views, optional imports under **Add files**, theme selection, and **Open another capture**. Report sections scroll horizontally on a phone. Each section keeps a compact header; explanations are in closed **About this page** disclosures. The Waterfall color key remains visible while scrolling.
+The viewer keeps the report section picker, selected page, and **Save** in one header. Open **Files** for the loaded filenames and selected page URLs, the second page selector and comparison views, optional imports under **Add files**, theme selection, and **Open another capture**. Saved reports use their own header with a section picker on phones. Explanations are in closed **About this page** disclosures. The Waterfall color key remains visible while scrolling.

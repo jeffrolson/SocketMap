@@ -30,7 +30,7 @@ npm run test:layout
 - CLI generates valid, self-contained HTML without remote dependencies
 - The embedded helpers match the scripts in `tools/`
 - Browser smoke confirms file imports, interaction, and offline behavior
-- Layout acceptance confirms first data within 220px at 1440×900 and 260px at 390×844, visible items, compact headers, and no page-wide horizontal overflow
+- Layout acceptance confirms first data within 220px at 1440×900 and 260px at 390×844, visible items, one combined header within 64px/56px respectively, accessible section navigation and controls, and no page-wide horizontal overflow
 
 Set `LAYOUT_SMOKE_OUTPUT` to a local JSON path to retain geometry results; set `LAYOUT_SMOKE_SCREENSHOTS` to a local directory for screenshots. These outputs contain synthetic sample data. The layout check fails if the browser or required Node runtime is unavailable.
 

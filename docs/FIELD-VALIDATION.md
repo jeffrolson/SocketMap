@@ -34,7 +34,7 @@ Record distribution, desktop environment, network manager, shell, traceroute var
 
 ## Your display, keyboard, and clipboard
 
-At normal desktop scaling and at your usual zoom, open the sample and your own report in both themes. Check that file selection and the first data are immediately visible. Use Tab and Enter to operate the copy button, Files menu, page selection, report sections, comparison, and Save. On a touch device check the horizontally scrolling report sections and charts. If clipboard access is blocked by browser policy, verify that the offered manual selection can be copied. Save a report and comparison, then reopen each with networking unavailable.
+At normal desktop scaling and at your usual zoom, open the sample and your own report in both themes. Check that file selection and the first data are immediately visible. Use Tab and Enter to operate the copy button, Files menu, page selection, report section picker, comparison, and Save. On a touch device check the section picker, the saved report's section picker, and scrolling within charts. If clipboard access is blocked by browser policy, verify that the offered manual selection can be copied. Save a report and comparison, then reopen each with networking unavailable.
 
 Pass when text and focus remain readable, controls can be reached without page-wide horizontal scrolling, the Waterfall color key stays available, and the sequence details panel opens and closes. Browser automation measures geometry; this check covers real display scaling, touch, and managed browser permissions.
 

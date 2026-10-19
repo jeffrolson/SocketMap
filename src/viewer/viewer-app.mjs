@@ -155,6 +155,7 @@ function init() {
   const result = $("result");
   const frame = $("report-frame");
   const pageSelect = $("page-select");
+  const sectionSelect = $("section-select");
   const pageSelectB = $("page-select-b");
   const pageContext = $("page-context");
   const fileName = $("file-name");
@@ -172,7 +173,7 @@ function init() {
     frameBusy = true;
     clearTimeout(frameTimer);
     frameTimer = setTimeout(() => { frameBusy = false; if (queuedHtml !== null) { const next = queuedHtml; queuedHtml = null; setFrameHtml(next); } }, 20000);
-    frame.srcdoc = html;
+    frame.srcdoc = html.replace('data-embedded="false"', 'data-embedded="true"');
   }
 
   function currentTheme() {
@@ -251,6 +252,7 @@ function init() {
     fileName.title = fileName.textContent;
     const pages = report.comparison ? [report.comparison.a.page, report.comparison.b.page] : [report.analysis.page];
     pageContext.textContent = pages.map((page, i) => `${pages.length > 1 ? (i ? "B" : "A") : "Selected"}: ${page.url}`).join(" · ");
+    pageContext.hidden = !pages.some(page => page.url);
     pageContext.title = pageContext.textContent;
     frame.title = nextView === "comparison" ? "SocketMap capture comparison" : `SocketMap ${b ? nextView.toUpperCase() + " " : ""}report`;
     setFrameHtml(report.html);
@@ -267,6 +269,7 @@ function init() {
     for (const id of ["compare-files", "add-comparison", "add-har", "add-profile", "open-another", "save-report", "swap-captures", "page-select", "page-select-b", "view-comparison", "view-a", "view-b"]) $(id).disabled = value;
     pageSelect.disabled = value || !captures[0]?.model.pages.length;
     pageSelectB.disabled = value || !captures[1]?.model.pages.length;
+    sectionSelect.disabled = value || view === "comparison";
     document.querySelectorAll("[data-open-sample]").forEach(button => { button.disabled = value; });
   }
 
@@ -548,6 +551,10 @@ function init() {
   }
   pageSelect.addEventListener("change", () => choosePage(0, pageSelect));
   pageSelectB.addEventListener("change", () => choosePage(1, pageSelectB));
+  sectionSelect.addEventListener("change", () => {
+    const links = frame.contentDocument?.querySelectorAll('[data-nav]') || [];
+    [...links].find(link => link.dataset.nav === sectionSelect.value)?.click();
+  });
   for (const name of ["comparison", "a", "b"]) $("view-" + name).addEventListener("click", () => show(captures, name));
   $("swap-captures").addEventListener("click", () => show([captures[1], captures[0]], "comparison"));
   frame.addEventListener("load", () => {
@@ -557,6 +564,24 @@ function init() {
     sendThemeToReport();
     const reportDocument = frame.contentDocument;
     if (reportDocument) {
+      const links = [...reportDocument.querySelectorAll('[data-nav]')];
+      sectionSelect.replaceChildren();
+      for (const link of links) {
+        const option = document.createElement('option');
+        option.value = link.dataset.nav;
+        option.textContent = link.textContent.trim();
+        sectionSelect.appendChild(option);
+      }
+      if (!links.length) {
+        const option = document.createElement('option');
+        option.value = 'comparison';
+        option.textContent = 'Comparison';
+        sectionSelect.appendChild(option);
+      }
+      sectionSelect.disabled = !links.length;
+      const syncSection = () => { sectionSelect.value = reportDocument.querySelector('.view.is-active')?.dataset.view || 'comparison'; };
+      syncSection();
+      frame.contentWindow.addEventListener('socketmap:viewchange', syncSection);
       reportDocument.addEventListener("dragover", event => event.preventDefault());
       reportDocument.addEventListener("drop", handleDrop);
     }

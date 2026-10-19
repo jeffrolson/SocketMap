@@ -40,7 +40,7 @@ The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain 
 3. Double-click it. It opens in Edge or Chrome. If Windows picks another program, right-click the file and choose **Open with > Microsoft Edge**.
 4. Drop your capture on it, or click **Try the sample capture** to see a finished report first.
 
-The start page puts the **Copy address** button for `chrome://net-export` beside file selection. Capture instructions are under **About this page**. The report toolbar keeps page selection and **Save** visible; the **Files** menu contains supplementary imports, comparison controls, appearance, and opening another capture. Use **Light theme** or **Dark theme** to change the viewer and report together; saved reports keep the selected appearance.
+The start page puts the **Copy address** button for `chrome://net-export` beside file selection. Capture instructions are under **About this page**. One report toolbar keeps section selection, page selection, and **Save** visible; the **Files** menu contains supplementary imports, comparison controls, appearance, and opening another capture. Use **Light theme** or **Dark theme** to change the viewer and report together; saved reports keep the selected appearance.
 
 To see what changed, choose **Compare two captures** or drop two NetLog files together. The viewer compares selected pages with paired request bars, timing and environment differences, and independent access to each full report. **Save comparison** bundles the selected comparison into one HTML file that opens offline. You can also add a second file to a report already open.
 
