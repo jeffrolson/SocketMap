@@ -231,7 +231,9 @@ function init() {
     $("page-label").textContent = b ? "A page / site" : "Page / site";
     pageSelect.setAttribute("aria-label", b ? "A page or site to analyze" : "Page or site to analyze");
     $("add-comparison").textContent = b ? "Replace B capture" : "Compare with another capture";
-    $("save-report").textContent = nextView === "comparison" ? "Save comparison" : "Save report";
+    $("save-report").title = nextView === "comparison" ? "Save comparison" : "Save report";
+    $("save-report").setAttribute("aria-label", $("save-report").title);
+    $("viewer-menu").open = false;
     for (const name of ["comparison", "a", "b"]) $("view-" + name).setAttribute("aria-pressed", String(view === name));
     fileName.textContent = b ? `A: ${a.source.name} · B: ${b.source.name}` : `${a.source.name}${a.har ? ` + HAR ${a.har.name}` : ""}${a.profile ? ` + profile ${a.profile.name}` : ""}${a.path ? ` + path ${a.path.name}` : ""}${a.lighthouse ? ` + Lighthouse ${a.lighthouse.name}` : ""}${a.cpu ? ` + CPU profile ${a.cpu.name}` : ""}`;
     $("add-har").hidden = nextView === "comparison" || nextView === "b" || a.model.source?.kind === "har";

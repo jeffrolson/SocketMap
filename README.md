@@ -2,6 +2,8 @@
 
 **Data-driven insights into a page load.**
 
+![SocketMap: Data-driven insights into a page load](docs/images/hero-banner.png)
+
 SocketMap turns a browser network capture from Chrome or Edge (`chrome://net-export`) into a single, self-contained HTML report: recorded connections, DNS lookups, certificates, and requests linked together and explained in plain language. It highlights private certificate roots, proxy use, local-agent calls, slow DNS, slow responses and recorded failures with evidence and a suggested next check.
 
 - **Nothing to install for most people.** Open `socketmap-viewer.html` in Chrome or Edge and drop in a capture.
@@ -9,7 +11,7 @@ SocketMap turns a browser network capture from Chrome or Edge (`chrome://net-exp
 - **Offline.** The viewer and every report load nothing from the internet.
 - **Zero dependencies.** The command-line tool uses only Node.js built-ins.
 
-![SocketMap report: findings overview](docs/images/report-overview.png)
+![Seamless three-step workflow](docs/images/workflow-guide.png)
 
 ---
 
@@ -38,9 +40,11 @@ The [user guide](docs/USER-GUIDE.md) explains every part of the report in plain 
 3. Double-click it. It opens in Edge or Chrome. If Windows picks another program, right-click the file and choose **Open with > Microsoft Edge**.
 4. Drop your capture on it, or click **Try the sample capture** to see a finished report first.
 
-The start page has a **Copy Chrome address** button for `chrome://net-export` and a short capture checklist. Use **Light theme** or **Dark theme** to change the viewer and report together; saved reports keep the selected appearance.
+The start page puts the **Copy address** button for `chrome://net-export` beside file selection. Capture instructions are under **About this page**. The report toolbar keeps page selection and **Save** visible; the **Files** menu contains supplementary imports, comparison controls, appearance, and opening another capture. Use **Light theme** or **Dark theme** to change the viewer and report together; saved reports keep the selected appearance.
 
 To see what changed, choose **Compare two captures** or drop two NetLog files together. The viewer compares selected pages with paired request bars, timing and environment differences, and independent access to each full report. **Save comparison** bundles the selected comparison into one HTML file that opens offline. You can also add a second file to a report already open.
+
+![SocketMap comparison: side-by-side performance diffs](docs/images/report-compare.png)
 
 Nothing else is needed: no Node.js, no admin rights. You can also pass the file on to colleagues or put it on SharePoint.
 
@@ -112,9 +116,13 @@ Tip: capture the same page twice, for example on the office network and at home,
 
 ## Read the report
 
+The report has views for the overview, waterfall, sequence, environment, policy, coverage, diagnostics, events, AI summary, and learning material. Optional-input views explain what to add when needed.
+
+![SocketMap report: findings overview](docs/images/report-overview.png)
+
 ![Sequence view with the plain-language guide](docs/images/report-sequence.png)
 
-The report has six tabs:
+![Request waterfall with timeline scrubber and long tasks](docs/images/report-waterfall.png)
 
 | Tab | What it shows |
 |---|---|
@@ -122,7 +130,10 @@ The report has six tabs:
 | **Waterfall** | Every request in start order with its time split into phases. Click a row for timing, connection, certificate, and headers |
 | **Sequence** | The page load as conversations between the browser and each server. Click any row or column heading for a plain-language explanation; hover any label (H2, 200, wait) for a definition |
 | **Environment** | Browser, OS, local IP, DNS servers and search domains, secure DNS, and proxy setup at capture time |
-| **Coverage** | A map of the request path showing what this capture recorded, what it could not, and what to collect next |
+| **Policy** | An optional Chrome or Edge policy export, interpreted with documented policy guidance and capture cross-checks |
+| **Coverage** | A map of the request path showing what this capture recorded, what it could not, and what to collect next; optional HAR, profile, Lighthouse, CPU-profile, and network-path helper evidence is read locally |
+| **Diagnostics** | Capture-wide browser snapshots, source activity, timeline signals, and evidence-backed next checks |
+| **Events** | On-demand inspection of the original local NetLog event stream; saved reports ask for the original file when needed |
 | **AI summary** | A compact text version to paste into your AI assistant |
 | **Learn** | Next steps, links to deeper tools (Web Vitals, DevTools, Microsoft 365 networking, Wireshark), and a glossary |
 
@@ -162,7 +173,7 @@ Fonts are used only if installed on the viewer's machine; nothing is downloaded.
 
 ## What SocketMap cannot see
 
-A NetLog records network activity only. It cannot show time spent running the page's own code (use a Chrome DevTools Performance profile), security software acting inside the browser, packet-level problems such as retransmissions (use Wireshark), or what servers do internally. A small helper script (`tools/socketmap-path.sh` for Mac and Linux, `tools/socketmap-path.ps1` for Windows) records the computer's Wi-Fi signal, DNS servers, proxy settings and the route to each host, and times each host directly with curl, as an optional file for the report. The report says so rather than guessing, and its **Coverage** tab shows what was and was not recorded, with suggestions for what to collect next.
+A NetLog records network activity only. It cannot show everything about page code, security software acting inside the browser, packet-level retransmissions, or internal server work. SocketMap can also read optional Performance profile, HAR, Lighthouse, CPU-profile, and network-path helper files locally. Packet captures and server logs remain separate evidence. The helper records the computer's Wi-Fi signal, DNS servers, proxy settings, direct host probes, and route replies as an optional file for the report. The **Coverage** tab distinguishes recorded facts from evidence worth collecting next.
 
 ---
 
@@ -188,7 +199,11 @@ node bin/traceviz.mjs <capture> [options]
 | `npm run verify` | Runs every test and repository check |
 | `npm run generate:tools` | Recompiles the helper scripts into the report after editing `tools/` |
 | `npm run check:helper -- <file>` | Checks a file written by the network path helper |
-| `npm run test:browser` | Real-browser smoke test of the built viewer (needs Chrome or Edge) |
+| `npm run test:browser` | Real-browser smoke test of the built viewer (Node.js 22+, Chrome or Edge) |
+| `npm run test:layout` | Checks desktop and phone data positions, visible items, themes, and page overflow (Node.js 22+, Chrome or Edge) |
+| `npm run prepare:release` | Builds the local release assets and SHA-256 manifest; does not publish |
+| `npm run generate:screenshots` | Refreshes synthetic documentation screenshots (Node.js 22+, Chrome or Edge) |
+| `npm run generate:framed-images` | Refreshes framed images after `npm run demo` (Node.js 22+, Chrome or Edge) |
 | `npm run audit:redaction -- <captures>` | Checks that no secret in your real capture files reaches the report |
 | `npm run generate:theme` | Recompiles the theme after editing `DESIGN.md` |
 

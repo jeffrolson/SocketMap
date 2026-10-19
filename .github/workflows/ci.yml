@@ -25,6 +25,8 @@ jobs:
         run: npm run build:viewer
       - name: Real-browser smoke test
         run: npm run test:browser
+      - name: Desktop and phone layout acceptance
+        run: npm run test:layout
       - name: Network path helper (Mac and Linux)
         if: runner.os != 'Windows'
         shell: bash

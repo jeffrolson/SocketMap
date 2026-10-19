@@ -28,8 +28,9 @@ import { renderPolicyView, policyScript, policyCss } from "./policy.mjs";
 import { buildPolicyEvidence } from "../policy/engine.mjs";
 import { renderServerInsights, renderServerDetail, renderServerMark, serverInsightsCss } from "./server-insights.mjs";
 import { eventReplayMarkup, eventReplayScript } from "../viewer/event-replay.mjs";
+import { renderPageHeader, PAGE_HEADER_CSS } from "./page-header.mjs";
 
-const VERSION = "0.17.4";
+const VERSION = "0.18.0-rc.1";
 const SEGMENTS = ["redirect", "queue", "proxy", "dns", "connect", "tls", "stalled", "send", "wait", "download"];
 const MAX_SEQUENCE_HOSTS = 8;
 const MAX_SEQUENCE_REQUESTS = 1000; // display limit for the sequence view only; the waterfall shows every request
@@ -85,7 +86,7 @@ function renderProtocolGuide(pageRequests) {
     </details>`;
 }
 
-function renderEnvironment(env) {
+function renderEnvironment(env, { compact = false } = {}) {
   const list = values => values?.length ? values.join(", ") : null;
   const yesNo = value => value == null ? null : value ? "Yes" : "No";
   const groups = [
@@ -122,8 +123,8 @@ function renderEnvironment(env) {
   ];
   return `
     <section id="environment" class="card">
-      <h2>Environment</h2>
-      <p class="note">Settings recorded by the browser when this capture was made. Available fields vary by browser version and capture; missing values are shown as not recorded.</p>
+      ${compact ? "" : "<h2>Environment</h2>"}
+      ${compact ? "" : '<p class="note">Settings recorded by the browser when this capture was made. Available fields vary by browser version and capture; missing values are shown as not recorded.</p>'}
       ${groups.map(([title, rows]) => `<h3 class="sub">${esc(title)}</h3><dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v ?? "Not recorded")}</dd>`).join("")}</dl>`).join("")}
       ${env.commandLine ? `<details class="more"><summary>Browser command line</summary><pre>${esc(env.commandLine)}</pre></details>` : ""}
       <p class="note">Machine name, public IP, and traceroute are not part of a NetLog capture.</p>
@@ -270,14 +271,12 @@ function renderWaterfall(analysis, connections, serverInsights, enrichment = nul
   }).join("");
   return `
     <section id="waterfall" class="card">
-      <h2>Request waterfall</h2>
-      <p class="note">Every request for this page, in start order. Click a row for its timing, connection, certificate, and headers.</p>
+      ${renderTimeline(pageRequests, connections, profile, page, span)}
       <div class="wf-key" aria-label="Timing color key">
         <span class="key-heading">Timing color key <span class="muted">· Hover or focus a phase to learn more</span></span>
         <ul class="legend">${SEGMENTS.map(k => `<li tabindex="0" data-tip="${esc(TIMING_MEANINGS[k])}"><span class="swatch seg-${k}" aria-hidden="true"></span>${esc(TIMING_LABELS[k])}</li>`).join("")}${milestones.drawn ? `<li tabindex="0" data-tip="Dashed vertical lines mark page milestones (${milestones.source === "profile" ? "first and largest contentful paint, DOMContentLoaded and load, from the Performance profile" : "DOMContentLoaded and load, from the HAR"}). They are the page's own events, not network events."><span class="swatch ms-swatch" aria-hidden="true"></span>Page milestones (${milestones.source === "profile" ? "profile" : "HAR"})</li>` : ""}${serverInsights.hasAnything ? `<li tabindex="0" data-tip="A thin line under the wait bar, as wide as the largest phase the server reported for itself (Server-Timing). It is the server's own figure and may overlap other phases."><span class="swatch srv-swatch" aria-hidden="true"></span>Server-reported time</li>` : ""}</ul>
       </div>
-      ${renderProtocolGuide(pageRequests)}
-      ${renderTimeline(pageRequests, connections, profile, page, span)}
+      <details class="about-page"><summary>About this page</summary><p>Every request for this page, in start order. Click a row for its timing, connection, certificate, and headers.</p>${renderProtocolGuide(pageRequests)}</details>
       <div class="wf">
         <div class="wf-axis"><span class="wf-label"></span><span class="wf-status"></span><span class="wf-proto"></span><span class="wf-track ticks">${ticks}${milestones.labels}</span><span class="wf-time"></span></div>
         ${mainBand}${rows}
@@ -443,7 +442,7 @@ function renderChip(c) {
   return `<span class="tag tone-${esc(c.tone)}"${c.tip ? ` data-tip="${esc(c.tip)}"` : ""}>${esc(c.text)}</span>`;
 }
 
-function renderSequence(view, page, analysis) {
+function renderSequence(view, page, analysis, pageHeader) {
   const n = view.actors.length;
   const center = (i) => ((i + 0.5) / n).toFixed(5);
   const head = view.actors.map(a => `
@@ -462,19 +461,16 @@ function renderSequence(view, page, analysis) {
           </span>
         </div>`).join("");
   return `
+    ${pageHeader}
     <section id="sequence" class="seq-layout">
       <div class="seq-main card">
-        <div class="seq-title">
-          <div class="seq-title-row"><h2>Sequence</h2><span class="seq-export"><button type="button" id="seq-save-png">Save as image</button><button type="button" id="seq-save-svg">Save as SVG</button><span class="muted" id="seq-export-status" role="status"></span></span><button type="button" id="toggle-details" aria-controls="explain" aria-expanded="true">Hide details panel</button></div>
-          <p class="note">One column per server (the first ${MAX_SEQUENCE_HOSTS} contacted; the rest share the last column). A handshake row appears only where a new connection was opened.${view.truncated ? ` Showing the first ${MAX_SEQUENCE_REQUESTS} of ${page.requestCount} requests; the waterfall lists all of them.` : ""}</p>
-          ${renderProtocolGuide(analysis.pageRequests)}
-        </div>
         <div class="seq-scroll" style="--n:${n}">
           <div class="seq-grid">
             <div class="seq-head"><span class="seq-t head">Time</span>${head}</div>
             <div class="seq-body">${lanes}${rows}</div>
           </div>
         </div>
+        <details class="about-page seq-about"><summary>About this page</summary><p>One column per server (the first ${MAX_SEQUENCE_HOSTS} contacted; the rest share the last column). A handshake row appears only where a new connection was opened.${view.truncated ? ` Showing the first ${MAX_SEQUENCE_REQUESTS} of ${page.requestCount} requests; the waterfall lists all of them.` : ""}</p>${renderProtocolGuide(analysis.pageRequests)}</details>
       </div>
       <aside class="inspector" id="explain" aria-label="Details" aria-live="polite">
         <div class="insp-bar"><span class="kicker">Details</span><button type="button" id="explain-close" aria-controls="explain" aria-expanded="true">Hide details panel</button></div>
@@ -530,6 +526,11 @@ const NAV = [
   ["learn", "learn", "Learn"]
 ];
 
+function pageHeader(options) {
+  const controls = `${options.controls || ""}<button type="button" data-theme-toggle aria-label="Switch color theme">Theme</button>`;
+  return renderPageHeader({ ...options, controls });
+}
+
 /**
  * @param {object} model     capture model
  * @param {object} analysis  result of analyzeCapture
@@ -565,7 +566,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   :root {
     ${themeCss(theme)}
     --sidebar-w: 216px;
-    --topbar-h: 96px;
+    --topbar-h: 64px;
     --tcol: 76px;
   }
   ${themeModeCss(theme, DEFAULT_THEME)}
@@ -578,6 +579,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   ${pathCss()}
   ${lighthouseCss()}
   ${cpuProfileCss()}
+  ${PAGE_HEADER_CSS}
   .ms-swatch { background: transparent; border-left: 1px dashed var(--secondary); height: 12px; width: 0; }
   .srv-swatch { background: var(--text); height: 3px; align-self: center; }
   .event-replay { padding: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -590,7 +592,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .sidebar { overflow-y: auto; }
   * { box-sizing: border-box; }
   html { scroll-padding-top: calc(var(--topbar-h) + 12px); }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font-sans); }
+  body { margin: 0; overflow-x: clip; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font-sans); }
   code, pre, .mono { font-family: var(--font-mono); font-size: 12.5px; }
   pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--canvas); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
   h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 12px; }
@@ -605,7 +607,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   button:focus-visible, [tabindex]:focus-visible, a:focus-visible { outline: 2px solid var(--secondary); outline-offset: 3px; }
 
   /* Shell: sidebar, top bar, status bar */
-  .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; padding: 14px 10px; z-index: 30; }
+  .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w); max-width: 100vw; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; padding: 14px 10px; z-index: 30; }
   .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; padding: 4px 8px 14px; color: var(--text); }
   .brand .icon { color: var(--secondary); }
   .sidebar a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius); color: var(--text-muted); text-decoration: none; }
@@ -615,19 +617,20 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .side-box .sub { margin: 0 0 6px; }
   .side-box div { display: flex; justify-content: space-between; gap: 8px; }
   .app { margin-left: var(--sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
-  .topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid color-mix(in srgb, var(--secondary) 20%, transparent); padding: 10px 20px; display: flex; flex-direction: column; gap: 8px; }
-  .top-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .topbar { display: none; }
+  .top-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px 10px; min-height: 40px; overflow: hidden; }
   .crumbs { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 13px; min-width: 0; }
   .crumbs .brand-mini { color: var(--secondary); font-weight: 600; letter-spacing: 0.05em; }
   .crumbs .sep { color: var(--text-faint); }
   .crumbs .file { background: var(--surface-mid); padding: 2px 8px; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }
   .badge { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
-  .page-url { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 160px; }
+  .page-url { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 80px; }
   .pill { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); white-space: nowrap; }
   .pill.is-bad { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
   .pill.is-plain { background: var(--surface-2); color: var(--text-muted); }
-  main { padding: 18px 20px 28px; flex: 1; min-width: 0; }
-  .view { display: grid; gap: 16px; }
+  main { padding: 8px 12px 20px; flex: 1; min-width: 0; max-width: 100%; }
+  .view { display: grid; gap: 10px; min-width: 0; max-width: 100%; overflow-x: clip; }
+  .view > .page-header { width: 100%; max-width: 100%; min-width: 0; overflow: visible; position: relative; z-index: 25; }
   .js .view:not(.is-active) { display: none; }
   .js .filterbar:not(.is-shown) { display: none; }
   .statusbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 20px; background: var(--canvas); border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); }
@@ -636,6 +639,16 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
 
   /* Filter bar */
   .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .page-actions { position: relative; }
+  .page-actions > summary { list-style: none; cursor: pointer; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 11px; font-size: 13px; }
+  .page-actions > summary::-webkit-details-marker { display: none; }
+  .page-actions[open] > summary { border-color: var(--secondary); }
+  .page-action-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: min(720px, calc(100vw - 24px)); padding: 10px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 55%, transparent); }
+  .page-action-panel .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .page-action-panel .filterbar .search { min-width: 180px; }
+  .page-action-panel .filterbar .filter-chips { flex-wrap: wrap; }
+  .page-action-panel .seq-export { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .page-action-panel #toggle-details { margin-bottom: 8px; }
   .search { display: flex; align-items: center; gap: 6px; background: var(--canvas); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 8px; color: var(--text-faint); flex: 1; min-width: 220px; max-width: 520px; }
   .search:focus-within { border-color: var(--secondary); }
   .search input { flex: 1; background: transparent; border: 0; outline: none; color: var(--text); font: 12.5px var(--font-mono); }
@@ -647,7 +660,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .is-filtered-out { display: none !important; }
 
   /* Cards and overview */
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
   .banner { border-left: 3px solid var(--secondary); background: var(--surface-mid); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin: 0; }
   .page-card h2 { font-family: var(--font-mono); font-size: 14px; overflow-wrap: anywhere; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
@@ -689,7 +702,7 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   details.more summary { cursor: pointer; color: var(--primary); font-size: 12.5px; margin-top: 8px; }
 
   /* Waterfall */
-  .wf-key { position: sticky; top: var(--topbar-h); z-index: 15; background: var(--surface); padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .wf-key { position: sticky; top: var(--topbar-h); z-index: 15; background: var(--surface); padding: 6px 0; border-bottom: 1px solid var(--border); }
   .key-heading { font-size: 12px; font-weight: 600; }
   .key-heading .muted { font-weight: 400; }
   .wf-key .legend { margin: 6px 0 0; }
@@ -735,9 +748,14 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
   .plain { background: var(--surface-mid); padding: 8px 10px; border-radius: var(--radius-sm); margin: 0 0 10px; }
 
   /* Sequence view */
-  .seq-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+  .seq-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; width: 100%; min-width: 0; }
+  .seq-main, .seq-scroll { min-width: 0; max-width: 100%; }
   .seq-main { padding: 0; overflow: hidden; }
-  .seq-title { padding: 14px 18px 4px; }
+  .about-page { margin: 0; color: var(--text-muted); font-size: 12.5px; }
+  .about-page > summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+  .about-page > p { margin: 6px 0; }
+  .page-about { padding: 0 2px; }
+  .seq-about { padding: 8px 14px; border-bottom: 1px solid var(--border); }
   .seq-scroll { overflow: auto; max-height: calc(100vh - var(--topbar-h) - 150px); background: var(--canvas); border-top: 1px solid var(--border); }
   .seq-grid { min-width: calc(var(--tcol) + var(--n) * 128px); }
   .seq-head { position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: var(--tcol) repeat(var(--n), minmax(0, 1fr)); gap: 6px; padding: 8px 8px 8px 0; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid color-mix(in srgb, var(--secondary) 20%, transparent); }
@@ -833,13 +851,26 @@ export function renderReportHtml(model, analysis, { theme = DEFAULT_THEME, sourc
     .inspector { position: static; width: auto; max-height: none; }
   }
   @media (max-width: 900px) {
-    .sidebar { position: static; width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; }
-    .brand { padding: 4px 8px; }
+    .sidebar { position: sticky; inset: 0 auto auto 0; width: 100%; height: 56px; flex-direction: row; flex-wrap: nowrap; align-items: center; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 6px 8px; z-index: 35; }
+    .brand { padding: 4px 6px; flex: none; }
+    .sidebar a { flex: none; padding: 7px 8px; }
     .side-box { display: none; }
     .app { margin-left: 0; }
     .detail-grid, .glossary { grid-template-columns: 1fr; }
     .wf-row > summary, .wf-axis { grid-template-columns: 1fr 60px 70px; }
     .wf-proto, .wf-track { display: none; }
+    .wf-key { top: 56px; }
+  }
+  @media (max-width: 600px) {
+    .top-row .crumbs .brand-mini, .top-row .crumbs .sep, .top-row .badge, .top-row .pill.is-plain, .top-row .pill:not(.is-bad) { display: none; }
+    .top-row .crumbs .file { max-width: 120px; }
+    .top-row { gap: 6px; }
+    .page-action-panel { position: fixed; top: 118px; right: 10px; left: 10px; width: auto; }
+    .page-action-panel .seq-export button, .page-action-panel #toggle-details { padding: 4px 6px; font-size: 11px; }
+    .filterbar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+    .filterbar .search { min-width: 180px; }
+    .filter-chips { flex-wrap: nowrap; }
+    .filter-chips button { white-space: nowrap; }
   }
 </style>
 ${themePreferenceScript()}
@@ -870,10 +901,7 @@ ${themePreferenceScript()}
   </header>
   <main>
     <div class="view" id="overview" data-view="overview">
-      <div class="card page-card">
-        <h2>${esc(page.url)}</h2>
-        <p class="banner">This report contains IP addresses, full URLs, and request/response headers from the capture. Passwords, cookies, auth headers, and tokens were removed before it was written.</p>
-      </div>
+      ${pageHeader({ title: "Page load", subtitle: page.url, status: `${page.requestCount} requests · ${ms(page.loadMs)}` })}
       <div class="kpis">
         <div class="kpi"><b>${esc(ms(page.loadMs))}</b><span>First request to last response</span></div>
         <div class="kpi"><b>${page.requestCount}</b><span>Requests</span></div>
@@ -881,6 +909,7 @@ ${themePreferenceScript()}
         <div class="kpi"><b>${esc(formatBytes(page.bytesWire) || "Not recorded")}</b><span>Transferred</span></div>
         <div class="kpi"><b>${analysis.findings.length}</b><span>Findings (${high} high)</span></div>
       </div>
+      <details class="about-page page-about"><summary>About this page</summary><p>This report contains IP addresses, full URLs, and request/response headers from the capture. Passwords, cookies, auth headers, and tokens were removed before it was written.</p></details>
       ${renderFindings(analysis.findings)}
       ${renderBreakdown(analysis.breakdown)}
       ${renderServerInsights(serverInsights)}
@@ -892,14 +921,16 @@ ${themePreferenceScript()}
       ${renderHosts(analysis.hosts)}
     </div>
     <div class="view" id="view-waterfall" data-view="waterfall">
+      ${pageHeader({ title: "Waterfall", subtitle: "Requests in start order", status: `${page.requestCount} requests`, controls: '<details class="page-actions" id="waterfall-controls"><summary>Filter</summary><div class="page-action-panel"></div></details>' })}
       ${renderWaterfall(analysis, connections, serverInsights, enrichment, profile, lighthouseData)}
     </div>
     <div class="view" id="view-sequence" data-view="sequence">
-      ${renderSequence(view, page, analysis)}
+      ${renderSequence(view, page, analysis, pageHeader({ title: "Sequence", subtitle: "Browser-to-server steps", status: `${view.rows.length} steps`, controls: '<details class="page-actions" id="sequence-controls"><summary>Controls</summary><div class="page-action-panel"><span class="seq-export"><button type="button" id="seq-save-png">Save as image</button><button type="button" id="seq-save-svg">Save as SVG</button><span class="muted" id="seq-export-status" role="status"></span></span><button type="button" id="toggle-details" aria-controls="explain" aria-expanded="true">Hide details panel</button></div></details>' }))}
     </div>
     <div class="view" id="view-environment" data-view="environment">
+      ${pageHeader({ title: "Environment", subtitle: "Browser-recorded settings", status: env.browser || "Browser not recorded" })}
       ${fromHar ? harNote("Browser version, operating system, proxy and DNS settings are not in it, so they show as not recorded.") : ""}
-      ${renderEnvironment(env)}
+      ${renderEnvironment(env, { compact: true })}
       <section id="other" class="card">
         <h2>Other activity in this capture</h2>
         ${analysis.background.length ? `<p class="note">Traffic from other tabs, extensions, and the browser itself. Not included in this report's analysis. Pick one of these as the page to analyze it.</p>
@@ -908,20 +939,20 @@ ${themePreferenceScript()}
         </tbody></table>` : "<p>None.</p>"}
       </section>
     </div>
-    <div class="view" id="view-policy" data-view="policy">${renderPolicyView()}</div>
-    <div class="view" id="view-coverage" data-view="coverage">${renderCoverage(buildCoverage(model))}</div>
-    <div class="view" id="view-diagnostics" data-view="diagnostics">${fromHar ? harNote("There are no browser diagnostics to show.") : ""}${renderDiagnostics(model)}</div>
-    <div class="view" id="view-events" data-view="event-replay">${fromHar ? harNote("There are no events to replay.") : ""}${eventReplayMarkup()}</div>
+    <div class="view" id="view-policy" data-view="policy">${pageHeader({ title: "Browser policy", subtitle: "Optional local policy export" })}${renderPolicyView({ compact: true })}</div>
+    <div class="view" id="view-coverage" data-view="coverage">${pageHeader({ title: "Capture coverage", subtitle: "What this capture recorded" })}${renderCoverage(buildCoverage(model), { compact: true })}</div>
+    <div class="view" id="view-diagnostics" data-view="diagnostics">${pageHeader({ title: "Browser diagnostics", subtitle: "Capture-wide NetLog evidence", status: `${model.stats?.events ?? "Not recorded"} events` })}${fromHar ? harNote("There are no browser diagnostics to show.") : ""}${renderDiagnostics(model, { compact: true })}</div>
+    <div class="view" id="view-events" data-view="event-replay">${pageHeader({ title: "Event replay", subtitle: "Search the original capture locally" })}${fromHar ? harNote("There are no events to replay.") : ""}${eventReplayMarkup({ compact: true })}</div>
     <div class="view" id="view-ai" data-view="ai-summary">
+      ${pageHeader({ title: "AI summary", subtitle: "Evidence for an approved assistant", controls: '<button type="button" id="copy-summary" class="primary">Copy summary</button><button type="button" id="save-summary">Save summary (.txt)</button><span id="copy-status" class="muted" role="status"></span>' })}
       <section id="ai-summary" class="card">
-        <h2>AI summary</h2>
-        <p class="note">A detailed handoff with capture context, environment, findings, request evidence, and questions to investigate. Copy it into your AI assistant or save it for later. It retains internal addresses and URLs, so share it only with an assistant approved for that data.</p>
-        <div class="tools"><button type="button" id="copy-summary" class="primary">Copy summary</button><button type="button" id="save-summary">Save summary (.txt)</button><span id="copy-status" class="muted" role="status"></span></div>
+        <details class="about-page"><summary>About this page</summary><p>A detailed handoff with capture context, environment, findings, request evidence, and questions to investigate. It retains internal addresses and URLs, so share it only with an assistant approved for that data.</p></details>
         <textarea id="summary-text" aria-label="Detailed AI evidence summary" readonly>${esc(summary)}</textarea>
       </section>
     </div>
     <div class="view" id="view-learn" data-view="learn">
-      ${renderLearn()}
+      ${pageHeader({ title: "Learn", subtitle: "Terms and next checks" })}
+      ${renderLearn({ compact: true })}
     </div>
   </main>
   <footer class="statusbar">
@@ -953,7 +984,14 @@ ${themePreferenceScript()}
     views.forEach(function (v) { v.classList.toggle("is-active", v === view); });
     var name = view.getAttribute("data-view");
     document.querySelectorAll("[data-nav]").forEach(function (a) { a.classList.toggle("is-active", a.getAttribute("data-nav") === name); });
-    filterbar.classList.toggle("is-shown", name === "waterfall" || name === "sequence");
+    var needsFilter = name === "waterfall" || name === "sequence";
+    if (needsFilter) {
+      var panel = view.querySelector(".page-action-panel");
+      if (panel) panel.appendChild(filterbar);
+    } else {
+      topbar.appendChild(filterbar);
+    }
+    filterbar.classList.toggle("is-shown", needsFilter);
     setTopbarHeight();
     if (target && target !== view && !/^(waterfall|sequence|ai-summary|learn|environment|coverage|policy)$/.test(hash)) {
       if (target.tagName === "DETAILS") target.open = true;
@@ -1250,18 +1288,28 @@ ${themePreferenceScript()}
   toggle.addEventListener("click", function () { setDetailsHidden(!layout.classList.contains("details-hidden")); });
   try { if (localStorage.getItem("socketmap-details-hidden") === "1") setDetailsHidden(true); } catch (e) { /* storage may be blocked */ }
 
-  // Copy buttons for request IDs. Falls back to selecting the ID when the clipboard is blocked.
+  // Copy recorded IDs or embedded helper commands; reveal the exact text for manual fallback.
   document.addEventListener("click", function (ev) {
-    var button = ev.target.closest && ev.target.closest("[data-copy]");
+    var button = ev.target.closest && ev.target.closest("[data-copy], [data-copy-from]");
     if (!button) return;
+    var target = button.getAttribute("data-copy-from") && document.getElementById(button.getAttribute("data-copy-from"));
+    var text = target ? target.value : button.getAttribute("data-copy");
+    if (typeof text !== "string") return;
     var label = button.textContent;
     function done(text) { button.textContent = text; setTimeout(function () { button.textContent = label; }, 1800); }
     function select() {
+      if (target) {
+        var details = target.closest("details");
+        if (details) details.open = true;
+        target.focus(); target.select();
+        done("Selected: copy with Ctrl+C / Command+C");
+        return;
+      }
       var code = button.previousElementSibling;
       if (code && window.getSelection) { var range = document.createRange(); range.selectNodeContents(code); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
       done("Press Ctrl+C");
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(button.getAttribute("data-copy")).then(function () { done("Copied"); }, select);
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done("Copied"); }, select);
     else select();
   });
 

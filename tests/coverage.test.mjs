@@ -72,8 +72,8 @@ describe("coverage model", () => {
     assert.ok(perf && perf.covers.includes("javascript"));
     for (const step of coverage.next) {
       const claims = /SocketMap (imports|reads) /i.test(JSON.stringify(step));
-      const reads = ["har-initiator", "performance-trace"].includes(step.id);
-      assert.equal(claims, reads, `${step.id}: only the HAR and profile steps may say SocketMap reads them`);
+      const reads = ["har-initiator", "performance-trace", "lighthouse", "route-check"].includes(step.id);
+      assert.equal(claims, reads, `${step.id}: only SocketMap-supported optional files may say SocketMap reads them`);
       assert.equal(Boolean(step.readBySocketMap), reads, step.id);
     }
   });
@@ -121,13 +121,16 @@ describe("tool comparison", () => {
     }
   });
 
-  it("does not claim SocketMap reads tools it does not read", async () => {
+  it("accurately identifies the optional files SocketMap reads", async () => {
     const { tools, about } = (await build()).comparison;
     const reads = about.find(entry => entry.key === "reads").values;
     assert.match(reads[0], /^Yes/);
     assert.match(reads[1], /^Yes, as an optional second file/, "a HAR is read now");
     assert.match(reads[2], /^Yes, as an optional extra file/, "a profile is read now");
-    for (const value of reads.slice(3)) assert.doesNotMatch(value, /^Yes/, value);
+    assert.match(reads[3], /^Yes, as an optional extra file/, "a Lighthouse report is read now");
+    assert.doesNotMatch(reads[4], /^Yes/, "a packet capture is not read");
+    assert.match(reads[5], /^Yes, through the optional network path helper/, "helper route data is read now");
+    assert.doesNotMatch(reads[6], /^Yes/, "server logs are not read");
     for (const tool of tools) if (tool.link) assert.match(tool.link, /^https:\/\//);
   });
 

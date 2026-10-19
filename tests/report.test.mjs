@@ -64,6 +64,17 @@ describe("Report HTML", () => {
     assert.ok(html.includes("events read"));
   });
 
+  it("keeps page titles and explanations compact so evidence starts first", () => {
+    for (const title of ["Page load", "Waterfall", "Sequence", "Environment", "AI summary"]) {
+      assert.ok(html.includes(`<h1 class="page-title">${title}</h1>`), title);
+    }
+    assert.ok(html.includes(".page-header { box-sizing: border-box; display: flex"));
+    assert.ok(html.includes("height: 64px; min-height: 64px"));
+    assert.ok(html.includes("height: 56px; min-height: 56px"));
+    assert.ok(html.includes('<details class="about-page page-about"><summary>About this page</summary>'));
+    assert.ok(html.includes('<details class="about-page"><summary>About this page</summary><p>Every request'));
+  });
+
   it("shows the sequence as rows under a sticky host header", () => {
     assert.ok(/\.seq-head \{ position: sticky/.test(html), "host header stays pinned");
     assert.ok(html.includes('title="portal.example.com (198.51.100.20)"'), "each host names its IP");

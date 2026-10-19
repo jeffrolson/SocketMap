@@ -1,20 +1,24 @@
 /**
  * Performance profile enrichment: places a DevTools Performance profile (already reduced by
  * trace-stream) on the NetLog's timeline. A profile's clock is not the NetLog's, so the two
- * are aligned from the requests they both recorded (method plus URL, paired in time order):
- * the median difference in start time is the offset. Nothing is assumed about the clocks.
- * If no request is shared, the two files may still share Chrome's monotonic clock (true when
- * recorded in one browser session, shown on a real pair); that is used only when the profile's
- * navigation falls inside the capture's time span and its page host appears in the capture.
- * Otherwise nothing is placed and the profile's own findings stand alone.
+ * are aligned from the requests they both recorded (method plus URL, paired in time order).
+ * A URL alone is weak evidence: an earlier or later page visit can fetch the same URL. A
+ * request placement is accepted only when its inferred offset agrees with Chrome's shared
+ * monotonic clock and the profile navigation falls in the capture's observed window. If no
+ * robust request match exists, clock evidence can place the profile band but never attaches
+ * profile details to an individual request.
  *
  * No Node APIs: runs in the browser viewer as well.
  */
 
 import { redactUrl } from "./redact.mjs";
 
-const OUTLIER_MS = 5000;
-const keyOf = (method, url) => `${String(method || "GET").toUpperCase()} ${redactUrl(String(url || "").split("#")[0])}`;
+const CLOCK_AGREEMENT_MS = 1000;
+const MIN_REQUEST_PAIRS = 2;
+const keyOf = (method, url) => {
+  if (typeof method !== "string" || !method.trim() || typeof url !== "string" || !url.trim()) return null;
+  return `${method.trim().toUpperCase()} ${redactUrl(url.split("#")[0])}`;
+};
 
 function median(values) {
   if (!values.length) return null;
@@ -23,6 +27,7 @@ function median(values) {
 }
 
 const hostOf = (url) => { try { return new URL(url).host; } catch { return null; } };
+const finite = (value) => typeof value === "number" && Number.isFinite(value);
 
 const secs = (value) => value == null ? "not recorded" : `${(value / 1000).toFixed(2)} s`;
 const ms = (value) => value == null ? "not recorded" : `${Math.round(value)} ms`;
@@ -35,47 +40,78 @@ export function joinProfile(model, trace) {
   const traceRequests = Array.isArray(trace.requests) ? trace.requests : [];
 
   const netByKey = new Map();
-  for (const request of [...netRequests].sort((a, b) => (a.start ?? 0) - (b.start ?? 0))) {
+  for (const request of netRequests.filter(request => finite(request?.start)).sort((a, b) => a.start - b.start)) {
     const key = keyOf(request.method, request.url);
+    if (!key) continue;
     if (!netByKey.has(key)) netByKey.set(key, []);
     netByKey.get(key).push(request);
   }
   const traceByKey = new Map();
-  for (const request of traceRequests) {
+  for (const request of traceRequests.filter(request => finite(request?.tsMs))) {
     const key = keyOf(request.method, request.url);
+    if (!key) continue;
     if (!traceByKey.has(key)) traceByKey.set(key, []);
     traceByKey.get(key).push(request);
   }
   const pairs = [];
   for (const [key, list] of traceByKey) {
     const partners = netByKey.get(key) || [];
-    for (let i = 0; i < Math.min(list.length, partners.length); i++) pairs.push({ net: partners[i], trace: list[i], unique: list.length === 1 && partners.length === 1 });
+    for (let i = 0; i < Math.min(list.length, partners.length); i++) pairs.push({ key, net: partners[i], trace: list[i], unique: list.length === 1 && partners.length === 1 });
   }
   const unique = pairs.filter(p => p.unique);
-  const basis = unique.length >= 3 ? unique : pairs;
-  let offset = median(basis.map(p => (p.net.start ?? 0) - p.trace.tsMs));
-  let kept = pairs;
-  if (offset != null) {
-    kept = pairs.filter(p => Math.abs((p.net.start ?? 0) - p.trace.tsMs - offset) <= OUTLIER_MS);
-    offset = median(kept.map(p => (p.net.start ?? 0) - p.trace.tsMs));
+
+  // NetLog requests are normalized to the capture's first TimeTicks value, while trace
+  // timestamps retain Chrome's TimeTicks value. This independent evidence rejects an
+  // otherwise convincing URL match from a different recording.
+  const first = model?.diagnostics?.firstTime;
+  const last = model?.diagnostics?.lastTime;
+  const nav = trace.page.navTsMs;
+  const host = hostOf(trace.page.url);
+  const captureSpan = finite(first) && finite(last) && last >= first ? last - first : null;
+  const navInCapture = captureSpan != null && finite(nav) && nav - first >= -CLOCK_AGREEMENT_MS && nav - first <= captureSpan + CLOCK_AGREEMENT_MS;
+  const sameSite = host != null && netRequests.some(r => hostOf(r.url) === host);
+  const clockOffset = finite(first) ? -first : null;
+  const requestOffsets = unique.map(p => p.net.start - p.trace.tsMs);
+  const inferredOffset = median(requestOffsets);
+  const clockAgreementMs = inferredOffset != null && clockOffset != null ? Math.abs(inferredOffset - clockOffset) : null;
+  // A request receives profile details only when it is an unambiguous method+URL match and
+  // its own timestamp agrees with the independently recorded browser clock. Redaction can
+  // collapse distinct signed URLs, so duplicate keys deliberately never qualify here.
+  let kept = clockOffset == null ? [] : unique.filter(p => Math.abs((p.net.start - p.trace.tsMs) - clockOffset) <= CLOCK_AGREEMENT_MS);
+  let offset = inferredOffset;
+  const robustRequests = inferredOffset != null && kept.length >= MIN_REQUEST_PAIRS && clockAgreementMs != null && clockAgreementMs <= CLOCK_AGREEMENT_MS && navInCapture;
+  let method = null;
+  let aligned = false;
+  let reason = "no shared clock evidence";
+  const contradictsClock = unique.length > 0 && clockAgreementMs != null && clockAgreementMs > CLOCK_AGREEMENT_MS;
+  if (robustRequests) {
+    method = "requests";
+    aligned = true;
+    reason = "shared requests agree with the capture clock";
+  } else if (!finite(first) || !finite(last) || last < first) {
+    reason = "capture clock range is not recorded";
+  } else if (contradictsClock) {
+    reason = "matching URLs disagree with the capture clock";
+  } else if (navInCapture && sameSite && clockOffset != null) {
+    // This is consistent with a shared clock, but cannot prove which individual requests
+    // correspond, so `perRequest` remains empty.
+    offset = clockOffset;
+    kept = [];
+    method = "clock";
+    aligned = true;
+    reason = "profile navigation is inside the capture on Chrome's shared clock";
+  } else if (pairs.length) {
+    reason = "shared requests are too few or ambiguous";
+  } else if (!navInCapture) {
+    reason = "profile navigation is outside the capture window";
+  } else if (!sameSite) {
+    reason = "profile page host is absent from the capture";
   }
-  let method = "requests";
-  let aligned = offset != null && kept.length > 0;
-  if (!aligned) {
-    // Fallback: the shared browser clock. NetLog event times and trace timestamps are both Chrome ticks.
-    const first = model?.diagnostics?.firstTime;
-    const last = model?.diagnostics?.lastTime;
-    const nav = trace.page.navTsMs;
-    const host = hostOf(trace.page.url);
-    const inSpan = typeof first === "number" && typeof last === "number" && typeof nav === "number" && nav >= first - 1000 && nav <= last + 1000;
-    const sameSite = host != null && netRequests.some(r => hostOf(r.url) === host);
-    if (inSpan && sameSite) { offset = -first; kept = []; aligned = true; method = "clock"; }
-  }
-  const deviations = kept.map(p => Math.abs((p.net.start ?? 0) - p.trace.tsMs - offset));
+  const deviations = aligned && method === "requests" ? kept.map(p => Math.abs(p.net.start - p.trace.tsMs - offset)) : [];
   const toNet = (traceMs) => traceMs + offset;
 
   const perRequest = new Map();
-  for (const p of kept) perRequest.set(p.net.id, { stack: p.trace.stack, renderBlocking: p.trace.renderBlocking, resourceType: p.trace.resourceType, priority: p.trace.priority, viaServiceWorker: p.trace.viaServiceWorker === true, fromCache: p.trace.fromCache === true });
+  if (method === "requests") for (const p of kept) perRequest.set(p.net.id, { stack: p.trace.stack, renderBlocking: p.trace.renderBlocking, resourceType: p.trace.resourceType, priority: p.trace.priority, viaServiceWorker: p.trace.viaServiceWorker === true, fromCache: p.trace.fromCache === true });
 
   const startAt = aligned ? toNet(trace.page.navTsMs) : null;
   const rel = (value) => (aligned && value != null ? startAt + value : null);
@@ -95,7 +131,9 @@ export function joinProfile(model, trace) {
       offsetMs: aligned ? offset : null,
       within50: deviations.filter(d => d <= 50).length,
       within500: deviations.filter(d => d <= 500).length,
-      medianSpreadMs: aligned ? median(deviations) : null
+      medianSpreadMs: deviations.length ? median(deviations) : null,
+      clockAgreementMs,
+      reason
     },
     page: { url: trace.page.url, startAt, spanMs: trace.page.spanMs ?? null },
     metrics: m,
@@ -112,7 +150,7 @@ export function profileEvidenceText(profile) {
   if (!profile) return "";
   const { metrics: m, mainThread: t, scripts, environment: env, alignment } = profile;
   const lines = ["PERFORMANCE PROFILE (a DevTools Performance recording read alongside this NetLog; it describes what the page's code and rendering did, and does not prove a cause)"];
-  lines.push(alignment.aligned ? (alignment.method === "clock" ? "Placed on the network timeline by the browser's shared clock (no request was recorded by both files; the profile's start falls inside the capture and its site appears in it)." : `Placed on the network timeline using ${alignment.matched} requests both files recorded (${alignment.within50} agree within 50 ms).`) : "Not placed on the network timeline: no request was recorded by both files and the two files do not share a clock, so page code cannot be lined up with individual requests.");
+  lines.push(alignment.aligned ? (alignment.method === "clock" ? "Placed on the network timeline by Chrome's shared clock. No robust shared-request match exists, so no profile detail is attached to an individual request." : `Placed on the network timeline using ${alignment.matched} shared requests that agree with the capture clock (${alignment.within50} agree within 50 ms).`) : `Not placed on the network timeline: ${alignment.reason || "the recordings lack shared timing evidence"}. Page code cannot be lined up with individual requests.`);
   lines.push(`Milestones after navigation start: first contentful paint ${secs(m.fcpMs)}, largest contentful paint ${secs(m.lcpMs)}${m.lcpType ? ` (${m.lcpType})` : ""}, DOMContentLoaded ${secs(m.domContentLoadedMs)}, load ${secs(m.loadMs)}; layout shift score ${m.layoutShiftScore == null ? "not recorded" : m.layoutShiftScore.toFixed(3)}. Responsiveness (INP) needs interaction and is not in a load profile.`);
   lines.push(`Main thread: busy ${ms(t.loadBusyMs)} of the first ${secs(t.loadWindowMs)} (until load); ${t.longTaskCount} long task(s) over 50 ms, ${ms(t.blockingMs)} beyond that threshold; longest ${ms(t.longestMs)}.`);
   for (const task of (t.longTasks || []).slice(0, 5)) lines.push(`- long task ${ms(task.durMs)} at +${secs(task.startMs)}: ${task.top.length ? task.top.map(s => `${fileOf(s.url)} ${ms(s.ms)}`).join(", ") : "no script recorded"}${task.layoutMs > 5 ? `, layout ${ms(task.layoutMs)}` : ""}`);

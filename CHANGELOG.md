@@ -3,6 +3,30 @@
 All notable changes to this project. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.18.0-rc.1] - 2026-10-18
+
+Release candidate; publication and physical-device acceptance are separate.
+### Added
+- Shared compact page headers, immediate capture/file actions, and closed explanations across the viewer, reports, and comparison.
+- Desktop and phone layout acceptance checks, including first-data position and visible items; CI runs them on each supported runner.
+- Local release preparation with a standalone HTML asset, optional helpers, device checklist, release notes, and SHA-256 checksums.
+- High-resolution 2x Retina visual documentation assets and headless Chrome screenshot pipeline (`scripts/generate-framed-images.mjs`) featuring macOS dark chrome frames, ambient illumination, and end-to-end views for hero presentation, workflow guide, viewer start, comparison diffs, findings overview, request waterfall, sequence diagram, and coverage telemetry.
+
+### Changed
+- Network-path collection can now be copied as a reviewable offline terminal command from the report. The helper records its route method or TCP-route unavailability, repeated reply/no-reply counts, and min/median/max hop timing. The report treats route silence as inconclusive.
+- Performance-profile placement now requires capture-clock agreement in addition to shared-request evidence. A profile that cannot establish that alignment stays separate from the request timeline.
+- Coverage and user guidance now identify which optional local files SocketMap reads and reserve packet captures and server logs for external evidence.
+
+### Fixed
+- Helper files redact secret query and fragment values, including encoded parameter names, before writing proxy and PAC addresses. Non-secret addresses and query values remain available.
+- Route medians preserve Windows less-than timing bounds; failed probes, missing proxy context, and inconsistent route counts are not presented as known measurements.
+- Copying an embedded helper command has a manual selection fallback when clipboard access is unavailable.
+
+### Validated
+- Local verification, offline browser checks, and real-capture redaction checks are recorded in `docs/validation/2026-10-02-autonomous-delivery.md`. Physical-device and colleague checks remain in `docs/FIELD-VALIDATION.md`.
+
 ## [0.17.4] - 2026-09-30
 ### Validated
 - **An actual exported Edge policy file.** Edge's Export to JSON opens a native save dialog that headless mode cannot complete, so the `record-real-data` workflow now has a job that opens a visible Edge on a disposable Windows runner with managed policies set in the registry, clicks Export through the debugging protocol, and completes the dialog with keystrokes. The file it produced has the top-level keys `chromeMetadata`, `policyValues` and `status`, `application` "Microsoft Edge", and the same per-policy fields as Chrome (`level`, `scope`, `source`, `value`, `deprecated`). The Policy tab reads it as Edge with no changes; a test now covers it.

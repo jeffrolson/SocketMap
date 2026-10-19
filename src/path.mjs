@@ -63,17 +63,43 @@ export function readPathFile(input) {
       if (!host) return null;
       return { host, dnsMs: ms(h.dnsMs), connectMs: ms(h.connectMs), tlsMs: ms(h.tlsMs), firstByteMs: ms(h.firstByteMs), httpVersion: text(h.httpVersion, 8), remoteIp: ip(h.remoteIp), status: Number.isInteger(h.status) ? h.status : null, error: text(h.error, 160) };
     }, 12),
+    routeCapabilities: {
+      tcp: {
+        available: bool(input.routeCapabilities?.tcp?.available),
+        tool: text(input.routeCapabilities?.tcp?.tool, 80),
+        reason: text(input.routeCapabilities?.tcp?.reason, 240)
+      }
+    },
     routes: list(input.routes, r => {
       const host = typeof r?.host === "string" && HOST_RE.test(r.host) ? r.host : null;
       if (!host) return null;
-      return { host, method: r.method === "icmp" ? "icmp" : r.method === "udp" ? "udp" : null, hops: list(r.hops, h => Number.isInteger(h?.n) && h.n > 0 && h.n < 100 ? { n: h.n, ip: ip(h.ip), rttMs: ms(h.rttMs) } : null, 40) };
+      const attempts = Number.isInteger(r.attempts) && r.attempts > 0 && r.attempts <= 5 ? r.attempts : null;
+      return {
+        host,
+        method: ["icmp", "udp", "tcp"].includes(r.method) ? r.method : null,
+        destinationPort: Number.isInteger(r.destinationPort) && r.destinationPort > 0 && r.destinationPort <= 65535 ? r.destinationPort : null,
+        attempts,
+        error: text(r.error, 160),
+        hops: list(r.hops, h => {
+          if (!Number.isInteger(h?.n) || h.n <= 0 || h.n >= 100) return null;
+          const samples = list(h.rttsMs, ms, 5);
+          let responseCount = Number.isInteger(h.responses) && h.responses >= 0 && h.responses <= 5 ? h.responses : samples.length || null;
+          let noResponseCount = Number.isInteger(h.noResponses) && h.noResponses >= 0 && h.noResponses <= 5 ? h.noResponses : attempts != null && responseCount != null ? Math.max(0, attempts - responseCount) : null;
+          if (attempts != null && (responseCount > attempts || noResponseCount > attempts || (responseCount != null && noResponseCount != null && responseCount + noResponseCount > attempts))) { responseCount = null; noResponseCount = null; }
+          let minMs = ms(h.minMs) ?? (samples.length ? Math.min(...samples) : null);
+          let medianMs = ms(h.medianMs) ?? median(samples);
+          let maxMs = ms(h.maxMs) ?? (samples.length ? Math.max(...samples) : null);
+          if ((minMs != null && medianMs != null && minMs > medianMs) || (medianMs != null && maxMs != null && medianMs > maxMs) || (minMs != null && maxMs != null && minMs > maxMs)) { minMs = null; medianMs = null; maxMs = null; }
+          return { n: h.n, ip: ip(h.ip), rttMs: medianMs ?? ms(h.rttMs), minMs, medianMs, maxMs, minUpperBound: bool(h.minUpperBound), medianUpperBound: bool(h.medianUpperBound), maxUpperBound: bool(h.maxUpperBound), responses: responseCount, noResponses: noResponseCount };
+        }, 40)
+      };
     }, 12),
     notes: list(input.notes, v => text(v, 200), 10)
   };
   return { recognized: true, data };
 }
 
-const median = (values) => { const v = values.filter(x => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor((v.length - 1) / 2)] : null; };
+const median = (values) => { const v = values.filter(x => x != null).sort((a, b) => a - b); return !v.length ? null : v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2; };
 const maxOf = (values) => { const v = values.filter(x => x != null && x > 0); return v.length ? Math.max(...v) : null; };
 
 /** What the browser itself recorded for a host: its slowest new-connection setup and its median wait. */
@@ -116,7 +142,7 @@ export function joinPath(model, data) {
   else if (data.link.type === "wifi" && q === "fair") findings.push({ id: "wifi-fair", severity: "low", title: "The Wi-Fi signal was fair", detail: `${dbm(data.link.wifi.rssiDbm)}. Above -67 dBm is a common target. Measured when the helper ran, not during the capture.` });
 
   const proxyOn = data.proxy.http || data.proxy.https || data.proxy.autoConfigUrl || data.proxy.autoConfigEnabled;
-  if (proxyOn) findings.push({ id: "proxy-configured", severity: "info", title: "This computer is set to use a proxy", detail: `${data.proxy.autoConfigUrl ? `Automatic configuration (PAC): ${data.proxy.autoConfigUrl}. ` : ""}${data.proxy.http ? `Web proxy: ${data.proxy.http}. ` : ""}${data.proxy.https && data.proxy.https !== data.proxy.http ? `Secure web proxy: ${data.proxy.https}. ` : ""}${data.probeUsesProxy ? "Curl used a proxy from its environment variables, so its timings include that proxy." : "The timings below were measured with curl, which does not use these system settings, so they show the path without the proxy."}` });
+  if (proxyOn) findings.push({ id: "proxy-configured", severity: "info", title: "This computer is set to use a proxy", detail: `${data.proxy.autoConfigUrl ? `Automatic configuration (PAC): ${data.proxy.autoConfigUrl}. ` : ""}${data.proxy.http ? `Web proxy: ${data.proxy.http}. ` : ""}${data.proxy.https && data.proxy.https !== data.proxy.http ? `Secure web proxy: ${data.proxy.https}. ` : ""}${data.probeUsesProxy === true ? "Proxy environment variables were present when curl ran; bypass settings can still select a direct connection." : data.probeUsesProxy === false ? "No proxy environment variables were recorded for curl. Other curl configuration was not captured." : "Whether curl used a proxy was not recorded, so its timing path is unknown."}` });
 
   const publicResolvers = data.dns.servers.filter(s => isPrivateAddress(s) === false);
   if (publicResolvers.length) findings.push({ id: "dns-public", severity: "info", title: "DNS servers outside private address space", detail: `${publicResolvers.join(", ")}. That can be normal (a public resolver or a provider's). If the network is expected to use internal DNS, this is worth checking.` });
@@ -132,18 +158,19 @@ export function joinPath(model, data) {
 
   for (const route of data.routes) {
     const hops = route.hops;
-    const answered = hops.filter(h => h.ip);
-    const timeouts = hops.length - answered.length;
-    if (hops.length >= 6 && timeouts / hops.length >= 0.5) findings.push({ id: "route-silent", severity: "info", title: `Many hops toward ${route.host} did not answer`, detail: `${timeouts} of ${hops.length} hops. Routers often ignore these probes, so silence is common and does not mean loss.` });
+    const answered = hops.filter(h => h.responses > 0 || h.ip);
+    const missing = hops.reduce((total, h) => total + (h.noResponses ?? (h.ip ? 0 : 1)), 0);
+    const opportunities = hops.reduce((total, h) => total + (route.attempts ?? ((h.responses ?? 0) + (h.noResponses ?? 0) || 1)), 0);
+    if (hops.length >= 6 && opportunities && missing / opportunities >= 0.5) findings.push({ id: "route-silent", severity: "info", title: `Many route probes toward ${route.host} did not answer`, detail: `${missing} of ${opportunities} probe attempts had no response. Routers often ignore route probes or rate-limit their replies, so this does not establish packet loss or a failing hop.` });
     let previous = null;
     for (const hop of hops) {
       if (hop.rttMs == null) continue;
-      if (previous != null && hop.rttMs - previous >= 60) { findings.push({ id: "route-jump", severity: "low", title: `Delay jumps at hop ${hop.n} toward ${route.host}`, detail: `From ${Math.round(previous)} ms to ${Math.round(hop.rttMs)} ms. A jump often marks a long link (another city, a VPN exit or a provider boundary). One probe per hop is a hint, not a measurement of loss.` }); break; }
+      if (previous != null && hop.rttMs - previous >= 60) { findings.push({ id: "route-jump", severity: "low", title: `Delay jumps at hop ${hop.n} toward ${route.host}`, detail: `From ${Math.round(previous)} ms to ${Math.round(hop.rttMs)} ms. A jump often marks a long link (another city, a VPN exit or a provider boundary). Route replies are a small, policy-dependent sample, not a measurement of loss.` }); break; }
       previous = hop.rttMs;
     }
   }
 
-  return { probeUsesProxy: data.probeUsesProxy, source: { tool: data.tool, collectedAt: data.collectedAt, gapMinutes, platform: data.platform, os: data.os, computer: data.computer }, link: data.link, dns: data.dns, proxy: data.proxy, publicIp: data.publicIp, publicIpSource: data.publicIpSource, compare, routes: data.routes, notes: data.notes, findings };
+  return { probeUsesProxy: data.probeUsesProxy, source: { tool: data.tool, collectedAt: data.collectedAt, gapMinutes, platform: data.platform, os: data.os, computer: data.computer }, link: data.link, dns: data.dns, proxy: data.proxy, publicIp: data.publicIp, publicIpSource: data.publicIpSource, compare, routeCapabilities: data.routeCapabilities, routes: data.routes, notes: data.notes, findings };
 }
 
 const gapText = (minutes) => minutes == null ? "at an unknown time relative to the capture" : Math.abs(minutes) < 2 ? "at about the same time as the capture" : minutes > 0 ? `${minutes} minutes after the capture started` : `${-minutes} minutes before the capture started`;
@@ -162,7 +189,8 @@ export function pathEvidenceText(path) {
     const b = item.browser;
     lines.push(`- ${item.host}: curl DNS ${c.dnsMs ?? "not recorded"} ms, connect ${c.connectMs ?? "not recorded"} ms, TLS ${c.tlsMs ?? "not recorded"} ms, first byte ${c.firstByteMs ?? "not recorded"} ms${b ? `; browser DNS ${b.dnsMs ?? "not recorded"} ms, connect ${b.connectMs ?? "not recorded"} ms, TLS ${b.tlsMs ?? "not recorded"} ms, median wait ${b.waitMs ?? "not recorded"} ms` : "; the browser recorded no page requests to this host"}.`);
   }
-  for (const route of path.routes) lines.push(`- route to ${route.host} (${route.method || "method not recorded"}): ${route.hops.length} hops, ${route.hops.filter(h => h.ip).length} answered.`);
+  for (const route of path.routes) lines.push(`- route to ${route.host} (${route.method || "method not recorded"}): ${route.hops.length} hops, ${route.hops.filter(h => h.responses > 0 || h.ip).length} answered${route.attempts ? `, up to ${route.attempts} probes per hop` : ""}.`);
+  if (path.routeCapabilities?.tcp?.available === false) lines.push(`- TCP route probes: unavailable. ${path.routeCapabilities.tcp.reason || "The helper did not record a reason."}`);
   for (const f of path.findings.filter(x => x.severity !== "info").slice(0, 6)) lines.push(`- ${f.title}: ${f.detail}`);
   return lines.join("\n");
 }

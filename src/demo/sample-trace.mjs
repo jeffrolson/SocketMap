@@ -5,12 +5,15 @@
  * Used by "Try the sample capture", the CLI demo and tests.
  */
 
-export function buildSampleTrace(model, { clockBaseUs = 700_000_000_000 } = {}) {
+export function buildSampleTrace(model, { clockBaseUs = null } = {}) {
   const page = model.requests.filter(r => !r.isBackground);
   const home = page.find(r => r.requestType === "main frame") || page[0];
   const PID = 4100, TID = 4101, FRAME = "SAMPLEFRAME0000000000000000000000";
+  // Trace timestamps retain Chrome's TimeTicks value. NetLog requests are normalized from its
+  // first tick, so derive this synthetic trace from that shared clock as a real pair would.
+  const baseUs = clockBaseUs ?? Math.round((model?.diagnostics?.firstTime ?? 0) * 1000);
   // Renderer sends each request a little before the network stack logs it.
-  const us = (netMs) => clockBaseUs + Math.round((netMs - 12) * 1000);
+  const us = (netMs) => baseUs + Math.round((netMs - 12) * 1000);
   const navTs = us(home.start - 5);
   const events = [];
   const meta = (name, pid, tid, value) => events.push({ args: { name: value }, cat: "__metadata", name, ph: "M", pid, tid, ts: 0 });

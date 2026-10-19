@@ -48,10 +48,12 @@ describe("profile panel", () => {
     assert.match(html, /load on the machine is not recorded/i);
   });
   it("says when the profile could not be lined up with the network", () => {
-    const unplaced = { ...profile, alignment: { ...profile.alignment, aligned: false, matched: 0, offsetMs: null }, page: { ...profile.page, startAt: null }, milestones: [], mainThread: { ...profile.mainThread, longTasks: profile.mainThread.longTasks.map(t => ({ ...t, atMs: null })) } };
+    const unplaced = { ...profile, alignment: { ...profile.alignment, aligned: false, matched: 0, offsetMs: null, reason: "matching URLs disagree with the capture clock" }, page: { ...profile.page, startAt: null }, milestones: [], mainThread: { ...profile.mainThread, longTasks: profile.mainThread.longTasks.map(t => ({ ...t, atMs: null })) }, perRequest: new Map() };
     const out = renderProfilePanel(unplaced, pageRequests);
     assert.match(out, /not lined up|could not be placed/i);
+    assert.match(out, /matching URLs disagree with the capture clock/i);
     assert.ok(!/requests? in flight/.test(out));
+    assert.equal(unplaced.perRequest.size, 0);
   });
   it("escapes what a profile contains and uses tokens only", () => {
     const evil = { ...profile, scripts: [{ url: "https://a.example.com/<img src=x>.js", totalMs: 10, compileMs: 1, calls: 1 }], mainThread: { ...profile.mainThread, longTasks: [{ startMs: 1, durMs: 90, atMs: 5, scriptMs: 80, top: [{ url: "https://a.example.com/\"><script>1</script>.js", ms: 80 }], layoutMs: 0, paintMs: 0, parseMs: 0 }] } };
@@ -85,6 +87,13 @@ describe("milestones from a profile", () => {
     const both = modelWith({ har: true });
     const out = renderMilestones(both.enrichment, { startMs: 0, observedSpanMs: 3000 }, 3000, both.profile);
     assert.equal((out.labels.match(/>Load</g) || []).length, 1);
+  });
+  it("uses HAR milestones when a profile has no supported placement", () => {
+    const both = modelWith({ har: true });
+    const unplaced = { ...both.profile, alignment: { ...both.profile.alignment, aligned: false, reason: "capture clock range is not recorded" }, milestones: [] };
+    const out = renderMilestones(both.enrichment, { startMs: 0, observedSpanMs: 3000 }, 3000, unplaced);
+    assert.equal(out.source, "har");
+    assert.ok(out.drawn > 0);
   });
 });
 

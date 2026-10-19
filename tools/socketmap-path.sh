@@ -5,11 +5,12 @@
 # settings, public IP address, per-host connection timing measured with curl, and the route to each
 # host. It writes ONE small JSON file that the SocketMap viewer can load next to a NetLog.
 #
-# Usage:  ./socketmap-path.sh [--no-public-ip] [--no-probe] [--no-route] [--out FILE] [host ...]
+# Usage:  ./socketmap-path.sh [--no-public-ip] [--no-probe] [--no-route] [--route-probes N] [--out FILE] [host ...]
 #   host          hostnames to measure (SocketMap's report lists the slowest ones for you)
 #   --no-public-ip  do not contact api.ipify.org to learn the public IP address
 #   --no-probe      skip the curl timing to each host
 #   --no-route      skip the traceroute to each host
+#   --route-probes N  probes per hop, from 1 to 5 (default: 3)
 #   --out FILE      where to write the result (default: socketmap-path.json in this folder)
 #
 # It only reads settings and makes ordinary requests: it never changes anything, needs no admin
@@ -17,11 +18,12 @@
 # lookup and a plain GET / to each host you list). Nothing is uploaded; read the file before sharing.
 # The Wi-Fi network name is recorded when the operating system provides it.
 
-VERSION="1.1"
+VERSION="1.2"
 OUT="socketmap-path.json"
 PUBLIC_IP=1
 PROBE=1
 ROUTE=1
+ROUTE_PROBES=3
 HOSTS=()
 
 while [ $# -gt 0 ]; do
@@ -29,6 +31,7 @@ while [ $# -gt 0 ]; do
     --no-public-ip) PUBLIC_IP=0 ;;
     --no-probe) PROBE=0 ;;
     --no-route) ROUTE=0 ;;
+    --route-probes) shift; ROUTE_PROBES="$1" ;;
     --out) shift; OUT="$1" ;;
     -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -36,6 +39,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+if ! [[ "$ROUTE_PROBES" =~ ^[1-5]$ ]]; then echo "--route-probes must be a whole number from 1 to 5" >&2; exit 2; fi
 
 # Only hostnames and addresses: refuse anything else so a typo cannot become a command or a URL.
 clean_hosts=()
@@ -63,7 +68,11 @@ jlist() { # strings -> JSON array
 }
 ms() { awk -v a="$1" -v b="${2:-0}" 'BEGIN { if (a == "" || a ~ /[^0-9.]/) { print "null"; exit } v = (a - b) * 1000; if (v < 0) v = 0; printf "%.1f", v }'; }
 # Removes credentials from a proxy address, both as scheme://user:pass@host and as a bare user:pass@host.
-strip_userinfo() { sed -E -e 's#(://)[^/@ ]*@#\1#g' -e 's#(^|[;, =])[^/@ :;=]+:[^/@ ;]*@#\1#g'; }
+strip_userinfo() { sed -E -e 's#(://)[^/@ ]*@#\1#g' -e 's#(^|[;, =])[^/@ :;=]+:[^/@ ;]*@#\1#g' | awk '
+function lower(s){return tolower(s)}
+function decode(s,  p,h1,h2,v){ while((p=match(s,/%[0-9a-fA-F][0-9a-fA-F]/))){h=substr(s,p+1,2); h1=index("0123456789abcdef",tolower(substr(h,1,1)))-1; h2=index("0123456789abcdef",tolower(substr(h,2,1)))-1; v=h1*16+h2; s=substr(s,1,p-1) sprintf("%c",v) substr(s,p+3)} return s }
+function secret(k){ k=lower(decode(k)); return k ~ /(token|session|secret|passw(or)?d|passwd|pwd|csrf|xsrf|assertion|credential|authorization|cookie|signature|api[-_]?key|access[-_]?key|^(tempauth|samlrequest|samlresponse)$|(^|[_-])(auth|code|key|sig)([_-]|$))/ }
+{ rest=$0; out=""; while(match(rest,/[?&#;]/)){ p=RSTART; out=out substr(rest,1,p); rest=substr(rest,p+1); separator=match(rest,/[?&#;]/); part=separator?substr(rest,1,RSTART-1):rest; rest=separator?substr(rest,RSTART):""; eq=index(part,"="); key=eq?substr(part,1,eq-1):part; if(eq&&secret(key))part=key "=[REDACTED]"; out=out part } print out rest }'; }
 
 # ---- link ------------------------------------------------------------------------------------
 IFACE="" GATEWAY="" IPV4="" IPV6="" LINK_TYPE="" SSID="" RSSI="" NOISE="" CHANNEL="" TXRATE="" PHY="" SECURITY=""
@@ -168,20 +177,41 @@ probes_json() {
 }
 
 # ---- route (traceroute) ----------------------------------------------------------------------
+# Linux traceroute supports TCP mode (-T). Some macOS and minimal Linux installations do not;
+# keep their normal UDP route rather than pretending it was TCP.
+TCP_ROUTE=0 ROUTE_METHOD="udp" TCP_REASON=""
+if command -v traceroute >/dev/null 2>&1; then
+  traceroute_help="$(traceroute --help 2>&1 || true)"
+  if printf '%s' "$traceroute_help" | grep -Eq '(^|[[:space:],])-T([[:space:],]|$)|--tcp'; then
+    TCP_ROUTE=1; ROUTE_METHOD="tcp"
+  else
+    TCP_REASON="The installed traceroute does not advertise TCP probe support; UDP route probes were used instead."
+  fi
+else
+  TCP_REASON="The traceroute command was not found."
+fi
 routes_json() {
-  local first=1 h out
+  local first=1 h out route_args route_error
   printf '['
   for h in "${HOSTS[@]}"; do
     [ $first -eq 0 ] && printf ','; first=0
-    out="$(traceroute -n -q 1 -w 2 -m 20 "$h" 2>/dev/null)"
-    printf '{"host":%s,"method":"udp","hops":' "$(jstr "$h")"
-    printf '%s\n' "$out" | awk '
+    # Match curl's HTTPS endpoint when TCP mode is available; traceroute's TCP default is not a web port.
+    if [ "$TCP_ROUTE" -eq 1 ]; then route_args=(-T -p 443); else route_args=(); fi
+    route_error=""
+    if ! out="$(traceroute -n "${route_args[@]}" -q "$ROUTE_PROBES" -w 2 -m 20 "$h" 2>/dev/null)"; then route_error="traceroute did not complete for this host"; fi
+    printf '{"host":%s,"method":%s,"destinationPort":%s,"attempts":%s,"error":%s,"hops":' "$(jstr "$h")" "$(jstr "$ROUTE_METHOD")" "$( [ "$TCP_ROUTE" -eq 1 ] && echo 443 || echo null )" "$ROUTE_PROBES" "$(jstr "$route_error")"
+    printf '%s\n' "$out" | awk -v attempts="$ROUTE_PROBES" '
+      function median(a, n, i, j, t) { for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) if (a[j] < a[i]) { t=a[i]; a[i]=a[j]; a[j]=t }; return n % 2 ? a[int((n+1)/2)] : (a[n/2] + a[n/2+1]) / 2 }
       BEGIN { printf "["; n = 0 }
       /^ *[0-9]+ / {
-        hop = $1; ip = ""; rtt = ""
-        for (i = 2; i <= NF; i++) { if ($i ~ /^[0-9a-fA-F:.]+$/ && ip == "" && $i ~ /[.:]/) ip = $i; if ($i == "ms" && rtt == "") rtt = $(i-1) }
+        hop = $1; ip = ""; count = 0; min = ""; max = ""
+        for (i = 2; i <= NF; i++) {
+          if ($i ~ /^[0-9a-fA-F:.]+$/ && ip == "" && $i ~ /[.:]/) ip = $i
+          if ($i == "ms" && $(i-1) ~ /^[0-9.]+$/) { values[++count] = $(i-1) + 0; if (min == "" || values[count] < min) min = values[count]; if (max == "" || values[count] > max) max = values[count] }
+        }
+        med = count ? median(values, count) : ""
         if (n++) printf ","
-        printf "{\"n\":%s,\"ip\":%s,\"rttMs\":%s}", hop, (ip == "" ? "null" : "\"" ip "\""), (rtt == "" ? "null" : rtt)
+        printf "{\"n\":%s,\"ip\":%s,\"responses\":%s,\"noResponses\":%s,\"minMs\":%s,\"medianMs\":%s,\"maxMs\":%s,\"rttMs\":%s}", hop, (ip == "" ? "null" : "\"" ip "\""), count, attempts-count, (min == "" ? "null" : min), (med == "" ? "null" : med), (max == "" ? "null" : max), (med == "" ? "null" : med)
       }
       END { printf "]" }'
     printf '}'
@@ -200,7 +230,8 @@ routes_json() {
   printf '"probeUsesProxy":%s,' "$( [ -n "${https_proxy:-$HTTPS_PROXY}${all_proxy:-$ALL_PROXY}" ] && echo true || echo false )"
   printf '"publicIp":%s,"publicIpSource":%s,' "$(jstr "$PUBLIC")" "$( [ -n "$PUBLIC" ] && jstr api.ipify.org || echo null )"
   if [ $PROBE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && command -v curl >/dev/null 2>&1; then printf '"hosts":%s,' "$(probes_json)"; else printf '"hosts":[],'; fi
-  if [ $ROUTE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && command -v traceroute >/dev/null 2>&1; then printf '"routes":%s,' "$(routes_json)"; else printf '"routes":[],'; [ $ROUTE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && note "traceroute was not found, so no route was recorded."; fi
+  printf '"routeCapabilities":{"tcp":{"available":%s,"tool":%s,"reason":%s}},' "$( [ "$TCP_ROUTE" -eq 1 ] && echo true || echo false )" "$( [ "$TCP_ROUTE" -eq 1 ] && jstr traceroute || echo null )" "$( [ "$TCP_ROUTE" -eq 1 ] && echo null || jstr "$TCP_REASON" )"
+  if [ $ROUTE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && command -v traceroute >/dev/null 2>&1; then printf '"routes":%s,' "$(routes_json)"; else printf '"routes":[],'; [ $ROUTE -eq 1 ] && [ ${#HOSTS[@]} -gt 0 ] && note "$TCP_REASON"; fi
   printf '"notes":%s}\n' "$(jlist "${NOTES[@]}")"
 } > "$OUT"
 

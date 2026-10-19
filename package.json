@@ -1,6 +1,6 @@
 {
   "name": "socketmap",
-  "version": "0.17.4",
+  "version": "0.18.0-rc.1",
   "description": "Zero-dependency, self-contained network trace visualizer and sequence diagram generator",
   "type": "module",
   "bin": {
@@ -11,6 +11,7 @@
     "test": "node --test",
     "generate:examples": "node scripts/generate-examples.mjs",
     "build:viewer": "node scripts/build-viewer.mjs",
+    "prepare:release": "node scripts/prepare-release.mjs",
     "demo": "node scripts/demo-report.mjs",
     "generate:theme": "node scripts/generate-theme.mjs",
     "generate:tools": "node scripts/generate-tools.mjs",
@@ -18,6 +19,9 @@
     "check:policy-links": "node scripts/check-policy-links.mjs",
     "audit:redaction": "node scripts/audit-redaction.mjs",
     "test:browser": "node scripts/browser-smoke.mjs",
+    "test:layout": "node scripts/layout-smoke.mjs",
+    "generate:screenshots": "node scripts/generate-screenshots.mjs",
+    "generate:framed-images": "node scripts/generate-framed-images.mjs",
     "check:helper": "node scripts/check-helper-output.mjs"
   },
   "keywords": [
