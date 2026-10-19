@@ -6,7 +6,7 @@ Candidate: **0.18.0-rc.1**. These results cover the local candidate; public rele
 
 - `npm run verify`: 422 tests passed, no failures or skips; generated theme and embedded helpers current. PowerShell checks used the official portable macOS PowerShell 7.6.7 runtime, verified against the release SHA-256 before extraction. This is script-logic proof, not physical Windows acceptance.
 - `npm run test:browser`: file imports, optional enrichments, image exports, helper-command copy/fallback, and profile refusal passed. No uncaught page errors or nonlocal resource requests.
-- `npm run test:layout`: both required viewports, all report tabs, theme switching, saved standalone reports, two-file viewer comparisons, and saved comparisons passed. Filter/Controls panels remain within the viewport. After scrolling an expanded Waterfall, the timing key pins at 0px on desktop and 56px below phone navigation.
+- `npm run test:layout`: both required viewports, all report tabs, light/dark system defaults and theme switching, saved standalone reports, two-file viewer comparisons, and saved comparisons passed. Filter/Controls panels remain within the viewport. After scrolling an expanded Waterfall, the timing key pins at 0px on desktop and 56px below phone navigation, relative to the report frame.
 - `npm run audit:redaction -- captures`: eighteen supported local capture files audited, zero leaks reported. Helper/policy readers and serialization canaries have separate tests.
 - `npm run check:policy-links`: every catalog link resolved.
 - Existing genuine capture/profile pairs: five matching pairs accepted, all twenty cross-pairs rejected. This rechecks stored recordings; it is not a new physical-device capture.

@@ -134,8 +134,17 @@ async function main() {
     };
     for (const viewport of viewports) {
       await setViewport(viewport);
+      await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "dark" }] });
       await send("Page.navigate", { url: pathToFileURL(viewer).href });
       await waitFor("document.readyState === 'complete'", "viewer to load");
+      await evaluate("localStorage.removeItem('socketmap-theme'); window.__layoutReloadPending = true; location.reload()");
+      await waitFor("!window.__layoutReloadPending && document.readyState === 'complete'", "dark-preference viewer to reload");
+      const startsDark = await evaluate("document.documentElement.dataset.theme === 'dark'");
+      await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
+      await evaluate("localStorage.removeItem('socketmap-theme'); window.__layoutReloadPending = true; location.reload()");
+      await waitFor("!window.__layoutReloadPending && document.readyState === 'complete'", "light-preference viewer to reload");
+      const startsLight = await evaluate("document.documentElement.dataset.theme === 'light'");
+      await evaluate("document.querySelector('[data-theme-toggle]').click()");
       await evaluate("window.scrollTo(0, 0)");
       const start = await evaluate(`(() => {
         const box = selector => { const el = document.querySelector(selector); if (!el) return null; const r = el.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height), width: Math.round(r.width) }; };
@@ -150,8 +159,9 @@ async function main() {
 
       await evaluate("document.querySelector('[data-open-sample]').click()");
       await waitFor(frame("doc => doc.querySelectorAll('[data-nav]').length >= 5 && doc.querySelector('.view.is-active')"), "sample report");
-      const lightTheme = await evaluate("(() => { const button = document.querySelector('[data-theme-toggle]'); button?.click(); return document.documentElement.dataset.theme === 'light'; })()");
-      const darkTheme = await evaluate("(() => { const button = document.querySelector('[data-theme-toggle]'); button?.click(); return document.documentElement.dataset.theme === 'dark'; })()");
+      const themeStates = await evaluate("(() => { const button = document.querySelector('[data-theme-toggle]'); const states = []; button?.click(); states.push(document.documentElement.dataset.theme); button?.click(); states.push(document.documentElement.dataset.theme); return states; })()");
+      const lightTheme = themeStates.includes("light");
+      const darkTheme = themeStates.includes("dark");
       const tabs = await evaluate(frame("doc => [...doc.querySelectorAll('[data-nav]')].map(item => item.getAttribute('data-nav')).filter(Boolean)"));
       const reports = {};
       for (const tab of tabs) {
@@ -247,7 +257,7 @@ async function main() {
       await waitFor("document.readyState === 'complete' && !!document.querySelector('.metrics .metric')", "saved standalone comparison");
       const savedComparison = await evaluate("(() => { const el = document.querySelector('.metrics .metric'), r = el.getBoundingClientRect(), h = document.querySelector('.page-header'); return { primaryTop: Math.round(r.top), headerHeight: Math.round(h?.getBoundingClientRect().height || 0), overflow: document.documentElement.scrollWidth > innerWidth }; })()");
       await screenshot(`${viewport.name}-saved-comparison`);
-      measurements.viewports[viewport.name] = { limits: { dataTop: viewport.dataLimit, headerHeight: viewport.headerLimit }, themes: { lightTheme, darkTheme }, start, reports, savedReport: saved, comparison, savedComparison };
+      measurements.viewports[viewport.name] = { limits: { dataTop: viewport.dataLimit, headerHeight: viewport.headerLimit }, themes: { startsDark, startsLight, lightTheme, darkTheme }, start, reports, savedReport: saved, comparison, savedComparison };
     }
 
     const failures = [];
@@ -272,7 +282,7 @@ async function main() {
           if (!sticky.maxScroll || sticky.keyTop < minimumTop || sticky.keyTop > minimumTop + 2 || sticky.keyBottom <= minimumTop) failures.push(`${viewport.name} waterfall: timing key is not pinned below navigation while scrolling`);
         }
       }
-      if (!result.themes.lightTheme || !result.themes.darkTheme) failures.push(`${viewport.name}: light and dark theme switches must both work`);
+      if (!result.themes.startsDark || !result.themes.startsLight || !result.themes.lightTheme || !result.themes.darkTheme) failures.push(`${viewport.name}: light and dark theme defaults and switches must both work`);
       for (const [name, item] of Object.entries({ savedReport: result.savedReport, comparison: result.comparison, savedComparison: result.savedComparison })) {
         if (item.primaryTop > result.limits.dataTop) failures.push(`${viewport.name} ${name}: primary data starts at ${item.primaryTop}px (limit ${result.limits.dataTop}px)`);
         if (item.headerHeight > result.limits.headerHeight) failures.push(`${viewport.name} ${name}: header is ${item.headerHeight}px (limit ${result.limits.headerHeight}px)`);
